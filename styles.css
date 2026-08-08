@@ -90,26 +90,74 @@ a { color: var(--a); }
 .mt-s { margin-top: 10px; }
 .block { display: block; width: 100%; }
 
-/* Brand mark. Sized identically whether it is the placeholder gradient block
-   or an <img>, so swapping in real artwork needs no other change. */
-.logo {
-  width: 32px; height: 32px; flex: none; display: block; object-fit: contain;
-  background: linear-gradient(135deg, var(--a), var(--c));
-}
-img.logo { background: none; }
+/* Brand mark — assets/logo.svg. Swap that one file to change the artwork. */
+.logo { width: 46px; height: 46px; flex: none; display: block; margin: -8px 0; }
+.logo.lg { width: 40px; height: 40px; margin: 0; }
 
-.brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.brand-btn { background: none; border: none; padding: 0; cursor: pointer; min-width: 0; text-align: left; }
 .wordmark {
-  display: flex; align-items: center; gap: 6px;
-  font: 600 10px var(--mono); letter-spacing: 0.18em;
-  color: oklch(0.68 0.19 135);
+  font: 700 15px var(--display); letter-spacing: 0.02em; color: var(--text); white-space: nowrap;
 }
+.wordmark.lg { font-size: 16px; }
+.wordmark .accent { color: var(--a); }
 
+.song-label { font: 500 9px var(--mono); color: oklch(0.55 0.01 250); flex: none; }
 .title-input {
-  background: transparent; border: none; outline: none; color: var(--text);
-  font: 600 15px var(--display); width: 100%; min-width: 0; padding: 0;
+  background: transparent; border: none; outline: none; color: oklch(0.85 0.01 250);
+  font: 600 12px var(--mono); width: 100%; min-width: 0; padding: 0;
 }
 .title-input:focus { border-bottom: 1px solid var(--border); }
+
+/* ---------- about ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; padding: 24px;
+  background: oklch(0 0 0 / 0.72);
+  display: flex; align-items: center; justify-content: center;
+}
+.overlay[hidden] { display: none; }
+.about {
+  max-width: 340px; width: 100%; padding: 22px;
+  background: oklch(0.08 0 0); border: 1.5px solid var(--a);
+  max-height: 100%; overflow-y: auto;
+}
+.about p { margin: 0 0 12px; font: 400 12.5px/1.6 var(--sans); color: oklch(0.8 0.008 250); }
+.about p.credit { margin: 0 0 18px; font: 500 11px var(--mono); color: oklch(0.55 0.01 250); }
+.version {
+  display: inline-block; margin: 4px 0 14px; padding: 3px 8px;
+  font: 600 10px var(--mono); letter-spacing: 0.05em; color: oklch(0.55 0.01 250);
+  border: 1px solid var(--border);
+}
+.about-close {
+  width: 100%; padding: 10px; background: var(--a); border: none; color: oklch(0.08 0 0);
+  font: 700 12px var(--mono); letter-spacing: 0.04em; cursor: pointer;
+}
+
+/* ---------- key lock / explore ---------- */
+.mb-s { margin-bottom: 12px; }
+.lock-btn {
+  flex: none; padding: 7px 12px; border: 1px solid var(--border); background: transparent;
+  color: oklch(0.85 0.006 250); font: 600 10px var(--mono); cursor: pointer; white-space: nowrap;
+}
+.lock-btn[aria-pressed='true'] { background: var(--a); border-color: var(--a); color: var(--ink); }
+.explore-card {
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--a);
+}
+.explore-card[hidden] { display: none; }
+.explore-card span { font: 700 13px var(--display); color: var(--a); }
+.explore-card p { margin: 4px 0 0; font: 400 11.5px/1.5 var(--sans); color: oklch(0.8 0.008 250); }
+
+/* ---------- learn extras ---------- */
+.diff-strip { display: flex; gap: 2px; margin-bottom: 10px; }
+.diff-strip div {
+  flex: 1; display: flex; align-items: center; justify-content: center; height: 26px;
+  font: 700 10px var(--mono);
+  background: oklch(0.2 0.012 250); color: oklch(0.6 0.008 250);
+}
+.diff-strip div.altered { background: var(--c); color: oklch(0.1 0.01 250); }
+.mastery-dots { display: flex; gap: 5px; margin-bottom: 10px; }
+.mastery-dots i { width: 9px; height: 9px; border-radius: 50%; background: oklch(0.3 0.01 250); flex: none; }
+.mastery-dots i.on { background: var(--d); }
 
 .led-dot {
   width: 6px; height: 6px; flex: none; background: var(--dimmer);

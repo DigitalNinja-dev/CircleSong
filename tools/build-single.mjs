@@ -96,11 +96,14 @@ async function loadWorklet(ctx) {
 }
 `;
 
-// Body markup from index.html, minus the module script tag.
+// Body markup from index.html, minus the module script tag. Referenced assets
+// become data URIs so the single file has nothing left to fetch.
+const logoDataUri = `data:image/svg+xml;base64,${Buffer.from(read('assets/logo.svg'), 'utf8').toString('base64')}`;
 const html = read('index.html');
 const body = html
   .slice(html.indexOf('<body>') + '<body>'.length, html.lastIndexOf('</body>'))
   .replace(/<script[^>]*src=[^>]*><\/script>/g, '')
+  .replaceAll('assets/logo.svg', logoDataUri)
   .trim();
 
 // Webfonts are inlined as data URIs rather than linked: the page must render

@@ -57,8 +57,14 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   before it, so rapid exploring never turns into overlapping mush. Toggle it
   off under Tone → Playback, and set how much of a bar an audition plays
   (1, 2, 3 beats or a full bar).
+- **Key lock + wheel explorer** — lock the key, then tap any wedge to hear it
+  and read how it relates: its scale degree and function if it belongs, or the
+  interval it sits at if it is borrowed.
 - **Modes lesson + ear trainer** — play any mode's scale and characteristic
-  vamp, then test yourself with the "guess the mode" quiz.
+  vamp, see the degree strip showing exactly which notes it alters against the
+  major scale, then test yourself with the "guess the mode" quiz, which tracks
+  your streak and which modes you have identified.
+- **About panel** — tap the wordmark for what CircleSong is and who made it.
 - **Songwriting Assistant** — mood-based chord suggestions, song-section ideas,
   and progression templates inspired by hit songs. Everything applies straight
   to the timeline in the current key.
@@ -96,6 +102,7 @@ closer to a recorded guitar.
 ```
 index.html               app shell / markup
 styles.css               cyber-brutalist dark theme
+assets/logo.svg          brand mark — swap this one file to change the artwork
 src/
   app.js                 state, rendering, and event wiring
   theory.js              pitch classes, modes, diatonic harmony, Circle of Fifths
@@ -120,11 +127,10 @@ Add `?theme=mono` to the URL for the monochrome amber accent set.
 
 ### Branding
 
-The header mark is a placeholder gradient block (`#appLogo` in `index.html`).
-To use real artwork, replace that element with `<img src="…" class="logo" alt="">`
-— `.logo` fixes the sizing either way, so nothing else needs to change. For the
-single-file build, inline the image as a `data:` URI so `dist/circlesong.html`
-stays self-contained.
+The brand mark lives at `assets/logo.svg` and is referenced by the header and
+the About panel. Replace that one file to change the artwork — the build
+inlines it as a `data:` URI automatically, so `dist/circlesong.html` stays
+self-contained.
 
 ---
 

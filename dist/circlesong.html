@@ -109,26 +109,74 @@ a { color: var(--a); }
 .mt-s { margin-top: 10px; }
 .block { display: block; width: 100%; }
 
-/* Brand mark. Sized identically whether it is the placeholder gradient block
-   or an <img>, so swapping in real artwork needs no other change. */
-.logo {
-  width: 32px; height: 32px; flex: none; display: block; object-fit: contain;
-  background: linear-gradient(135deg, var(--a), var(--c));
-}
-img.logo { background: none; }
+/* Brand mark — assets/logo.svg. Swap that one file to change the artwork. */
+.logo { width: 46px; height: 46px; flex: none; display: block; margin: -8px 0; }
+.logo.lg { width: 40px; height: 40px; margin: 0; }
 
-.brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.brand-btn { background: none; border: none; padding: 0; cursor: pointer; min-width: 0; text-align: left; }
 .wordmark {
-  display: flex; align-items: center; gap: 6px;
-  font: 600 10px var(--mono); letter-spacing: 0.18em;
-  color: oklch(0.68 0.19 135);
+  font: 700 15px var(--display); letter-spacing: 0.02em; color: var(--text); white-space: nowrap;
 }
+.wordmark.lg { font-size: 16px; }
+.wordmark .accent { color: var(--a); }
 
+.song-label { font: 500 9px var(--mono); color: oklch(0.55 0.01 250); flex: none; }
 .title-input {
-  background: transparent; border: none; outline: none; color: var(--text);
-  font: 600 15px var(--display); width: 100%; min-width: 0; padding: 0;
+  background: transparent; border: none; outline: none; color: oklch(0.85 0.01 250);
+  font: 600 12px var(--mono); width: 100%; min-width: 0; padding: 0;
 }
 .title-input:focus { border-bottom: 1px solid var(--border); }
+
+/* ---------- about ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; padding: 24px;
+  background: oklch(0 0 0 / 0.72);
+  display: flex; align-items: center; justify-content: center;
+}
+.overlay[hidden] { display: none; }
+.about {
+  max-width: 340px; width: 100%; padding: 22px;
+  background: oklch(0.08 0 0); border: 1.5px solid var(--a);
+  max-height: 100%; overflow-y: auto;
+}
+.about p { margin: 0 0 12px; font: 400 12.5px/1.6 var(--sans); color: oklch(0.8 0.008 250); }
+.about p.credit { margin: 0 0 18px; font: 500 11px var(--mono); color: oklch(0.55 0.01 250); }
+.version {
+  display: inline-block; margin: 4px 0 14px; padding: 3px 8px;
+  font: 600 10px var(--mono); letter-spacing: 0.05em; color: oklch(0.55 0.01 250);
+  border: 1px solid var(--border);
+}
+.about-close {
+  width: 100%; padding: 10px; background: var(--a); border: none; color: oklch(0.08 0 0);
+  font: 700 12px var(--mono); letter-spacing: 0.04em; cursor: pointer;
+}
+
+/* ---------- key lock / explore ---------- */
+.mb-s { margin-bottom: 12px; }
+.lock-btn {
+  flex: none; padding: 7px 12px; border: 1px solid var(--border); background: transparent;
+  color: oklch(0.85 0.006 250); font: 600 10px var(--mono); cursor: pointer; white-space: nowrap;
+}
+.lock-btn[aria-pressed='true'] { background: var(--a); border-color: var(--a); color: var(--ink); }
+.explore-card {
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--a);
+}
+.explore-card[hidden] { display: none; }
+.explore-card span { font: 700 13px var(--display); color: var(--a); }
+.explore-card p { margin: 4px 0 0; font: 400 11.5px/1.5 var(--sans); color: oklch(0.8 0.008 250); }
+
+/* ---------- learn extras ---------- */
+.diff-strip { display: flex; gap: 2px; margin-bottom: 10px; }
+.diff-strip div {
+  flex: 1; display: flex; align-items: center; justify-content: center; height: 26px;
+  font: 700 10px var(--mono);
+  background: oklch(0.2 0.012 250); color: oklch(0.6 0.008 250);
+}
+.diff-strip div.altered { background: var(--c); color: oklch(0.1 0.01 250); }
+.mastery-dots { display: flex; gap: 5px; margin-bottom: 10px; }
+.mastery-dots i { width: 9px; height: 9px; border-radius: 50%; background: oklch(0.3 0.01 250); flex: none; }
+.mastery-dots i.on { background: var(--d); }
 
 .led-dot {
   width: 6px; height: 6px; flex: none; background: var(--dimmer);
@@ -386,19 +434,37 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
     <span class="bracket tl"></span><span class="bracket tr"></span>
     <span class="bracket bl"></span><span class="bracket br"></span>
 
+    <!-- ABOUT -->
+    <div id="aboutOverlay" class="overlay" hidden>
+      <div class="about" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <div class="row tight">
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkNpcmNsZVNvbmciPgogIDx0aXRsZT5DaXJjbGVTb25nPC90aXRsZT4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM5ZGZmNGEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmY1YWQwIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMmMzYTJlIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxjaXJjbGUgY3g9IjMyLjAwIiBjeT0iOC4wMCIgcj0iNC4yIiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iNDQuMDAiIGN5PSIxMS4yMiIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iNTIuNzgiIGN5PSIyMC4wMCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iNTYuMDAiIGN5PSIzMi4wMCIgcj0iMi45IiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iNTIuNzgiIGN5PSI0NC4wMCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iNDQuMDAiIGN5PSI1Mi43OCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iMzIuMDAiIGN5PSI1Ni4wMCIgcj0iMi45IiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iMjAuMDAiIGN5PSI1Mi43OCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iMTEuMjIiIGN5PSI0NC4wMCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iOC4wMCIgY3k9IjMyLjAwIiByPSIyLjkiIGZpbGw9InVybCgjZykiLz4KICA8Y2lyY2xlIGN4PSIxMS4yMiIgY3k9IjIwLjAwIiByPSIyLjEiIGZpbGw9IiM1ZjdhNjMiLz4KICA8Y2lyY2xlIGN4PSIyMC4wMCIgY3k9IjExLjIyIiByPSIyLjEiIGZpbGw9IiM1ZjdhNjMiLz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIxMi41IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZykiIHN0cm9rZS13aWR0aD0iMi41Ii8+CiAgPHBhdGggZD0iTTMyIDI1LjV2MTMiIHN0cm9rZT0idXJsKCNnKSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K" alt="" class="logo lg">
+          <span id="aboutTitle" class="wordmark lg">CIRCLE<span class="accent">SONG</span></span>
+        </div>
+        <span class="version">VERSION 1.0</span>
+        <p>CircleSong is a circle-of-fifths powered composition tool for guitar players. It maps the theory behind keys, modes, and chord progressions onto an instrument you already play, so you can build song structures — verses, choruses, bridges — by ear and by understanding, not guesswork.</p>
+        <p>Pick a key, hear every diatonic chord and its inversions instantly, sequence them into a loop, and get progression ideas grounded in real theory and well-known songs. The Learn tab and ear trainer build your fluency in modes as you write — so composing and studying happen in the same place.</p>
+        <p class="credit">by Nicolas Jean Pierre Figueroa</p>
+        <button id="aboutCloseBtn" class="about-close">CLOSE</button>
+      </div>
+    </div>
+
     <!-- TOP TRANSPORT BAR -->
     <header class="transport">
       <div class="row between">
         <div class="row tight grow">
-          <!-- Brand mark. Replace this element with <img src="..." class="logo"> to
-               drop in the artwork; .logo keeps the sizing either way. -->
-          <div class="logo" id="appLogo" aria-hidden="true"></div>
-          <div class="brand">
-            <span class="wordmark">CIRCLESONG<i id="armedLed" class="led-dot" title="Audio engine"></i></span>
-            <input id="projectTitle" class="title-input" value="Untitled Song" aria-label="Song title">
-          </div>
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkNpcmNsZVNvbmciPgogIDx0aXRsZT5DaXJjbGVTb25nPC90aXRsZT4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM5ZGZmNGEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmY1YWQwIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMmMzYTJlIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxjaXJjbGUgY3g9IjMyLjAwIiBjeT0iOC4wMCIgcj0iNC4yIiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iNDQuMDAiIGN5PSIxMS4yMiIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iNTIuNzgiIGN5PSIyMC4wMCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iNTYuMDAiIGN5PSIzMi4wMCIgcj0iMi45IiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iNTIuNzgiIGN5PSI0NC4wMCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iNDQuMDAiIGN5PSI1Mi43OCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iMzIuMDAiIGN5PSI1Ni4wMCIgcj0iMi45IiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iMjAuMDAiIGN5PSI1Mi43OCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iMTEuMjIiIGN5PSI0NC4wMCIgcj0iMi4xIiBmaWxsPSIjNWY3YTYzIi8+CiAgPGNpcmNsZSBjeD0iOC4wMCIgY3k9IjMyLjAwIiByPSIyLjkiIGZpbGw9InVybCgjZykiLz4KICA8Y2lyY2xlIGN4PSIxMS4yMiIgY3k9IjIwLjAwIiByPSIyLjEiIGZpbGw9IiM1ZjdhNjMiLz4KICA8Y2lyY2xlIGN4PSIyMC4wMCIgY3k9IjExLjIyIiByPSIyLjEiIGZpbGw9IiM1ZjdhNjMiLz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIxMi41IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZykiIHN0cm9rZS13aWR0aD0iMi41Ii8+CiAgPHBhdGggZD0iTTMyIDI1LjV2MTMiIHN0cm9rZT0idXJsKCNnKSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K" alt="" class="logo" id="appLogo">
+          <button id="aboutBtn" class="brand-btn" aria-haspopup="dialog" title="About CircleSong">
+            <span class="wordmark">CIRCLE<span class="accent">SONG</span></span>
+          </button>
+          <i id="armedLed" class="led-dot" title="Audio engine"></i>
         </div>
         <button id="playBtn" class="play" aria-label="Play"><span class="play-icon"></span></button>
+      </div>
+
+      <div class="row tight">
+        <span class="song-label">SONG:</span>
+        <input id="projectTitle" class="title-input" value="Untitled Song" aria-label="Song title">
       </div>
 
       <div class="row">
@@ -423,6 +489,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <h2>/01 CIRCLE_OF_FIFTHS</h2>
         <span id="circleKeyLabel" class="accent-a"></span>
       </div>
+      <div class="row gap-xs mb-s">
+        <select id="modeSelect" class="select grow" aria-label="Mode"></select>
+        <button id="lockBtn" class="lock-btn" aria-pressed="false"></button>
+      </div>
       <div class="wheel" id="wheel">
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
@@ -437,10 +507,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <span>◄ Fourths (subdominant)</span>
         <span>Fifths (dominant) ►</span>
       </div>
-      <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key; tap the outer ring for a major tonic, the inner ring for its relative minor. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant.</p>
-      <div class="row mt-s">
-        <span class="micro-label">MODE</span>
-        <select id="modeSelect" class="select grow" aria-label="Mode"></select>
+      <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant. Lock the key, then tap any wedge to hear it and see how it relates.</p>
+      <div id="exploreCard" class="explore-card" hidden>
+        <span id="exploreName"></span>
+        <p id="exploreText"></p>
       </div>
       <div class="scale-strip" id="scaleStrip"></div>
     </section>
@@ -535,6 +605,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <span id="learnAlsoKnown" class="muted small"></span>
         </div>
         <span id="learnFormula" class="mono-strong block"></span>
+        <div id="diffStrip" class="diff-strip" aria-label="Scale degrees compared with the major scale"></div>
         <p id="learnMood" class="accent-b tight"></p>
         <p id="learnUse" class="body-copy tight"></p>
         <div class="row gap-s">
@@ -544,7 +615,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       </div>
 
       <h3>EAR_TRAINER // GUESS_THE_MODE</h3>
-      <p class="hint">Score: <span id="quizScore">0 / 0</span></p>
+      <p class="hint">Score: <span id="quizScore">0 / 0</span> · <span id="quizStreak">Streak: 0 (best 0)</span></p>
+      <div id="masteryDots" class="mastery-dots" aria-label="Modes identified correctly at least once"></div>
       <div class="row gap-s">
         <button id="quizStartBtn" class="chip filled-a grow">▶ Start</button>
         <button id="quizReplayBtn" class="chip" hidden>↺</button>
@@ -1322,6 +1394,12 @@ const MODE_NAMES = ['Ionian', 'Dorian', 'Phrygian', 'Lydian', 'Mixolydian', 'Aeo
 
 const CIRCLE_LABELS = ['C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'D♭', 'A♭', 'E♭', 'B♭', 'F'];
 const MINOR_LABELS = ['Am', 'Em', 'Bm', 'F♯m', 'C♯m', 'G♯m', 'D♯m', 'B♭m', 'Fm', 'Cm', 'Gm', 'Dm'];
+
+/** Interval names, indexed by semitones above the tonic. */
+const INTERVAL_NAMES = [
+  'Unison (root)', 'Minor 2nd', 'Major 2nd', 'Minor 3rd', 'Major 3rd', 'Perfect 4th',
+  'Tritone', 'Perfect 5th', 'Minor 6th', 'Major 6th', 'Minor 7th', 'Major 7th',
+];
 
 const BAR_SIZES = [4, 8, 16, 32];
 const TIME_SIGS = ['4/4', '3/4', '6/8', '3/8', '12/8'];
@@ -2299,9 +2377,22 @@ const state = {
   moodId: null,
   sectionId: null,
   templateId: null,
+  showAbout: false,
+
+  /**
+   * Key lock turns the wheel from a key picker into an explorer: taps stop
+   * changing the key and instead sound the wedge and explain how it relates to
+   * the key you locked in.
+   */
+  rootLocked: false,
+  exploreNote: null,
+  exploreIsMinor: false,
 
   learnModeIdx: 0,
-  quiz: { modeIdx: null, options: [], answered: false, correct: null, picked: null, score: 0, total: 0 },
+  quiz: {
+    modeIdx: null, options: [], answered: false, correct: null, picked: null,
+    score: 0, total: 0, streak: 0, bestStreak: 0, mastered: [],
+  },
 };
 
 function makeBars(n, existing = []) {
@@ -2674,6 +2765,13 @@ function renderCircle() {
   $('hubMode').textContent = MODE_NAMES[state.modeIdx];
   $('circleKeyLabel').textContent = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
   $('modeSelect').value = String(state.modeIdx);
+  $('modeSelect').disabled = state.rootLocked;
+
+  const lock = $('lockBtn');
+  lock.setAttribute('aria-pressed', String(state.rootLocked));
+  lock.textContent = state.rootLocked ? '🔒 Key Locked — tap wheel to explore' : '🔓 Lock Key to Explore';
+
+  renderExplore();
 
   const strip = $('scaleStrip');
   strip.replaceChildren();
@@ -2694,6 +2792,30 @@ function renderCircle() {
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Explain a tapped wedge in terms of the locked key: what scale degree it is if
+ * it belongs, or which interval it sits at if it is borrowed.
+ */
+function renderExplore() {
+  const card = $('exploreCard');
+  if (state.exploreNote === null) { card.hidden = true; return; }
+
+  const note = state.exploreNote;
+  const flats = preferFlats();
+  const interval = ((note - state.rootPc) % 12 + 12) % 12;
+  const displayName = noteName(note, flats) + (state.exploreIsMinor ? 'm' : '');
+  const chords = diatonicChords(state.rootPc, modeId(), false);
+  const degree = chords.findIndex((c) => c.root === note);
+  const keyName = noteName(state.rootPc, flats);
+
+  $('exploreName').textContent = displayName;
+  $('exploreText').textContent =
+    degree >= 0
+      ? `${displayName} is the ${FUNCTION_NAMES[degree]} (${chords[degree].numeral}) of ${keyName} — a ${INTERVAL_NAMES[interval]} above the root.`
+      : `${displayName} sits a ${INTERVAL_NAMES[interval]} from ${keyName} — outside the current key, a borrowed or chromatic color.`;
+  card.hidden = false;
 }
 
 function renderTone() {
@@ -2985,8 +3107,29 @@ function renderLearn() {
   $('learnMood').textContent = info.mood;
   $('learnUse').textContent = info.use;
 
+  // Degree strip: which notes this mode alters relative to the major scale.
+  // That single row is what actually distinguishes one mode from another.
+  const major = modeStepsAbsolute('ionian');
+  const here = modeStepsAbsolute(MODE_IDS[state.learnModeIdx]);
+  const strip = $('diffStrip');
+  strip.replaceChildren();
+  here.slice(0, 7).forEach((val, i) => {
+    const delta = val - major[i];
+    const cell = el('div', delta !== 0 ? 'altered' : '', delta === 0 ? String(i + 1) : `${delta < 0 ? '♭' : '♯'}${i + 1}`);
+    strip.appendChild(cell);
+  });
+
   const q = state.quiz;
   $('quizScore').textContent = `${q.score} / ${q.total}`;
+  $('quizStreak').textContent = `Streak: ${q.streak} (best ${q.bestStreak})`;
+
+  const dots = $('masteryDots');
+  dots.replaceChildren();
+  MODE_NAMES.forEach((label, i) => {
+    const dot = el('i', q.mastered.includes(i) ? 'on' : '');
+    dot.title = `${label}${q.mastered.includes(i) ? ' — identified' : ''}`;
+    dots.appendChild(dot);
+  });
   $('quizStartBtn').textContent = q.modeIdx !== null ? '↻ New Round' : '▶ Start';
   $('quizReplayBtn').hidden = q.modeIdx === null;
 
@@ -3015,7 +3158,14 @@ function answerQuiz(idx) {
   q.picked = idx;
   q.correct = idx === q.modeIdx;
   q.total += 1;
-  if (q.correct) q.score += 1;
+  if (q.correct) {
+    q.score += 1;
+    q.streak += 1;
+    q.bestStreak = Math.max(q.bestStreak, q.streak);
+    if (!q.mastered.includes(q.modeIdx)) q.mastered.push(q.modeIdx);
+  } else {
+    q.streak = 0;
+  }
   renderLearn();
 }
 
@@ -3137,7 +3287,7 @@ function wire() {
   $('loopBtn').onclick = () => { state.loop = !state.loop; renderTransport(); };
   $('retriggerBtn').onclick = () => { state.cutOnRetrigger = !state.cutOnRetrigger; renderTone(); };
 
-  $('wheel').onclick = (e) => {
+  $('wheel').onclick = async (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const scale = rect.width / 280;
     const dx = (e.clientX - (rect.left + rect.width / 2)) / scale;
@@ -3147,14 +3297,50 @@ function wire() {
     let angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
     if (angle < 0) angle += 360;
     const note = CIRCLE[Math.floor(((angle + 15) % 360) / 30)];
-    if (dist > 90) { state.rootPc = note; state.modeIdx = 0; }
+    const isMinorRing = dist <= 90;
+
+    // Locked: explore instead of navigate. Sound the wedge and explain it.
+    if (state.rootLocked) {
+      const tapped = isMinorRing ? (note + 9) % 12 : note;
+      state.exploreNote = tapped;
+      state.exploreIsMinor = isMinorRing;
+      renderExplore();
+      if (!(await ensureAudio())) return;
+      const strings = tuning();
+      const target = 60 + tapped;
+      let s = 0;
+      let bestFret = 99;
+      for (let k = 0; k < 6; k++) {
+        const f = target - strings[k];
+        if (f >= 0 && f <= 14 && f < bestFret) { s = k; bestFret = f; }
+      }
+      engine.pluck({ string: s, midi: target, when: auditionStart(), velocity: 0.85 });
+      return;
+    }
+
+    if (!isMinorRing) { state.rootPc = note; state.modeIdx = 0; }
     else { state.rootPc = (note + 9) % 12; state.modeIdx = 5; }
     state.activeDegree = 0;
     state.voicingIndex = 0;
+    state.exploreNote = null;
     reresolveAll();
     render();
     previewDegree(0);
   };
+
+  $('lockBtn').onclick = () => {
+    state.rootLocked = !state.rootLocked;
+    state.exploreNote = null;
+    renderCircle();
+  };
+
+  // About dialog.
+  const overlay = $('aboutOverlay');
+  const closeAbout = () => { state.showAbout = false; overlay.hidden = true; };
+  $('aboutBtn').onclick = () => { state.showAbout = true; overlay.hidden = false; $('aboutCloseBtn').focus(); };
+  $('aboutCloseBtn').onclick = closeAbout;
+  overlay.onclick = (e) => { if (e.target === overlay) closeAbout(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showAbout) closeAbout(); });
 
   $('previewBtn').onclick = () => previewDegree(state.activeDegree);
   $('seventhBtn').onclick = () => {

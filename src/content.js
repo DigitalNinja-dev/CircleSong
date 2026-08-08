@@ -168,6 +168,12 @@ export const MODE_NAMES = ['Ionian', 'Dorian', 'Phrygian', 'Lydian', 'Mixolydian
 export const CIRCLE_LABELS = ['C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'D♭', 'A♭', 'E♭', 'B♭', 'F'];
 export const MINOR_LABELS = ['Am', 'Em', 'Bm', 'F♯m', 'C♯m', 'G♯m', 'D♯m', 'B♭m', 'Fm', 'Cm', 'Gm', 'Dm'];
 
+/** Interval names, indexed by semitones above the tonic. */
+export const INTERVAL_NAMES = [
+  'Unison (root)', 'Minor 2nd', 'Major 2nd', 'Minor 3rd', 'Major 3rd', 'Perfect 4th',
+  'Tritone', 'Perfect 5th', 'Minor 6th', 'Major 6th', 'Minor 7th', 'Major 7th',
+];
+
 export const BAR_SIZES = [4, 8, 16, 32];
 export const TIME_SIGS = ['4/4', '3/4', '6/8', '3/8', '12/8'];
 

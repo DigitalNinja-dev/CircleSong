@@ -17,19 +17,37 @@
     <span class="bracket tl"></span><span class="bracket tr"></span>
     <span class="bracket bl"></span><span class="bracket br"></span>
 
+    <!-- ABOUT -->
+    <div id="aboutOverlay" class="overlay" hidden>
+      <div class="about" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <div class="row tight">
+          <img src="assets/logo.svg" alt="" class="logo lg">
+          <span id="aboutTitle" class="wordmark lg">CIRCLE<span class="accent">SONG</span></span>
+        </div>
+        <span class="version">VERSION 1.0</span>
+        <p>CircleSong is a circle-of-fifths powered composition tool for guitar players. It maps the theory behind keys, modes, and chord progressions onto an instrument you already play, so you can build song structures — verses, choruses, bridges — by ear and by understanding, not guesswork.</p>
+        <p>Pick a key, hear every diatonic chord and its inversions instantly, sequence them into a loop, and get progression ideas grounded in real theory and well-known songs. The Learn tab and ear trainer build your fluency in modes as you write — so composing and studying happen in the same place.</p>
+        <p class="credit">by Nicolas Jean Pierre Figueroa</p>
+        <button id="aboutCloseBtn" class="about-close">CLOSE</button>
+      </div>
+    </div>
+
     <!-- TOP TRANSPORT BAR -->
     <header class="transport">
       <div class="row between">
         <div class="row tight grow">
-          <!-- Brand mark. Replace this element with <img src="..." class="logo"> to
-               drop in the artwork; .logo keeps the sizing either way. -->
-          <div class="logo" id="appLogo" aria-hidden="true"></div>
-          <div class="brand">
-            <span class="wordmark">CIRCLESONG<i id="armedLed" class="led-dot" title="Audio engine"></i></span>
-            <input id="projectTitle" class="title-input" value="Untitled Song" aria-label="Song title">
-          </div>
+          <img src="assets/logo.svg" alt="" class="logo" id="appLogo">
+          <button id="aboutBtn" class="brand-btn" aria-haspopup="dialog" title="About CircleSong">
+            <span class="wordmark">CIRCLE<span class="accent">SONG</span></span>
+          </button>
+          <i id="armedLed" class="led-dot" title="Audio engine"></i>
         </div>
         <button id="playBtn" class="play" aria-label="Play"><span class="play-icon"></span></button>
+      </div>
+
+      <div class="row tight">
+        <span class="song-label">SONG:</span>
+        <input id="projectTitle" class="title-input" value="Untitled Song" aria-label="Song title">
       </div>
 
       <div class="row">
@@ -54,6 +72,10 @@
         <h2>/01 CIRCLE_OF_FIFTHS</h2>
         <span id="circleKeyLabel" class="accent-a"></span>
       </div>
+      <div class="row gap-xs mb-s">
+        <select id="modeSelect" class="select grow" aria-label="Mode"></select>
+        <button id="lockBtn" class="lock-btn" aria-pressed="false"></button>
+      </div>
       <div class="wheel" id="wheel">
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
@@ -68,10 +90,10 @@
         <span>◄ Fourths (subdominant)</span>
         <span>Fifths (dominant) ►</span>
       </div>
-      <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key; tap the outer ring for a major tonic, the inner ring for its relative minor. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant.</p>
-      <div class="row mt-s">
-        <span class="micro-label">MODE</span>
-        <select id="modeSelect" class="select grow" aria-label="Mode"></select>
+      <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant. Lock the key, then tap any wedge to hear it and see how it relates.</p>
+      <div id="exploreCard" class="explore-card" hidden>
+        <span id="exploreName"></span>
+        <p id="exploreText"></p>
       </div>
       <div class="scale-strip" id="scaleStrip"></div>
     </section>
@@ -166,6 +188,7 @@
           <span id="learnAlsoKnown" class="muted small"></span>
         </div>
         <span id="learnFormula" class="mono-strong block"></span>
+        <div id="diffStrip" class="diff-strip" aria-label="Scale degrees compared with the major scale"></div>
         <p id="learnMood" class="accent-b tight"></p>
         <p id="learnUse" class="body-copy tight"></p>
         <div class="row gap-s">
@@ -175,7 +198,8 @@
       </div>
 
       <h3>EAR_TRAINER // GUESS_THE_MODE</h3>
-      <p class="hint">Score: <span id="quizScore">0 / 0</span></p>
+      <p class="hint">Score: <span id="quizScore">0 / 0</span> · <span id="quizStreak">Streak: 0 (best 0)</span></p>
+      <div id="masteryDots" class="mastery-dots" aria-label="Modes identified correctly at least once"></div>
       <div class="row gap-s">
         <button id="quizStartBtn" class="chip filled-a grow">▶ Start</button>
         <button id="quizReplayBtn" class="chip" hidden>↺</button>

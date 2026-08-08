@@ -40,6 +40,7 @@ import {
   MINOR_LABELS,
   BAR_SIZES,
   TIME_SIGS,
+  INTERVAL_NAMES,
   nearestBarSize,
 } from './content.js';
 
@@ -101,9 +102,22 @@ const state = {
   moodId: null,
   sectionId: null,
   templateId: null,
+  showAbout: false,
+
+  /**
+   * Key lock turns the wheel from a key picker into an explorer: taps stop
+   * changing the key and instead sound the wedge and explain how it relates to
+   * the key you locked in.
+   */
+  rootLocked: false,
+  exploreNote: null,
+  exploreIsMinor: false,
 
   learnModeIdx: 0,
-  quiz: { modeIdx: null, options: [], answered: false, correct: null, picked: null, score: 0, total: 0 },
+  quiz: {
+    modeIdx: null, options: [], answered: false, correct: null, picked: null,
+    score: 0, total: 0, streak: 0, bestStreak: 0, mastered: [],
+  },
 };
 
 function makeBars(n, existing = []) {
@@ -476,6 +490,13 @@ function renderCircle() {
   $('hubMode').textContent = MODE_NAMES[state.modeIdx];
   $('circleKeyLabel').textContent = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
   $('modeSelect').value = String(state.modeIdx);
+  $('modeSelect').disabled = state.rootLocked;
+
+  const lock = $('lockBtn');
+  lock.setAttribute('aria-pressed', String(state.rootLocked));
+  lock.textContent = state.rootLocked ? '🔒 Key Locked — tap wheel to explore' : '🔓 Lock Key to Explore';
+
+  renderExplore();
 
   const strip = $('scaleStrip');
   strip.replaceChildren();
@@ -496,6 +517,30 @@ function renderCircle() {
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Explain a tapped wedge in terms of the locked key: what scale degree it is if
+ * it belongs, or which interval it sits at if it is borrowed.
+ */
+function renderExplore() {
+  const card = $('exploreCard');
+  if (state.exploreNote === null) { card.hidden = true; return; }
+
+  const note = state.exploreNote;
+  const flats = preferFlats();
+  const interval = ((note - state.rootPc) % 12 + 12) % 12;
+  const displayName = noteName(note, flats) + (state.exploreIsMinor ? 'm' : '');
+  const chords = diatonicChords(state.rootPc, modeId(), false);
+  const degree = chords.findIndex((c) => c.root === note);
+  const keyName = noteName(state.rootPc, flats);
+
+  $('exploreName').textContent = displayName;
+  $('exploreText').textContent =
+    degree >= 0
+      ? `${displayName} is the ${FUNCTION_NAMES[degree]} (${chords[degree].numeral}) of ${keyName} — a ${INTERVAL_NAMES[interval]} above the root.`
+      : `${displayName} sits a ${INTERVAL_NAMES[interval]} from ${keyName} — outside the current key, a borrowed or chromatic color.`;
+  card.hidden = false;
 }
 
 function renderTone() {
@@ -787,8 +832,29 @@ function renderLearn() {
   $('learnMood').textContent = info.mood;
   $('learnUse').textContent = info.use;
 
+  // Degree strip: which notes this mode alters relative to the major scale.
+  // That single row is what actually distinguishes one mode from another.
+  const major = modeStepsAbsolute('ionian');
+  const here = modeStepsAbsolute(MODE_IDS[state.learnModeIdx]);
+  const strip = $('diffStrip');
+  strip.replaceChildren();
+  here.slice(0, 7).forEach((val, i) => {
+    const delta = val - major[i];
+    const cell = el('div', delta !== 0 ? 'altered' : '', delta === 0 ? String(i + 1) : `${delta < 0 ? '♭' : '♯'}${i + 1}`);
+    strip.appendChild(cell);
+  });
+
   const q = state.quiz;
   $('quizScore').textContent = `${q.score} / ${q.total}`;
+  $('quizStreak').textContent = `Streak: ${q.streak} (best ${q.bestStreak})`;
+
+  const dots = $('masteryDots');
+  dots.replaceChildren();
+  MODE_NAMES.forEach((label, i) => {
+    const dot = el('i', q.mastered.includes(i) ? 'on' : '');
+    dot.title = `${label}${q.mastered.includes(i) ? ' — identified' : ''}`;
+    dots.appendChild(dot);
+  });
   $('quizStartBtn').textContent = q.modeIdx !== null ? '↻ New Round' : '▶ Start';
   $('quizReplayBtn').hidden = q.modeIdx === null;
 
@@ -817,7 +883,14 @@ function answerQuiz(idx) {
   q.picked = idx;
   q.correct = idx === q.modeIdx;
   q.total += 1;
-  if (q.correct) q.score += 1;
+  if (q.correct) {
+    q.score += 1;
+    q.streak += 1;
+    q.bestStreak = Math.max(q.bestStreak, q.streak);
+    if (!q.mastered.includes(q.modeIdx)) q.mastered.push(q.modeIdx);
+  } else {
+    q.streak = 0;
+  }
   renderLearn();
 }
 
@@ -939,7 +1012,7 @@ function wire() {
   $('loopBtn').onclick = () => { state.loop = !state.loop; renderTransport(); };
   $('retriggerBtn').onclick = () => { state.cutOnRetrigger = !state.cutOnRetrigger; renderTone(); };
 
-  $('wheel').onclick = (e) => {
+  $('wheel').onclick = async (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const scale = rect.width / 280;
     const dx = (e.clientX - (rect.left + rect.width / 2)) / scale;
@@ -949,14 +1022,50 @@ function wire() {
     let angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
     if (angle < 0) angle += 360;
     const note = CIRCLE[Math.floor(((angle + 15) % 360) / 30)];
-    if (dist > 90) { state.rootPc = note; state.modeIdx = 0; }
+    const isMinorRing = dist <= 90;
+
+    // Locked: explore instead of navigate. Sound the wedge and explain it.
+    if (state.rootLocked) {
+      const tapped = isMinorRing ? (note + 9) % 12 : note;
+      state.exploreNote = tapped;
+      state.exploreIsMinor = isMinorRing;
+      renderExplore();
+      if (!(await ensureAudio())) return;
+      const strings = tuning();
+      const target = 60 + tapped;
+      let s = 0;
+      let bestFret = 99;
+      for (let k = 0; k < 6; k++) {
+        const f = target - strings[k];
+        if (f >= 0 && f <= 14 && f < bestFret) { s = k; bestFret = f; }
+      }
+      engine.pluck({ string: s, midi: target, when: auditionStart(), velocity: 0.85 });
+      return;
+    }
+
+    if (!isMinorRing) { state.rootPc = note; state.modeIdx = 0; }
     else { state.rootPc = (note + 9) % 12; state.modeIdx = 5; }
     state.activeDegree = 0;
     state.voicingIndex = 0;
+    state.exploreNote = null;
     reresolveAll();
     render();
     previewDegree(0);
   };
+
+  $('lockBtn').onclick = () => {
+    state.rootLocked = !state.rootLocked;
+    state.exploreNote = null;
+    renderCircle();
+  };
+
+  // About dialog.
+  const overlay = $('aboutOverlay');
+  const closeAbout = () => { state.showAbout = false; overlay.hidden = true; };
+  $('aboutBtn').onclick = () => { state.showAbout = true; overlay.hidden = false; $('aboutCloseBtn').focus(); };
+  $('aboutCloseBtn').onclick = closeAbout;
+  overlay.onclick = (e) => { if (e.target === overlay) closeAbout(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showAbout) closeAbout(); });
 
   $('previewBtn').onclick = () => previewDegree(state.activeDegree);
   $('seventhBtn').onclick = () => {
