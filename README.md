@@ -1,7 +1,7 @@
 # CircleSong 🎸⭕
 
 > **Turn Music Theory into Song Structures.**
-> CircleSong is an interactive, web-based Guitar DAW designed to help musicians compose songs from scratch. By bridging the Circle of Fifths, smart chord inversions, customizable rhythm patterns, and real-time fretboard visualization, CircleSong makes songwriting intuitive, educational, and fun.
+> CircleSong is an interactive, web-based Guitar tool designed to help musicians compose songs from scratch. By bridging the Circle of Fifths, smart chord inversions, customizable rhythm patterns, and real-time fretboard visualization, CircleSong makes songwriting intuitive, educational, and fun.
 
 by Nicolas Jean Pierre Figueroa
 
