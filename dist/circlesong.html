@@ -493,6 +493,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <select id="modeSelect" class="select grow" aria-label="Mode"></select>
         <button id="lockBtn" class="lock-btn" aria-pressed="false"></button>
       </div>
+      <div id="exploreModeRow" class="row gap-xs mb-s" hidden>
+        <span class="micro-label">TAP PLAYS</span>
+        <div class="row gap-xs grow" id="exploreModeBtns"></div>
+      </div>
       <div class="wheel" id="wheel">
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
@@ -2387,6 +2391,8 @@ const state = {
   rootLocked: false,
   exploreNote: null,
   exploreIsMinor: false,
+  /** What a wheel tap sounds while locked: 'chord' or 'note'. */
+  exploreMode: 'chord',
 
   learnModeIdx: 0,
   quiz: {
@@ -2771,6 +2777,23 @@ function renderCircle() {
   lock.setAttribute('aria-pressed', String(state.rootLocked));
   lock.textContent = state.rootLocked ? '🔒 Key Locked — tap wheel to explore' : '🔓 Lock Key to Explore';
 
+  // The chord/note choice only means anything while locked, so it appears with
+  // the mode it belongs to instead of sitting there inert.
+  $('exploreModeRow').hidden = !state.rootLocked;
+  const modeBtns = $('exploreModeBtns');
+  modeBtns.replaceChildren();
+  for (const [id, label] of [['chord', 'Chord'], ['note', 'Note']]) {
+    const b = el('button', `chip small grow${state.exploreMode === id ? ' active' : ''}`, label);
+    b.setAttribute('aria-pressed', String(state.exploreMode === id));
+    b.onclick = () => {
+      state.exploreMode = id;
+      renderCircle();
+      // Re-sound the current selection so the difference is immediate.
+      if (state.exploreNote !== null) playExplore();
+    };
+    modeBtns.appendChild(b);
+  }
+
   renderExplore();
 
   const strip = $('scaleStrip');
@@ -2795,27 +2818,71 @@ function renderCircle() {
 }
 
 /**
- * Explain a tapped wedge in terms of the locked key: what scale degree it is if
- * it belongs, or which interval it sits at if it is borrowed.
+ * Resolve the tapped wedge into the thing to sound and the words to show.
+ *
+ * The chord is the key's own chord on that root whenever the note belongs, so
+ * what you hear matches the roman numeral in the caption — tapping D in C major
+ * gives Dm (ii), not D. Off-key wedges fall back to the quality the wheel
+ * itself implies: major on the outer ring, minor on the inner.
  */
-function renderExplore() {
-  const card = $('exploreCard');
-  if (state.exploreNote === null) { card.hidden = true; return; }
-
+function exploreTarget() {
+  if (state.exploreNote === null) return null;
   const note = state.exploreNote;
   const flats = preferFlats();
-  const interval = ((note - state.rootPc) % 12 + 12) % 12;
-  const displayName = noteName(note, flats) + (state.exploreIsMinor ? 'm' : '');
   const chords = diatonicChords(state.rootPc, modeId(), false);
   const degree = chords.findIndex((c) => c.root === note);
-  const keyName = noteName(state.rootPc, flats);
+  const chord =
+    degree >= 0
+      ? chords[degree]
+      : makeChord(note, state.exploreIsMinor ? 'min' : 'maj', { preferFlats: flats });
 
-  $('exploreName').textContent = displayName;
-  $('exploreText').textContent =
+  // The headline names whatever is actually sounding, so the label never
+  // promises a chord the ear does not get.
+  const displayName =
+    state.exploreMode === 'chord'
+      ? chord.symbol
+      : noteName(note, flats) + (state.exploreIsMinor ? 'm' : '');
+
+  const interval = ((note - state.rootPc) % 12 + 12) % 12;
+  const keyName = noteName(state.rootPc, flats);
+  const text =
     degree >= 0
       ? `${displayName} is the ${FUNCTION_NAMES[degree]} (${chords[degree].numeral}) of ${keyName} — a ${INTERVAL_NAMES[interval]} above the root.`
       : `${displayName} sits a ${INTERVAL_NAMES[interval]} from ${keyName} — outside the current key, a borrowed or chromatic color.`;
+
+  return { note, chord, displayName, text };
+}
+
+function renderExplore() {
+  const card = $('exploreCard');
+  const target = exploreTarget();
+  if (!target) { card.hidden = true; return; }
+  $('exploreName').textContent = target.displayName;
+  $('exploreText').textContent = target.text;
   card.hidden = false;
+}
+
+/** Sound the current explore selection as a chord or as a single note. */
+async function playExplore() {
+  const target = exploreTarget();
+  if (!target || !(await ensureAudio())) return;
+
+  if (state.exploreMode === 'chord') {
+    const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
+    if (v) { await playChordNow(target.chord, v); return; }
+    // No playable shape in this tuning — fall through to the single note
+    // rather than going silent.
+  }
+
+  const strings = tuning();
+  const midi = 60 + target.note;
+  let string = 0;
+  let bestFret = 99;
+  for (let k = 0; k < 6; k++) {
+    const fret = midi - strings[k];
+    if (fret >= 0 && fret <= 14 && fret < bestFret) { string = k; bestFret = fret; }
+  }
+  engine.pluck({ string, midi, when: auditionStart(), velocity: 0.85 });
 }
 
 function renderTone() {
@@ -3301,20 +3368,10 @@ function wire() {
 
     // Locked: explore instead of navigate. Sound the wedge and explain it.
     if (state.rootLocked) {
-      const tapped = isMinorRing ? (note + 9) % 12 : note;
-      state.exploreNote = tapped;
+      state.exploreNote = isMinorRing ? (note + 9) % 12 : note;
       state.exploreIsMinor = isMinorRing;
       renderExplore();
-      if (!(await ensureAudio())) return;
-      const strings = tuning();
-      const target = 60 + tapped;
-      let s = 0;
-      let bestFret = 99;
-      for (let k = 0; k < 6; k++) {
-        const f = target - strings[k];
-        if (f >= 0 && f <= 14 && f < bestFret) { s = k; bestFret = f; }
-      }
-      engine.pluck({ string: s, midi: target, when: auditionStart(), velocity: 0.85 });
+      await playExplore();
       return;
     }
 

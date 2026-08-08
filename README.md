@@ -59,7 +59,9 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   (1, 2, 3 beats or a full bar).
 - **Key lock + wheel explorer** — lock the key, then tap any wedge to hear it
   and read how it relates: its scale degree and function if it belongs, or the
-  interval it sits at if it is borrowed.
+  interval it sits at if it is borrowed. Choose whether a tap plays the full
+  chord or a single note. In chord mode you hear the key's own chord on that
+  root, so tapping D in C major gives Dm (ii), matching the caption.
 - **Modes lesson + ear trainer** — play any mode's scale and characteristic
   vamp, see the degree strip showing exactly which notes it alters against the
   major scale, then test yourself with the "guess the mode" quiz, which tracks
