@@ -109,8 +109,8 @@ const body = html
 // Webfonts are inlined as data URIs rather than linked: the page must render
 // its real typography with no network, and font CDNs are blocked outright in
 // sandboxed hosts. Regenerate with tools/fetch-fonts.mjs.
-const fonts = exists('tools/fonts.css') ? read('tools/fonts.css') : '';
-if (!fonts) console.warn('warning: tools/fonts.css missing — falling back to system faces');
+const fonts = exists('assets/fonts.css') ? read('assets/fonts.css') : '';
+if (!fonts) console.warn('warning: assets/fonts.css missing — falling back to system faces');
 
 const css = read('styles.css');
 const head = `<title>CircleSong</title>

@@ -54,6 +54,11 @@
 
 * { box-sizing: border-box; }
 
+/* Taps should feel like buttons, not like text: kill the selection flash and
+   the 300 ms delay, and stop double-tap zoom on controls. */
+button, .slot, .wheel, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button, .slot { user-select: none; -webkit-user-select: none; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -65,6 +70,13 @@ body {
 a { color: var(--a); }
 
 .stage { display: flex; justify-content: center; width: 100%; min-height: 100vh; background: var(--bg); }
+/* Mobile toolbars change the viewport height as they hide and show; dvh tracks
+   the space actually visible, where vh stays at the largest size and leaves the
+   tab bar sitting below the fold. */
+@supports (height: 100dvh) {
+  .stage { min-height: 100dvh; }
+  .phone { min-height: 100dvh; }
+}
 
 .phone {
   position: relative;
@@ -3530,6 +3542,22 @@ render();
 // chord the user taps already makes sound.
 const arm = () => { ensureAudio(); document.removeEventListener('pointerdown', arm); };
 document.addEventListener('pointerdown', arm, { once: true });
+
+// Register the service worker that makes the app installable and offline-
+// capable. Guarded on the manifest link because the single-file build strips
+// it, and on http(s) because workers are unavailable on file:// origins —
+// without both checks those two ways of running the app log a fetch error.
+if (
+  'serviceWorker' in navigator &&
+  document.querySelector('link[rel="manifest"]') &&
+  location.protocol.startsWith('http')
+) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* Offline support is an enhancement; the app runs fine without it. */
+    });
+  });
+}
 
 // Expose for debugging in the console.
 window.CircleSong = { state, engine, sequencer, MODES };

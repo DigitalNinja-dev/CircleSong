@@ -30,5 +30,5 @@ for (const block of blocks) {
   console.log(`${family} ${weight}  ${(buf.length / 1024).toFixed(1)} KB`);
 }
 
-writeFileSync('/home/user/CircleSong/tools/fonts.css', out);
-console.log(`\n${blocks.length} faces, ${(bytes / 1024).toFixed(0)} KB raw -> tools/fonts.css`);
+writeFileSync('/home/user/CircleSong/assets/fonts.css', out);
+console.log(`\n${blocks.length} faces, ${(bytes / 1024).toFixed(0)} KB raw -> assets/fonts.css`);

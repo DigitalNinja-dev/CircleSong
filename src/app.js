@@ -1253,5 +1253,21 @@ render();
 const arm = () => { ensureAudio(); document.removeEventListener('pointerdown', arm); };
 document.addEventListener('pointerdown', arm, { once: true });
 
+// Register the service worker that makes the app installable and offline-
+// capable. Guarded on the manifest link because the single-file build strips
+// it, and on http(s) because workers are unavailable on file:// origins —
+// without both checks those two ways of running the app log a fetch error.
+if (
+  'serviceWorker' in navigator &&
+  document.querySelector('link[rel="manifest"]') &&
+  location.protocol.startsWith('http')
+) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* Offline support is an enhancement; the app runs fine without it. */
+    });
+  });
+}
+
 // Expose for debugging in the console.
 window.CircleSong = { state, engine, sequencer, MODES };
