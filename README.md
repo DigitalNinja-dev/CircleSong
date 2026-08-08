@@ -1,15 +1,99 @@
-# CircleSong
-CircleSong — An interactive, theory-guided Guitar DAW and progression sequencer powered by the Circle of Fifths. by Nicolas Jean Pierre Figueroa
 # CircleSong 🎸⭕
 
-> **Turn Music Theory into Song Structures.** 
+> **Turn Music Theory into Song Structures.**
 > CircleSong is an interactive, web-based Guitar DAW designed to help musicians compose songs from scratch. By bridging the Circle of Fifths, smart chord inversions, customizable rhythm patterns, and real-time fretboard visualization, CircleSong makes songwriting intuitive, educational, and fun.
+
+by Nicolas Jean Pierre Figueroa
 
 ---
 
-### Key Features
-- **Circle of Fifths Engine:** Real-time harmonic mapping, mode selection, and diatonic chord recommendations.
-- **Interactive Progression Timeline:** Layer loops across 4, 8, 16, or 32 bars with custom time signatures ($4/4$, $3/8$, $6/8$, etc.) and BPM control.
-- **Dynamic Fretboard & Inversion Switcher:** View exact fingerings and instantly audition Drop-2, Drop-3, and triad inversions.
-- **Custom Tone & Strum Engine:** Audition progressions using Acoustic, Electric, Jazz, and Reggae soundbanks paired with preset strumming patterns.
-- **AI-Powered Songwriting Assistant:** Mood-based chord suggestions and progression templates inspired by hit songs.
+## Running it
+
+The app is dependency-free static ES modules, but it **must be served over
+HTTP** — `AudioWorklet` and ES modules do not work from `file://`.
+
+```bash
+npx http-server -p 8080 .
+# then open http://localhost:8080
+```
+
+Any static server works (`python3 -m http.server 8080`, `npx serve`, nginx…).
+
+Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.1+.
+
+---
+
+## Key Features
+
+- **Circle of Fifths Engine** — real-time harmonic mapping, mode selection, and
+  diatonic chord recommendations. Tap the outer ring for a major tonic, the
+  inner ring for its relative minor.
+- **Interactive Progression Timeline** — layer loops across 4, 8, 16, or 32 bars
+  with custom time signatures (4/4, 3/4, 6/8, 3/8, 12/8) and BPM control.
+  Bars can be split in half for two chords per bar. Drag chords in from the
+  Compose tab.
+- **Dynamic Fretboard & Inversion Switcher** — exact fingerings with chord-tone
+  colouring, and instant auditioning of root position, 1st/2nd inversion,
+  Drop-2 and Drop-3 voicings. Cycle alternative shapes for any chord.
+- **Custom Tone & Strum Engine** — six modelled instruments (acoustic steel,
+  nylon classical, electric clean, crunch, jazz archtop, reggae) and seven
+  rhythm patterns, plus live control over sustain, brightness, and pick
+  position. Five tunings including Drop D, DADGAD and Open G.
+- **Modes lesson + ear trainer** — play any mode's scale and characteristic
+  vamp, then test yourself with the "guess the mode" quiz.
+- **Songwriting Assistant** — mood-based chord suggestions, song-section ideas,
+  and progression templates inspired by hit songs. Everything applies straight
+  to the timeline in the current key.
+- **Save / load** — export and re-import songs as JSON. Progressions are stored
+  as scale degrees, so re-importing into a different key transposes the song.
+
+Keyboard: <kbd>Space</kbd> toggles playback, <kbd>1</kbd>–<kbd>7</kbd> select and
+audition scale degrees.
+
+---
+
+## The sound
+
+Chords are rendered by a **six-string digital waveguide model** (extended
+Karplus–Strong) running in an `AudioWorklet`, not by oscillators: fractional
+delay tuning, frequency-dependent decay, pick position and hardness, velocity →
+brightness coupling, and sympathetic bridge coupling between strings. Each
+preset then convolves with a modelled instrument body or speaker cabinet.
+
+Strums are performed rather than triggered — sequential string contact, velocity
+and timing jitter, treble-side upstrokes that catch fewer strings, and real loop
+damping for palm mutes.
+
+See **[docs/AUDIO_QUALITY.md](docs/AUDIO_QUALITY.md)** for the full signal path,
+the measurements it is verified against, and the ordered roadmap for pushing it
+closer to a recorded guitar.
+
+---
+
+## Project layout
+
+```
+index.html               app shell / markup
+styles.css               cyber-brutalist dark theme
+src/
+  app.js                 state, rendering, and event wiring
+  theory.js              pitch classes, modes, diatonic harmony, Circle of Fifths
+  fretboard.js           tunings, voicing search, inversions, Drop-2/Drop-3
+  patterns.js            strum and fingerpicking patterns
+  sequencer.js           lookahead transport, metronome, playhead
+  content.js             harmonic-function copy, mode lessons, templates
+  audio/
+    engine.js            AudioContext, presets, signal chain, strum performance
+    guitar-processor.js  AudioWorklet — the six string models
+    impulse.js           synthesised body, cabinet, and room impulse responses
+docs/
+  AUDIO_QUALITY.md       sound design notes and improvement roadmap
+```
+
+Add `?theme=mono` to the URL for the monochrome amber accent set.
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
