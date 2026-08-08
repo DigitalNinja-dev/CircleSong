@@ -9,15 +9,29 @@ by Nicolas Jean Pierre Figueroa
 
 ## Running it
 
-The app is dependency-free static ES modules, but it **must be served over
-HTTP** — `AudioWorklet` and ES modules do not work from `file://`.
+**Easiest — no install, no server.** Download
+[`dist/circlesong.html`](dist/circlesong.html) and open it. It is the entire
+app in one self-contained file: no network, no dependencies, fonts and the
+audio engine included. Works offline, and works on a phone (the layout is
+mobile-first).
+
+**From source**, for development. The app is dependency-free static ES modules,
+but in this form it **must be served over HTTP** — ES modules and
+`AudioWorklet` both refuse `file://` origins.
 
 ```bash
-npx http-server -p 8080 .
+npm start                 # or: npx http-server -p 8080 .
 # then open http://localhost:8080
 ```
 
 Any static server works (`python3 -m http.server 8080`, `npx serve`, nginx…).
+
+Rebuild the single-file version after changing sources:
+
+```bash
+npm run build             # -> dist/circlesong.html
+npm run fonts             # refresh tools/fonts.css (needs network; rarely)
+```
 
 Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.1+.
 
@@ -86,8 +100,13 @@ src/
     engine.js            AudioContext, presets, signal chain, strum performance
     guitar-processor.js  AudioWorklet — the six string models
     impulse.js           synthesised body, cabinet, and room impulse responses
+tools/
+  build-single.mjs       bundles everything into dist/circlesong.html
+  fetch-fonts.mjs        regenerates tools/fonts.css (inlined webfont subsets)
 docs/
   AUDIO_QUALITY.md       sound design notes and improvement roadmap
+dist/
+  circlesong.html        generated single-file build — do not edit by hand
 ```
 
 Add `?theme=mono` to the URL for the monochrome amber accent set.
