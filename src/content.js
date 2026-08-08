@@ -1,5 +1,5 @@
 // Editorial content: harmonic-function copy, mode lessons, and the rule-based
-// songwriting suggestions. Ported from the FretFlow design prototype.
+// songwriting suggestions. Ported from the CircleSong design prototype.
 
 export const FUNCTION_NAMES = [
   'Tonic',

@@ -78,7 +78,21 @@ correlated transients: before they were added, every preset peaked between
 into crackle. All presets now peak at ~0.9 with zero clipped samples, and sit
 within 0.04 of each other so switching tones does not jump in loudness.
 
-### 1.4 Performance realism (`src/audio/engine.js`, `src/patterns.js`)
+### 1.4 Retrigger and stop behaviour
+
+Overlapping auditions were the loudest usability problem: tapping through
+chords stacked them on top of each other. The worklet now takes a `cut`
+message that both drops queued events scheduled at or after a given frame and
+damps every ringing string, so the caller cuts first and schedules the
+replacement second. Damping attenuates the delay-line *output*, not just its
+feedback path — otherwise a "cut" still rings for a full period.
+
+Measured: strings fall to 0.5 % of level in 120 ms and to zero by 300 ms.
+Residual output after a cut is the room reverb decaying naturally (9 % at
+120 ms, 1.5 % at 600 ms), which is intentional — cutting a reverb tail dead
+sounds artificial.
+
+### 1.5 Performance realism (`src/audio/engine.js`, `src/patterns.js`)
 
 Correct notes played mechanically still sound fake. The strum engine adds:
 

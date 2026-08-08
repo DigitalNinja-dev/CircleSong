@@ -16,6 +16,22 @@ export function keyPrefersFlats(tonicPc) {
   return FLAT_KEYS.has(((tonicPc % 12) + 12) % 12);
 }
 
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+
+/**
+ * Accidental spelling for a tonic *in a given mode*.
+ *
+ * Spelling follows the key signature, and a mode's signature is its relative
+ * major's — C Aeolian carries three flats, so its scale is C D E♭ F G A♭ B♭,
+ * not C D D♯ F G G♯ A♯. Deciding from the tonic alone gets every non-Ionian
+ * key wrong.
+ */
+export function keySignaturePrefersFlats(tonicPc, modeId) {
+  const i = Math.max(0, MODE_IDS.indexOf(modeId));
+  const relativeMajor = (((tonicPc - MAJOR_STEPS[i]) % 12) + 12) % 12;
+  return FLAT_KEYS.has(relativeMajor);
+}
+
 export function midiToName(midi, preferFlats = false) {
   return noteName(midi % 12, preferFlats) + (Math.floor(midi / 12) - 1);
 }
@@ -81,7 +97,7 @@ export function scalePitchClasses(tonicPc, modeId) {
 export function diatonicChords(tonicPc, modeId, sevenths = false) {
   const mode = MODES[modeId] || MODES.ionian;
   const steps = mode.steps;
-  const flats = keyPrefersFlats(tonicPc);
+  const flats = keySignaturePrefersFlats(tonicPc, modeId);
   const out = [];
 
   for (let d = 0; d < 7; d++) {

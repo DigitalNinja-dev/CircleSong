@@ -59,9 +59,9 @@ export class Sequencer {
     this.timer = null;
     cancelAnimationFrame(this._raf);
     this.scheduled.length = 0;
-    const t = this.engine.currentTime;
-    // Let the strings decay naturally rather than cutting them dead.
-    for (let s = 0; s < 6; s++) this.engine.release(s, t, 0.55, 0.25);
+    // Stop means stop: drop everything already queued and damp the strings.
+    // Letting them ring out sounds like the transport ignored you.
+    this.engine.cut(this.engine.currentTime, { level: 1, time: 0.04 });
     if (this.onPlayhead) this.onPlayhead(-1);
   }
 
@@ -146,6 +146,10 @@ export class Sequencer {
     if (!notes.length) return;
 
     const pattern = getPattern(st.rhythm);
+    // Previews can play only the first part of the pattern — `fraction` is how
+    // much of the bar to sound, so the pattern keeps its tempo and is truncated
+    // rather than squeezed.
+    const fraction = st.previewFraction ?? 1;
 
     if (pattern.kind === 'arp') {
       // Map symbolic picks onto whichever strings this voicing actually uses.
@@ -158,6 +162,7 @@ export class Sequencer {
         return fromTop ?? sounding[sounding.length - 1];
       };
       for (const p of pattern.picks) {
+        if (p.t >= fraction) continue;
         const s = pick(p.pick);
         if (s === undefined) continue;
         this.engine.pluck({
@@ -172,6 +177,7 @@ export class Sequencer {
     }
 
     for (const hit of pattern.hits) {
+      if (hit.t >= fraction) continue;
       const t = swingTime(hit.t, pattern.swing || 0);
       const when = startTime + t * duration;
       if (when < startTime - 0.001 || when >= startTime + duration) continue;

@@ -1,8 +1,8 @@
-// CircleSong / FretFlow — application shell.
+// CircleSong — application shell.
 //
-// Implements the FretFlow design prototype as a real app: the design's DCLogic
-// component tree becomes plain DOM, and its placeholder oscillator synth is
-// replaced by the waveguide engine in src/audio/.
+// Implements the design prototype as a real app: the design's DCLogic component
+// tree becomes plain DOM, and its placeholder oscillator synth is replaced by
+// the waveguide engine in src/audio/.
 
 import {
   CIRCLE,
@@ -11,8 +11,8 @@ import {
   diatonicChords,
   scalePitchClasses,
   noteName,
-  keyPrefersFlats,
   chordLabel,
+  keySignaturePrefersFlats,
   midiToName,
   modeStepsAbsolute,
 } from './theory.js';
@@ -26,7 +26,7 @@ import {
   VOICING_MODES,
 } from './fretboard.js';
 import { AudioEngine, PRESETS } from './audio/engine.js';
-import { Sequencer, barDuration } from './sequencer.js';
+import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
 import {
   FUNCTION_NAMES,
@@ -89,6 +89,10 @@ const state = {
   rhythm: 'straight8',
   tuningId: 'standard',
   volume: 0.8,
+  /** Each new chord silences the previous one instead of layering over it. */
+  cutOnRetrigger: true,
+  /** How many beats of the rhythm pattern an audition plays. */
+  previewBeats: 4,
 
   barCount: 8,
   bars: makeBars(8),
@@ -165,7 +169,7 @@ function toast(msg, isError = false) {
 
 const modeId = () => MODE_IDS[state.modeIdx];
 const tuning = () => TUNINGS[state.tuningId].midi;
-const preferFlats = () => keyPrefersFlats(state.rootPc);
+const preferFlats = () => keySignaturePrefersFlats(state.rootPc, modeId());
 
 function currentChords() {
   return diatonicChords(state.rootPc, modeId(), state.seventh);
@@ -187,31 +191,44 @@ function voicingList(chord, mode = state.voicingMode) {
   return list;
 }
 
-function activeVoicing() {
-  const chord = chordForDegree(state.activeDegree);
-  const list = voicingList(chord);
-  if (!list.length) return null;
-  return list[state.voicingIndex % list.length];
-}
-
 // ------------------------------------------------------------------ playback
 
-async function playChordNow(chord, voicing, { duration } = {}) {
+/**
+ * Fraction of a bar an audition covers. The rhythm pattern keeps its tempo and
+ * is truncated, so "2 beats" sounds like the first half of the real thing
+ * rather than the whole thing played twice as fast.
+ */
+function previewFraction() {
+  const { beats } = parseTimeSig(state.timeSig);
+  return Math.min(1, state.previewBeats / beats);
+}
+
+/**
+ * Start of the next audition. When "cut previous sound" is on, everything
+ * already ringing or queued is silenced at exactly this moment, so repeated
+ * clicks replace each other instead of stacking up.
+ */
+function auditionStart() {
+  const when = engine.currentTime + 0.04;
+  if (state.cutOnRetrigger) engine.cut(when);
+  return when;
+}
+
+async function playChordNow(chord, voicing, { duration, fraction } = {}) {
   if (!(await ensureAudio())) return;
   const dur = duration ?? barDuration(state.timeSig, state.bpm);
-  sequencer.scheduleChord(
-    { chord, voicing, voicingMode: state.voicingMode },
-    engine.currentTime + 0.04,
-    dur,
-    {
-      rhythm: state.rhythm,
-      tuning: tuning(),
-      velocity: 1,
-    }
-  );
+  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, auditionStart(), dur, {
+    rhythm: state.rhythm,
+    tuning: tuning(),
+    velocity: 1,
+    previewFraction: fraction ?? previewFraction(),
+  });
 }
 
 async function previewDegree(degree) {
+  // While the transport runs, tapping a chord selects it without sounding —
+  // auditioning over a loop is what turned into audio soup.
+  if (sequencer.playing) return;
   const chord = chordForDegree(degree);
   const list = voicingList(chord);
   const v = list.length ? list[state.voicingIndex % list.length] : null;
@@ -222,7 +239,7 @@ async function previewDegree(degree) {
 async function playModeScale(idx) {
   if (!(await ensureAudio())) return;
   const steps = modeStepsAbsolute(MODE_IDS[idx]).concat([12]);
-  const t0 = engine.currentTime + 0.05;
+  const t0 = auditionStart();
   const strings = tuning();
   steps.forEach((off, i) => {
     const target = 60 + state.rootPc + off;
@@ -242,7 +259,7 @@ async function playModeVamp(idx) {
   const chords = diatonicChords(state.rootPc, MODE_IDS[idx], false);
   const info = MODE_INFO[idx];
   const dur = Math.max((60 / state.bpm) * 2, 0.9);
-  const t0 = engine.currentTime + 0.05;
+  const t0 = auditionStart();
   info.vampDegrees.forEach((d, i) => {
     const chord = chords[d];
     const v = resolveVoicing(chord, 'root', { tuning: tuning() });
@@ -262,9 +279,10 @@ async function togglePlay() {
     state.playheadIndex = -1;
   } else {
     if (!(await ensureAudio())) return;
-    if (!state.bars.some((b) => b.slots.some(Boolean))) {
-      toast('Timeline is empty — add chords first.');
-      return;
+    // An empty timeline still plays: the metronome runs, which is what you
+    // want when working out a tempo or a feel before committing chords.
+    if (!state.bars.some((b) => b.slots.some(Boolean)) && !state.metronome) {
+      toast('Timeline is empty — add chords, or switch the metronome on.');
     }
     sequencer.start();
     state.playing = true;
@@ -380,12 +398,16 @@ function glyph(kind, active) {
 }
 
 function renderTransport() {
-  const status = audioError
-    ? 'ENGINE:UNAVAILABLE // SERVE_OVER_HTTP'
-    : `ENGINE:${engine.ready ? 'WAVEGUIDE' : 'IDLE'} // KEY:${noteName(state.rootPc, preferFlats())}_${MODE_NAMES[state.modeIdx].toUpperCase()} // STATUS:${
-        sequencer.playing ? 'PLAYING' : engine.ready ? 'ARMED' : 'TAP_TO_ARM'
-      }`;
-  $('statusText').textContent = status;
+  // The engine state is a single LED rather than a status readout: it matters
+  // only when something is wrong, and the key/mode it used to echo is already
+  // on the wheel.
+  const led = $('armedLed');
+  led.classList.toggle('armed', engine.ready && !audioError);
+  led.title = audioError
+    ? `Audio unavailable — ${audioError}`
+    : engine.ready
+      ? 'Audio engine ready'
+      : 'Tap anything to start audio';
 
   const play = $('playBtn');
   play.classList.toggle('playing', sequencer.playing);
@@ -395,7 +417,7 @@ function renderTransport() {
   const bpm = $('bpm');
   if (document.activeElement !== bpm) bpm.value = state.bpm;
 
-  $('timeSigBtn').textContent = `${state.timeSig} ▾`;
+  $('timeSigSelect').value = state.timeSig;
   const metro = $('metroBtn');
   metro.setAttribute('aria-pressed', String(state.metronome));
   const loop = $('loopBtn');
@@ -453,7 +475,7 @@ function renderCircle() {
   $('hubKey').textContent = noteName(state.rootPc, preferFlats());
   $('hubMode').textContent = MODE_NAMES[state.modeIdx];
   $('circleKeyLabel').textContent = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
-  $('modeBtn').textContent = `${MODE_NAMES[state.modeIdx]} ▾`;
+  $('modeSelect').value = String(state.modeIdx);
 
   const strip = $('scaleStrip');
   strip.replaceChildren();
@@ -470,7 +492,7 @@ function renderCircle() {
         const f = target - strings[k];
         if (f >= 0 && f <= 14 && f < bestFret) { s = k; bestFret = f; }
       }
-      engine.pluck({ string: s, midi: target, when: engine.currentTime + 0.02, velocity: 0.85 });
+      engine.pluck({ string: s, midi: target, when: auditionStart(), velocity: 0.85 });
     };
     strip.appendChild(b);
   });
@@ -523,6 +545,21 @@ function renderTone() {
     };
     row.append(lab, input, out);
     sliders.appendChild(row);
+  }
+
+  const retrigger = $('retriggerBtn');
+  retrigger.setAttribute('aria-pressed', String(state.cutOnRetrigger));
+  retrigger.textContent = state.cutOnRetrigger ? 'On' : 'Off';
+
+  const lenRow = $('previewLengthRow');
+  lenRow.replaceChildren();
+  const { beats } = parseTimeSig(state.timeSig);
+  for (let n = 1; n <= 4; n++) {
+    const isBar = n >= beats;
+    const b = el('button', `chip small${state.previewBeats === n ? ' active' : ''}`, isBar ? '1 bar' : `${n}`);
+    b.title = isBar ? 'Play a full bar' : `Play ${n} beat${n > 1 ? 's' : ''}`;
+    b.onclick = () => { state.previewBeats = n; renderTone(); previewDegree(state.activeDegree); };
+    lenRow.appendChild(b);
   }
 
   const sel = $('tuningSelect');
@@ -856,13 +893,14 @@ function renderAssist() {
 
 // ------------------------------------------------------------ static wiring
 
-function buildMenu(hostId, items, isActive, onPick) {
-  const menu = $(hostId);
-  menu.replaceChildren();
-  items.forEach((item, i) => {
-    const b = el('button', isActive(i) ? 'active' : '', item);
-    b.onclick = () => { onPick(i); menu.hidden = true; };
-    menu.appendChild(b);
+/** Fill a <select> once, with `values[i]` as the option value. */
+function fillSelect(sel, labels, values) {
+  sel.replaceChildren();
+  labels.forEach((label, i) => {
+    const o = document.createElement('option');
+    o.value = String(values ? values[i] : label);
+    o.textContent = label;
+    sel.appendChild(o);
   });
 }
 
@@ -876,49 +914,30 @@ function wire() {
     $('bpmValue').textContent = state.bpm;
   };
 
-  const timeSigBtn = $('timeSigBtn');
-  const timeSigMenu = $('timeSigMenu');
-  timeSigBtn.onclick = (e) => {
-    e.stopPropagation();
-    buildMenu('timeSigMenu', TIME_SIGS, (i) => TIME_SIGS[i] === state.timeSig, (i) => {
-      state.timeSig = TIME_SIGS[i];
-      renderTransport();
-    });
-    timeSigMenu.hidden = !timeSigMenu.hidden;
-    timeSigBtn.setAttribute('aria-expanded', String(!timeSigMenu.hidden));
+  // Native selects rather than custom popovers: they cannot get stuck open,
+  // they open the platform picker on touch devices, and they are keyboard- and
+  // screen-reader-accessible for free.
+  const timeSig = $('timeSigSelect');
+  fillSelect(timeSig, TIME_SIGS);
+  timeSig.onchange = () => {
+    state.timeSig = timeSig.value;
+    renderTransport();
+    renderTone(); // audition-length labels depend on beats per bar
   };
 
-  const modeBtn = $('modeBtn');
-  const modeMenu = $('modeMenu');
-  modeBtn.onclick = (e) => {
-    e.stopPropagation();
-    buildMenu('modeMenu', MODE_NAMES, (i) => i === state.modeIdx, (i) => {
-      state.modeIdx = i;
-      state.activeDegree = 0;
-      state.voicingIndex = 0;
-      reresolveAll();
-      render();
-    });
-    modeMenu.hidden = !modeMenu.hidden;
-    modeBtn.setAttribute('aria-expanded', String(!modeMenu.hidden));
+  const modeSel = $('modeSelect');
+  fillSelect(modeSel, MODE_NAMES, MODE_NAMES.map((_, i) => i));
+  modeSel.onchange = () => {
+    state.modeIdx = Number(modeSel.value);
+    state.activeDegree = 0;
+    state.voicingIndex = 0;
+    reresolveAll();
+    render();
   };
-
-  document.addEventListener('click', () => {
-    timeSigMenu.hidden = true;
-    modeMenu.hidden = true;
-    timeSigBtn.setAttribute('aria-expanded', 'false');
-    modeBtn.setAttribute('aria-expanded', 'false');
-  });
 
   $('metroBtn').onclick = () => { state.metronome = !state.metronome; renderTransport(); };
   $('loopBtn').onclick = () => { state.loop = !state.loop; renderTransport(); };
-  $('panicBtn').onclick = () => {
-    if (sequencer.playing) sequencer.stop();
-    state.playing = false;
-    engine.allNotesOff();
-    renderTransport();
-    renderTimeline();
-  };
+  $('retriggerBtn').onclick = () => { state.cutOnRetrigger = !state.cutOnRetrigger; renderTone(); };
 
   $('wheel').onclick = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();

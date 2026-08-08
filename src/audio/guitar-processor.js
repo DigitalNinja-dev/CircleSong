@@ -237,6 +237,11 @@ class StringModel {
       out = y - this.buf[pr] * this.pickupMix;
     }
 
+    // A hand landing on the strings silences what is already travelling down
+    // the delay line, not just what recirculates — so damping has to attenuate
+    // the output too, otherwise a "cut" still rings for a full period.
+    out *= this.muteGain;
+
     this.w = (this.w + 1) & MASK;
 
     // DC blocker.
@@ -279,6 +284,22 @@ class GuitarProcessor extends AudioWorkletProcessor {
         // Keep the queue ordered by scheduled frame.
         this.queue.sort((a, b) => a.frame - b.frame);
         break;
+
+      // Retrigger: silence everything from `frame` onward. Pending events at or
+      // after that point are dropped rather than allowed to fire, which is what
+      // stops a rapid series of clicks from piling chords on top of each other.
+      // Notes scheduled *after* this message arrives still play, so the caller
+      // cuts first and schedules the replacement second.
+      case 'cut':
+        this.queue = this.queue.filter((e) => e.frame < msg.frame);
+        this.queue.push({
+          type: 'cutAll',
+          frame: msg.frame,
+          level: msg.level ?? 1,
+          time: msg.time ?? 0.03,
+        });
+        this.queue.sort((a, b) => a.frame - b.frame);
+        break;
       case 'config':
         if (msg.coupling !== undefined) this.coupling = msg.coupling;
         if (msg.master !== undefined) this.master = msg.master;
@@ -294,6 +315,10 @@ class GuitarProcessor extends AudioWorkletProcessor {
   }
 
   applyEvent(ev) {
+    if (ev.type === 'cutAll') {
+      for (const s of this.strings) s.release(ev.level, ev.time);
+      return;
+    }
     const s = this.strings[ev.string & 5];
     if (ev.type === 'pluck') s.pluck(ev);
     else s.release(ev.level ?? 0.6, ev.time ?? 0.1);

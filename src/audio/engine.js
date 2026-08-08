@@ -441,6 +441,27 @@ export class AudioEngine {
     });
   }
 
+  /**
+   * Silence everything from `when` onward, dropping any notes already queued
+   * for that moment or later. This is the retrigger primitive: call it, then
+   * schedule the replacement, and the old sound stops exactly as the new one
+   * starts instead of layering on top of it.
+   *
+   * The default 30 ms damp is fast enough to read as an immediate cut but slow
+   * enough not to click.
+   */
+  cut(when = null, { level = 1, time = 0.03 } = {}) {
+    if (!this.ready) return;
+    const t = Math.max(when ?? this.currentTime, 0);
+    this.node.port.postMessage({
+      type: 'cut',
+      frame: Math.max(0, Math.round(t * this.ctx.sampleRate)),
+      level,
+      time,
+    });
+  }
+
+  /** Immediate, unconditional silence — used when tearing down playback. */
   allNotesOff() {
     if (this.ready) this.node.port.postMessage({ type: 'allNotesOff' });
   }

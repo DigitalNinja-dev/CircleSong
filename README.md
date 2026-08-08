@@ -53,6 +53,10 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   nylon classical, electric clean, crunch, jazz archtop, reggae) and seven
   rhythm patterns, plus live control over sustain, brightness, and pick
   position. Five tunings including Drop D, DADGAD and Open G.
+- **Predictable auditioning** — by default each chord you tap silences the one
+  before it, so rapid exploring never turns into overlapping mush. Toggle it
+  off under Tone → Playback, and set how much of a bar an audition plays
+  (1, 2, 3 beats or a full bar).
 - **Modes lesson + ear trainer** — play any mode's scale and characteristic
   vamp, then test yourself with the "guess the mode" quiz.
 - **Songwriting Assistant** — mood-based chord suggestions, song-section ideas,
@@ -60,6 +64,9 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   to the timeline in the current key.
 - **Save / load** — export and re-import songs as JSON. Progressions are stored
   as scale degrees, so re-importing into a different key transposes the song.
+
+Pressing play with an empty timeline runs the metronome, so you can find a
+tempo before committing chords.
 
 Keyboard: <kbd>Space</kbd> toggles playback, <kbd>1</kbd>–<kbd>7</kbd> select and
 audition scale degrees.
@@ -110,6 +117,14 @@ dist/
 ```
 
 Add `?theme=mono` to the URL for the monochrome amber accent set.
+
+### Branding
+
+The header mark is a placeholder gradient block (`#appLogo` in `index.html`).
+To use real artwork, replace that element with `<img src="…" class="logo" alt="">`
+— `.logo` fixes the sizing either way, so nothing else needs to change. For the
+single-file build, inline the image as a `data:` URI so `dist/circlesong.html`
+stays self-contained.
 
 ---
 
