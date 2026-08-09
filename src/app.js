@@ -29,8 +29,8 @@ import {
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
-import { DrumKit, DRUM_KITS } from './audio/drums.js';
-import { DRUM_STYLES, DRUM_STYLE_BY_ID, stylesForMeter } from './drum-patterns.js';
+import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
+import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern } from './drum-patterns.js';
 import {
   FUNCTION_NAMES,
   FUNCTION_BLURB,
@@ -64,10 +64,11 @@ const TONE_COLOR = {
 const TABS = [
   { id: 'circle', label: 'Circle', glyph: 'circle' },
   { id: 'tone', label: 'Tone', glyph: 'square' },
+  { id: 'drums', label: 'Drums', glyph: 'grid' },
   { id: 'compose', label: 'Compose', glyph: 'diamond' },
   { id: 'timeline', label: 'Timeline', glyph: 'bars' },
-  { id: 'learn', label: 'Learn', glyph: 'book' },
   { id: 'assist', label: 'Assist', glyph: 'spark' },
+  { id: 'learn', label: 'Learn', glyph: 'book' },
 ];
 
 const params = new URLSearchParams(location.search);
@@ -112,6 +113,11 @@ const state = {
   drumKit: 'rock',
   drumVolume: 0.7,
   drumFills: true,
+  /**
+   * The editable grid. A style seeds it, after which this is what plays — so
+   * anything typed into the sequencer is heard, not overwritten by the preset.
+   */
+  drumPattern: null,
 
   activeTab: 'circle',
   moodId: null,
@@ -165,7 +171,7 @@ const sequencer = new Sequencer(engine, () => ({
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
   drumsOn: state.drumsOn,
-  drumStyle: state.drumStyle,
+  drumPattern: state.drumPattern,
   drumFills: state.drumFills,
 }));
 
@@ -413,6 +419,7 @@ function render() {
   renderTransport();
   renderCircle();
   renderTone();
+  renderDrums();
   renderCompose();
   renderTimeline();
   renderLearn();
@@ -446,6 +453,9 @@ function glyph(kind, active) {
     diamond: `width:13px;height:13px;transform:rotate(45deg);border:2px solid ${col};`,
     bars: `width:16px;height:12px;background:linear-gradient(90deg,${col} 3px,transparent 3px);background-size:6px 100%;`,
     book: `width:13px;height:11px;border:2px solid ${col};border-radius:1px 4px 4px 1px;`,
+    grid: `width:15px;height:11px;background:
+      linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
+      linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
@@ -735,11 +745,28 @@ function renderTone() {
     b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
     list.appendChild(b);
   }
-
-  renderDrums();
 }
 
+/** Seed the editable grid from a named groove. */
+function loadDrumStyle(id, { keepKit = false } = {}) {
+  const style = DRUM_STYLE_BY_ID[id];
+  if (!style) return;
+  state.drumStyle = id;
+  state.drumPattern = styleToPattern(style, DRUM_VOICES.map((v) => v.id));
+  if (!keepKit) {
+    state.drumKit = style.kit;
+    if (engine.drums) engine.drums.setKit(state.drumKit);
+  }
+}
+
+/** Steps cycle off -> soft -> medium -> hard, so one tap edits without a menu. */
+const STEP_LEVELS = [0, 4, 6, 9];
+const nextStepLevel = (v) => STEP_LEVELS[(STEP_LEVELS.indexOf(v) + 1) % STEP_LEVELS.length] ?? 0;
+
 function renderDrums() {
+  if (!state.drumPattern) loadDrumStyle(state.drumStyle);
+  const pattern = state.drumPattern;
+
   for (const id of ['drumsBtn', 'drumsQuickBtn']) {
     const b = $(id);
     b.setAttribute('aria-pressed', String(state.drumsOn));
@@ -761,23 +788,65 @@ function renderDrums() {
   }
   kitSel.value = state.drumKit;
 
-  // Only offer grooves that fit the current metre — a 6/8 clave in 4/4 is not
-  // a useful option, it is a bug waiting to be reported.
-  const list = $('drumStyleList');
-  list.replaceChildren();
-  for (const style of stylesForMeter(state.timeSig)) {
-    const b = el('button', `list-btn${state.drumStyle === style.id ? ' active' : ''}`);
-    b.append(el('span', '', style.label), el('span', 'tag', style.meters.join(' ')));
-    b.onclick = () => {
-      state.drumStyle = style.id;
-      // Each groove names the kit it was written for; follow it unless the
-      // user has since chosen one deliberately.
-      state.drumKit = style.kit;
-      if (engine.drums) engine.drums.setKit(state.drumKit);
-      if (!state.drumsOn) toggleDrums(true);
-      renderDrums();
+  // Only grooves that fit the current metre — a 6/8 clave in 4/4 is not a
+  // useful option, it is a bug waiting to be reported.
+  const styleSel = $('drumStyleSelect');
+  const available = stylesForMeter(state.timeSig);
+  styleSel.replaceChildren();
+  for (const style of available) {
+    const o = document.createElement('option');
+    o.value = style.id;
+    o.textContent = style.label;
+    styleSel.appendChild(o);
+  }
+  if (available.some((s) => s.id === state.drumStyle)) styleSel.value = state.drumStyle;
+
+  const swing = $('drumSwing');
+  swing.value = pattern.swing || 0;
+  $('drumSwingOut').textContent = `${Math.round((pattern.swing || 0) * 100)}%`;
+
+  // --- the grid ---
+  const grid = $('drumGrid');
+  grid.replaceChildren();
+  grid.style.setProperty('--steps', pattern.steps);
+  // Group boundaries land every 4 steps in 4/4 and every 3 in compound metres.
+  const group = pattern.steps % 4 === 0 && pattern.steps !== 12 ? 4 : 3;
+
+  for (const voice of DRUM_VOICES) {
+    const lane = pattern.lanes[voice.id] || new Array(pattern.steps).fill(0);
+
+    const name = el('button', 'seq-name', voice.label);
+    name.title = `Preview ${voice.label}`;
+    name.onclick = async () => {
+      if (!(await ensureAudio())) return;
+      engine.drums.hit(voice.id, engine.currentTime + 0.02, 0.9);
     };
-    list.appendChild(b);
+    grid.appendChild(name);
+
+    const row = el('div', 'seq-row');
+    lane.forEach((vel, i) => {
+      const cell = el('button', `seq-cell${vel ? ' on' : ''}${i % group === 0 ? ' beat' : ''}`);
+      cell.dataset.step = String(i);
+      cell.dataset.voice = voice.id;
+      if (vel) cell.dataset.level = vel >= 9 ? 'hard' : vel >= 6 ? 'med' : 'soft';
+      cell.setAttribute('aria-label', `${voice.label} step ${i + 1}`);
+      cell.onclick = async () => {
+        lane[i] = nextStepLevel(lane[i]);
+        pattern.lanes[voice.id] = lane;
+        renderDrums();
+        // Audition the edit so the grid answers back.
+        if (lane[i] && (await ensureAudio())) {
+          engine.drums.hit(voice.id, engine.currentTime + 0.02, lane[i] / 9);
+        }
+      };
+      row.appendChild(cell);
+    });
+    grid.appendChild(row);
+
+    const clear = el('button', 'seq-clear', '✕');
+    clear.title = `Clear ${voice.label}`;
+    clear.onclick = () => { pattern.lanes[voice.id] = new Array(pattern.steps).fill(0); renderDrums(); };
+    grid.appendChild(clear);
   }
 }
 
@@ -1188,6 +1257,10 @@ function wire() {
     state.timeSig = timeSig.value;
     renderTransport();
     renderTone(); // audition-length labels depend on beats per bar
+    // Grooves are metre-specific; move to one that fits if the current one does not.
+    const fits = stylesForMeter(state.timeSig);
+    if (!fits.some((s) => s.id === state.drumStyle)) loadDrumStyle(fits[0].id);
+    renderDrums();
   };
 
   const modeSel = $('modeSelect');
@@ -1319,6 +1392,33 @@ function wire() {
     state.drumKit = e.target.value;
     if (engine.drums) engine.drums.setKit(state.drumKit);
   };
+  $('drumStyleSelect').onchange = (e) => {
+    loadDrumStyle(e.target.value);
+    if (!state.drumsOn) toggleDrums(true);
+    renderDrums();
+  };
+  $('drumClearBtn').onclick = () => {
+    for (const v of DRUM_VOICES) {
+      state.drumPattern.lanes[v.id] = new Array(state.drumPattern.steps).fill(0);
+    }
+    renderDrums();
+  };
+  $('drumResetBtn').onclick = () => { loadDrumStyle(state.drumStyle, { keepKit: true }); renderDrums(); };
+  $('drumDoubleBtn').onclick = () => {
+    // Write a one-bar idea in the first half, then fill the bar with it.
+    const p = state.drumPattern;
+    const half = Math.floor(p.steps / 2);
+    for (const v of DRUM_VOICES) {
+      const lane = p.lanes[v.id];
+      for (let i = 0; i < half; i++) lane[half + i] = lane[i];
+    }
+    renderDrums();
+  };
+  const swing = $('drumSwing');
+  swing.oninput = () => {
+    state.drumPattern.swing = Number(swing.value);
+    $('drumSwingOut').textContent = `${Math.round(state.drumPattern.swing * 100)}%`;
+  };
   const drumVol = $('drumVolume');
   drumVol.oninput = () => {
     state.drumVolume = Number(drumVol.value);
@@ -1368,7 +1468,7 @@ function exportSong() {
     tone: state.tone,
     rhythm: state.rhythm,
     tuning: state.tuningId,
-    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills },
+    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
     sections: state.sections.map((sec) => ({
       name: sec.name,
@@ -1410,6 +1510,9 @@ function importSong(e) {
         if (DRUM_KITS[data.drums.kit]) state.drumKit = data.drums.kit;
         if (Number.isFinite(data.drums.volume)) state.drumVolume = data.drums.volume;
         state.drumFills = data.drums.fills !== false;
+        // Prefer the saved grid over the style's defaults: it may have been edited.
+        if (data.drums.pattern && data.drums.pattern.lanes) state.drumPattern = data.drums.pattern;
+        else loadDrumStyle(state.drumStyle, { keepKit: true });
       }
 
       // v1 held a single loop; v2 holds named sections. Reading a v1 file just

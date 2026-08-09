@@ -11,10 +11,21 @@
 export const RHYTHMS = [
   { id: 'straight8', label: 'Straight 8ths', tag: 'strum' },
   { id: 'pop16', label: '16th Pop Strum', tag: 'strum' },
+  { id: 'folkDDU', label: 'Folk D-DU-UDU', tag: 'strum' },
+  { id: 'driving16', label: 'Driving 16ths', tag: 'strum' },
+  { id: 'anthemic', label: 'Anthem Half-Time', tag: 'strum' },
+  { id: 'muteChuck', label: 'Muted Chuck', tag: 'percussive' },
   { id: 'reggaeSkank', label: 'Reggae Skank', tag: 'offbeat' },
+  { id: 'skaUpstroke', label: 'Ska Upstrokes', tag: 'offbeat' },
   { id: 'jazzSwing', label: 'Jazz Swing', tag: 'comp' },
+  { id: 'charleston', label: 'Charleston Comp', tag: 'comp' },
   { id: 'bossa', label: 'Bossa Nova', tag: 'syncop' },
+  { id: 'rumba', label: 'Rumba Clave', tag: 'syncop' },
+  { id: 'waltzStrum', label: 'Waltz Strum', tag: '3/4' },
+  { id: 'ballad68', label: 'Ballad 6/8', tag: '6/8' },
   { id: 'fingerstyle', label: 'Fingerstyle Arp', tag: 'arp' },
+  { id: 'travis', label: 'Travis Picking', tag: 'arp' },
+  { id: 'arpUp', label: 'Rising Arpeggio', tag: 'arp' },
   { id: 'wholeNote', label: 'Let Ring', tag: 'sustain' },
 ];
 
@@ -96,6 +107,161 @@ export const RHYTHM_PATTERNS = {
       { t: 0.625, pick: 1, vel: 0.62 },
       { t: 0.75, pick: 0, vel: 0.72 },
       { t: 0.875, pick: 2, vel: 0.58 },
+    ],
+  },
+
+  // The pattern most people mean by "strumming a guitar": D-DU-UDU, with the
+  // second downstroke missing so the hand keeps moving through the gap.
+  folkDDU: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0),
+      d(0.25, 0.82),
+      u(0.375, 0.7),
+      u(0.625, 0.66),
+      d(0.75, 0.86),
+      u(0.875, 0.7),
+    ],
+  },
+
+  driving16: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0, { spread: 0.018 }),
+      u(0.0625, 0.5),
+      d(0.125, 0.7),
+      u(0.1875, 0.5),
+      d(0.25, 0.88),
+      u(0.3125, 0.5),
+      d(0.375, 0.68),
+      u(0.4375, 0.52),
+      d(0.5, 0.95),
+      u(0.5625, 0.5),
+      d(0.625, 0.7),
+      u(0.6875, 0.5),
+      d(0.75, 0.86),
+      u(0.8125, 0.52),
+      d(0.875, 0.68),
+      u(0.9375, 0.56),
+    ],
+  },
+
+  // Big open strokes with room between them, for choruses.
+  anthemic: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0, { spread: 0.045 }),
+      u(0.1875, 0.55),
+      d(0.5, 0.92, { spread: 0.04 }),
+      u(0.6875, 0.55),
+      u(0.875, 0.6),
+    ],
+  },
+
+  // Fret-hand mutes on the backbeat: pitch barely sounds, the click carries it.
+  muteChuck: {
+    kind: 'strum',
+    hits: [
+      d(0, 0.9),
+      u(0.125, 0.55, { mute: 0.5 }),
+      d(0.25, 0.95, { mute: 0.75, spread: 0.012 }),
+      u(0.375, 0.5, { mute: 0.5 }),
+      d(0.5, 0.85),
+      u(0.625, 0.55, { mute: 0.5 }),
+      d(0.75, 0.95, { mute: 0.75, spread: 0.012 }),
+      u(0.875, 0.5, { mute: 0.5 }),
+    ],
+  },
+
+  // Ska: every offbeat, all upstrokes, tighter and brighter than a skank.
+  skaUpstroke: {
+    kind: 'strum',
+    hits: [
+      u(0.125, 0.95, { mute: 0.35, spread: 0.01 }),
+      u(0.375, 0.88, { mute: 0.35, spread: 0.01 }),
+      u(0.625, 0.95, { mute: 0.35, spread: 0.01 }),
+      u(0.875, 0.88, { mute: 0.35, spread: 0.01 }),
+    ],
+  },
+
+  // The Charleston figure: beat one and the "and" of two. Endlessly useful.
+  charleston: {
+    kind: 'strum',
+    swing: 0.33,
+    hits: [
+      d(0, 0.95, { spread: 0.03 }),
+      u(0.375, 0.8, { mute: 0.3 }),
+      d(0.5, 0.7, { spread: 0.03 }),
+      u(0.875, 0.75, { mute: 0.3 }),
+    ],
+  },
+
+  // Rumba clave, the 3-2 figure underneath a lot of Latin guitar.
+  rumba: {
+    kind: 'strum',
+    hits: [
+      d(0, 0.95),
+      d(0.1875, 0.7),
+      d(0.375, 0.8),
+      d(0.625, 0.75),
+      d(0.75, 0.85),
+    ],
+  },
+
+  // 3/4: down on one, lighter strokes on two and three.
+  waltzStrum: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0, { spread: 0.038 }),
+      d(0.3333, 0.7),
+      u(0.5, 0.5),
+      d(0.6667, 0.72),
+      u(0.8333, 0.5),
+    ],
+  },
+
+  ballad68: {
+    kind: 'strum',
+    hits: [
+      d(0, 0.95, { spread: 0.04 }),
+      u(0.1667, 0.55),
+      u(0.3333, 0.6),
+      d(0.5, 0.85, { spread: 0.035 }),
+      u(0.6667, 0.55),
+      u(0.8333, 0.6),
+    ],
+  },
+
+  // Alternating thumb against a steady melody — the Travis signature.
+  travis: {
+    kind: 'arp',
+    picks: [
+      { t: 0, pick: 'bass', vel: 0.95 },
+      { t: 0.0625, pick: 1, vel: 0.6 },
+      { t: 0.125, pick: 0, vel: 0.7 },
+      { t: 0.25, pick: 'bass2', vel: 0.85 },
+      { t: 0.3125, pick: 2, vel: 0.58 },
+      { t: 0.375, pick: 1, vel: 0.62 },
+      { t: 0.5, pick: 'bass', vel: 0.9 },
+      { t: 0.5625, pick: 1, vel: 0.6 },
+      { t: 0.625, pick: 0, vel: 0.72 },
+      { t: 0.75, pick: 'bass2', vel: 0.82 },
+      { t: 0.8125, pick: 2, vel: 0.56 },
+      { t: 0.875, pick: 1, vel: 0.6 },
+    ],
+  },
+
+  arpUp: {
+    kind: 'arp',
+    picks: [
+      { t: 0, pick: 'bass', vel: 0.9 },
+      { t: 0.125, pick: 3, vel: 0.7 },
+      { t: 0.25, pick: 2, vel: 0.72 },
+      { t: 0.375, pick: 1, vel: 0.74 },
+      { t: 0.5, pick: 0, vel: 0.8 },
+      { t: 0.625, pick: 1, vel: 0.66 },
+      { t: 0.75, pick: 2, vel: 0.68 },
+      { t: 0.875, pick: 3, vel: 0.64 },
     ],
   },
 

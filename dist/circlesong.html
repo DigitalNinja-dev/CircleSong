@@ -449,6 +449,43 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .chip[disabled] { opacity: 0.35; cursor: not-allowed; }
 .chip[disabled]:hover { border-color: var(--border); }
 
+/* ---------- drum step sequencer ---------- */
+.seq-wrap { overflow-x: auto; margin-bottom: 10px; padding-bottom: 4px; }
+.seq {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 3px 6px;
+  min-width: max-content;
+}
+.seq-name {
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font: 500 10px var(--mono); color: oklch(0.78 0.008 250);
+  text-align: left; white-space: nowrap;
+}
+.seq-name:hover { color: var(--a); }
+.seq-row { display: grid; grid-template-columns: repeat(var(--steps), 1fr); gap: 3px; min-width: 246px; }
+.seq-cell {
+  height: 20px; min-width: 13px; padding: 0; cursor: pointer;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  background: oklch(0.15 0.008 250);
+}
+/* The first step of each group is marked so the beat is readable at a glance. */
+.seq-cell.beat { border-color: oklch(0.65 0.2 135 / 0.35); background: oklch(0.18 0.01 250); }
+.seq-cell.on { border-color: transparent; }
+.seq-cell.on[data-level='soft'] { background: oklch(0.55 0.13 135); }
+.seq-cell.on[data-level='med'] { background: oklch(0.72 0.19 135); }
+.seq-cell.on[data-level='hard'] { background: var(--a); }
+.seq-cell:focus-visible { outline: 2px solid var(--a); outline-offset: 1px; }
+.seq-clear {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  color: var(--dimmer); font-size: 10px; line-height: 1;
+}
+.seq-clear:hover { color: oklch(0.7 0.15 25); }
+
+/* Seven tabs need a little more room than six. */
+.tabbar button { font-size: 9px; padding: 4px 1px; gap: 3px; }
+
 </style>
 </head>
 <body>
@@ -573,26 +610,44 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="stack" id="rhythmList"></div>
 
-      <h2 class="mt">/04 DRUMS</h2>
-      <div class="row between">
-        <div>
-          <span class="setting-name">Backing drums</span>
-          <span class="setting-note">Locked to the transport, bar for bar</span>
-        </div>
-        <button id="drumsBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+    </section>
+
+    <!-- DRUM MACHINE -->
+    <section class="panel" id="tab-drums" hidden>
+      <div class="head">
+        <h2>/03 DRUM_MACHINE</h2>
+        <button id="drumsBtn" class="chip toggle solid small" aria-pressed="false">Off</button>
       </div>
-      <div class="row mt-s">
-        <span class="micro-label">KIT</span>
-        <select id="drumKitSelect" class="select grow" aria-label="Drum kit"></select>
+
+      <div class="row gap-xs mb-s">
+        <select id="drumStyleSelect" class="select grow" aria-label="Groove"></select>
+        <select id="drumKitSelect" class="select" aria-label="Drum kit"></select>
       </div>
-      <div class="stack mt-s" id="drumStyleList"></div>
-      <div class="sliders mt-s">
+
+      <div class="seq-wrap">
+        <div class="seq" id="drumGrid" role="grid" aria-label="Drum step sequencer"></div>
+      </div>
+      <p class="hint block">Tap a step to cycle it through soft, medium and hard, then off. Tap a voice name to preview it; the ✕ clears that row.</p>
+
+      <div class="row gap-s">
+        <button id="drumClearBtn" class="chip small">Clear grid</button>
+        <button id="drumResetBtn" class="chip small">Reset groove</button>
+        <button id="drumDoubleBtn" class="chip small" title="Copy the first half onto the second">Double</button>
+      </div>
+
+      <div class="sliders mt">
         <div class="slider-row">
           <label for="drumVolume">DRUM VOL</label>
           <input id="drumVolume" type="range" min="0" max="1" step="0.01" value="0.7" class="grow">
           <output id="drumVolumeOut">70%</output>
         </div>
+        <div class="slider-row">
+          <label for="drumSwing">SWING</label>
+          <input id="drumSwing" type="range" min="0" max="0.6" step="0.01" value="0" class="grow">
+          <output id="drumSwingOut">0%</output>
+        </div>
       </div>
+
       <div class="row between mt-s">
         <div>
           <span class="setting-name">Fill before the loop turns</span>
@@ -1183,10 +1238,21 @@ function resolveVoicing(chord, modeId, opts = {}) {
 const RHYTHMS = [
   { id: 'straight8', label: 'Straight 8ths', tag: 'strum' },
   { id: 'pop16', label: '16th Pop Strum', tag: 'strum' },
+  { id: 'folkDDU', label: 'Folk D-DU-UDU', tag: 'strum' },
+  { id: 'driving16', label: 'Driving 16ths', tag: 'strum' },
+  { id: 'anthemic', label: 'Anthem Half-Time', tag: 'strum' },
+  { id: 'muteChuck', label: 'Muted Chuck', tag: 'percussive' },
   { id: 'reggaeSkank', label: 'Reggae Skank', tag: 'offbeat' },
+  { id: 'skaUpstroke', label: 'Ska Upstrokes', tag: 'offbeat' },
   { id: 'jazzSwing', label: 'Jazz Swing', tag: 'comp' },
+  { id: 'charleston', label: 'Charleston Comp', tag: 'comp' },
   { id: 'bossa', label: 'Bossa Nova', tag: 'syncop' },
+  { id: 'rumba', label: 'Rumba Clave', tag: 'syncop' },
+  { id: 'waltzStrum', label: 'Waltz Strum', tag: '3/4' },
+  { id: 'ballad68', label: 'Ballad 6/8', tag: '6/8' },
   { id: 'fingerstyle', label: 'Fingerstyle Arp', tag: 'arp' },
+  { id: 'travis', label: 'Travis Picking', tag: 'arp' },
+  { id: 'arpUp', label: 'Rising Arpeggio', tag: 'arp' },
   { id: 'wholeNote', label: 'Let Ring', tag: 'sustain' },
 ];
 
@@ -1271,6 +1337,161 @@ const RHYTHM_PATTERNS = {
     ],
   },
 
+  // The pattern most people mean by "strumming a guitar": D-DU-UDU, with the
+  // second downstroke missing so the hand keeps moving through the gap.
+  folkDDU: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0),
+      d(0.25, 0.82),
+      u(0.375, 0.7),
+      u(0.625, 0.66),
+      d(0.75, 0.86),
+      u(0.875, 0.7),
+    ],
+  },
+
+  driving16: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0, { spread: 0.018 }),
+      u(0.0625, 0.5),
+      d(0.125, 0.7),
+      u(0.1875, 0.5),
+      d(0.25, 0.88),
+      u(0.3125, 0.5),
+      d(0.375, 0.68),
+      u(0.4375, 0.52),
+      d(0.5, 0.95),
+      u(0.5625, 0.5),
+      d(0.625, 0.7),
+      u(0.6875, 0.5),
+      d(0.75, 0.86),
+      u(0.8125, 0.52),
+      d(0.875, 0.68),
+      u(0.9375, 0.56),
+    ],
+  },
+
+  // Big open strokes with room between them, for choruses.
+  anthemic: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0, { spread: 0.045 }),
+      u(0.1875, 0.55),
+      d(0.5, 0.92, { spread: 0.04 }),
+      u(0.6875, 0.55),
+      u(0.875, 0.6),
+    ],
+  },
+
+  // Fret-hand mutes on the backbeat: pitch barely sounds, the click carries it.
+  muteChuck: {
+    kind: 'strum',
+    hits: [
+      d(0, 0.9),
+      u(0.125, 0.55, { mute: 0.5 }),
+      d(0.25, 0.95, { mute: 0.75, spread: 0.012 }),
+      u(0.375, 0.5, { mute: 0.5 }),
+      d(0.5, 0.85),
+      u(0.625, 0.55, { mute: 0.5 }),
+      d(0.75, 0.95, { mute: 0.75, spread: 0.012 }),
+      u(0.875, 0.5, { mute: 0.5 }),
+    ],
+  },
+
+  // Ska: every offbeat, all upstrokes, tighter and brighter than a skank.
+  skaUpstroke: {
+    kind: 'strum',
+    hits: [
+      u(0.125, 0.95, { mute: 0.35, spread: 0.01 }),
+      u(0.375, 0.88, { mute: 0.35, spread: 0.01 }),
+      u(0.625, 0.95, { mute: 0.35, spread: 0.01 }),
+      u(0.875, 0.88, { mute: 0.35, spread: 0.01 }),
+    ],
+  },
+
+  // The Charleston figure: beat one and the "and" of two. Endlessly useful.
+  charleston: {
+    kind: 'strum',
+    swing: 0.33,
+    hits: [
+      d(0, 0.95, { spread: 0.03 }),
+      u(0.375, 0.8, { mute: 0.3 }),
+      d(0.5, 0.7, { spread: 0.03 }),
+      u(0.875, 0.75, { mute: 0.3 }),
+    ],
+  },
+
+  // Rumba clave, the 3-2 figure underneath a lot of Latin guitar.
+  rumba: {
+    kind: 'strum',
+    hits: [
+      d(0, 0.95),
+      d(0.1875, 0.7),
+      d(0.375, 0.8),
+      d(0.625, 0.75),
+      d(0.75, 0.85),
+    ],
+  },
+
+  // 3/4: down on one, lighter strokes on two and three.
+  waltzStrum: {
+    kind: 'strum',
+    hits: [
+      d(0, 1.0, { spread: 0.038 }),
+      d(0.3333, 0.7),
+      u(0.5, 0.5),
+      d(0.6667, 0.72),
+      u(0.8333, 0.5),
+    ],
+  },
+
+  ballad68: {
+    kind: 'strum',
+    hits: [
+      d(0, 0.95, { spread: 0.04 }),
+      u(0.1667, 0.55),
+      u(0.3333, 0.6),
+      d(0.5, 0.85, { spread: 0.035 }),
+      u(0.6667, 0.55),
+      u(0.8333, 0.6),
+    ],
+  },
+
+  // Alternating thumb against a steady melody — the Travis signature.
+  travis: {
+    kind: 'arp',
+    picks: [
+      { t: 0, pick: 'bass', vel: 0.95 },
+      { t: 0.0625, pick: 1, vel: 0.6 },
+      { t: 0.125, pick: 0, vel: 0.7 },
+      { t: 0.25, pick: 'bass2', vel: 0.85 },
+      { t: 0.3125, pick: 2, vel: 0.58 },
+      { t: 0.375, pick: 1, vel: 0.62 },
+      { t: 0.5, pick: 'bass', vel: 0.9 },
+      { t: 0.5625, pick: 1, vel: 0.6 },
+      { t: 0.625, pick: 0, vel: 0.72 },
+      { t: 0.75, pick: 'bass2', vel: 0.82 },
+      { t: 0.8125, pick: 2, vel: 0.56 },
+      { t: 0.875, pick: 1, vel: 0.6 },
+    ],
+  },
+
+  arpUp: {
+    kind: 'arp',
+    picks: [
+      { t: 0, pick: 'bass', vel: 0.9 },
+      { t: 0.125, pick: 3, vel: 0.7 },
+      { t: 0.25, pick: 2, vel: 0.72 },
+      { t: 0.375, pick: 1, vel: 0.74 },
+      { t: 0.5, pick: 0, vel: 0.8 },
+      { t: 0.625, pick: 1, vel: 0.66 },
+      { t: 0.75, pick: 2, vel: 0.68 },
+      { t: 0.875, pick: 3, vel: 0.64 },
+    ],
+  },
+
   // One slow strum per bar for auditioning voicings.
   wholeNote: {
     kind: 'strum',
@@ -1292,15 +1513,19 @@ function getPattern(id) {
 
 /* ===== src/drum-patterns.js ===== */
 /**
- * Drum patterns.
+ * Drum grooves.
  *
- * A pattern is a set of voice lanes. Each lane is a string of steps where a
- * digit 1-9 is a hit at that velocity (9 loudest) and `.` is a rest, so a
- * groove reads like a drum machine's grid rather than like an array literal.
+ * A lane is one voice's row of steps: a digit 1-9 is a hit at that velocity,
+ * `.` is a rest. Written this way a groove reads like a drum machine's grid, so
+ * the source and the on-screen sequencer show the same thing.
  *
- * `steps` is how many subdivisions fill one bar, which is what lets a 6/8
- * pattern and a 4/4 pattern share the same scheduler: the bar is divided into
- * `steps`, whatever its length in seconds.
+ * `steps` divides one bar, which is what lets a 6/8 groove and a 4/4 groove
+ * share a scheduler: the bar's real duration does the rest.
+ *
+ * Velocity is where a pattern stops sounding like a machine. Ghost notes — the
+ * quiet snare taps between backbeats — carry most of the feel in funk and
+ * Motown, and the accent pattern on a hi-hat line is what makes it swing or
+ * drive. These are written in deliberately, not left flat.
  */
 
 const DRUM_STYLES = [
@@ -1311,9 +1536,11 @@ const DRUM_STYLES = [
     meters: ['4/4'],
     steps: 16,
     lanes: {
-      kick: '9...' + '..7.' + '8...' + '....',
-      snare: '....' + '8...' + '....' + '8...',
-      hat: '6.5.' + '6.5.' + '6.5.' + '6.5o',
+      crash: '7...............',
+      kick: '9.....7.9.......',
+      snare: '....9..2....9...',
+      hat: '7.5.7.5.7.5.7.5.',
+      openhat: '..............6.',
     },
   },
   {
@@ -1323,9 +1550,21 @@ const DRUM_STYLES = [
     meters: ['4/4'],
     steps: 16,
     lanes: {
-      kick: '9...' + '..6.' + '.8..' + '..5.',
-      snare: '....' + '8...' + '....' + '8..3',
-      hat: '7353' + '7353' + '7353' + '7353',
+      kick: '9....7...8...7..',
+      snare: '....9.2.2...9..3',
+      hat: '7353635372536353',
+    },
+  },
+  {
+    id: 'funkGhost',
+    label: 'Funk Ghost Notes',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9..7..9....7.9..',
+      snare: '..2.9.22..2.9.2.',
+      hat: '6353635363536353',
     },
   },
   {
@@ -1335,9 +1574,22 @@ const DRUM_STYLES = [
     meters: ['4/4'],
     steps: 16,
     lanes: {
-      kick: '8...' + '8...' + '8...' + '8...',
-      rim: '....' + '7...' + '....' + '7...',
-      hat: '6.6.' + '6.6.' + '6.6.' + '6.6.',
+      kick: '8...8...8...8...',
+      rim: '....7.......7...',
+      hat: '6.5.6.5.6.5.6.5.',
+    },
+  },
+  {
+    id: 'disco',
+    label: 'Disco Four-on-Floor',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...8...9...8...',
+      snare: '....9.......9...',
+      hat: '5...5...5...5...',
+      openhat: '..7...7...7...7.',
     },
   },
   {
@@ -1346,11 +1598,24 @@ const DRUM_STYLES = [
     kit: 'reggae',
     meters: ['4/4'],
     steps: 16,
-    // Beat 1 is deliberately empty — that silence is the whole point of the feel.
+    // Beat one is deliberately empty; that silence is the whole feel.
     lanes: {
-      kick: '....' + '....' + '9...' + '....',
-      rim: '....' + '....' + '9...' + '....',
-      hat: '..6.' + '..6.' + '..6.' + '..6.',
+      kick: '........9.......',
+      rim: '........9.......',
+      hat: '..5...4...5...4.',
+    },
+  },
+  {
+    id: 'reggaeSteppers',
+    label: 'Reggae Steppers',
+    kit: 'reggae',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...8...9...8...',
+      rim: '........9.......',
+      hat: '..5...5...5...5.',
+      shaker: '..4...4...4...4.',
     },
   },
   {
@@ -1359,10 +1624,23 @@ const DRUM_STYLES = [
     kit: 'jazz',
     meters: ['4/4'],
     steps: 16,
+    // Cross-stick plays the 3-2 son clave; ride keeps flat eighths over it.
     lanes: {
-      kick: '7...' + '..5.' + '7...' + '..5.',
-      rim: '..6.' + '6...' + '...6' + '.6..',
-      ride: '5.4.' + '5.4.' + '5.4.' + '5.4.',
+      kick: '8.....6.7.....6.',
+      rim: '9..7..9...9.7...',
+      ride: '5.4.5.4.5.4.5.4.',
+    },
+  },
+  {
+    id: 'sambaLite',
+    label: 'Samba (light)',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9..7.9..9..7.9..',
+      rim: '..6..6..6..6..6.',
+      shaker: '6454645464546454',
     },
   },
   {
@@ -1371,10 +1649,11 @@ const DRUM_STYLES = [
     kit: 'acoustic',
     meters: ['6/8', '12/8'],
     steps: 12,
+    // The 6/8 bell pattern, the backbone of the whole tradition.
     lanes: {
-      kick: '8..' + '...' + '7..' + '...',
-      rim: '..6' + '.6.' + '..6' + '6..',
-      shaker: '654' + '654' + '654' + '654',
+      kick: '8.....7.....',
+      rim: '9.87.9.87.9.',
+      shaker: '654654654654',
     },
   },
   {
@@ -1383,10 +1662,23 @@ const DRUM_STYLES = [
     kit: 'jazz',
     meters: ['6/8', '12/8'],
     steps: 12,
+    // Long-short ride triplets: the shuffle lives in the missing middle note.
     lanes: {
-      kick: '8..' + '...' + '7..' + '...',
-      snare: '...' + '8..' + '...' + '8..',
-      ride: '6.4' + '6.4' + '6.4' + '6.4',
+      kick: '8.....7.....',
+      snare: '...9.....9..',
+      ride: '6.46.46.46.4',
+    },
+  },
+  {
+    id: 'jazzSwing',
+    label: 'Jazz Swing Ride',
+    kit: 'jazz',
+    meters: ['4/4', '12/8'],
+    steps: 12,
+    lanes: {
+      kick: '4.....4.....',
+      rim: '...7.....7..',
+      ride: '7..7.67..7.6',
     },
   },
   {
@@ -1395,11 +1687,23 @@ const DRUM_STYLES = [
     kit: 'acoustic',
     meters: ['3/4'],
     steps: 12,
-    // "boom-chick-chick": weight on one, brushes on two and three.
+    // "Boom-chick-chick" — weight on one, brushes on two and three.
     lanes: {
-      kick: '9...' + '....' + '....',
-      snare: '....' + '5...' + '5...',
-      hat: '5..3' + '5..3' + '5..3',
+      kick: '9...........',
+      snare: '....5...5...',
+      hat: '5..35..35..3',
+    },
+  },
+  {
+    id: 'ballad68',
+    label: 'Ballad 6/8',
+    kit: 'acoustic',
+    meters: ['6/8', '3/8', '12/8'],
+    steps: 12,
+    lanes: {
+      kick: '9.....7.....',
+      snare: '......9.....',
+      hat: '5.45.45.45.4',
     },
   },
   {
@@ -1409,9 +1713,10 @@ const DRUM_STYLES = [
     meters: ['4/4'],
     steps: 16,
     lanes: {
-      kick: '9...' + '..5.' + '7...' + '....',
-      snare: '....' + '8..2' + '..3.' + '8...',
-      hat: '6464' + '6464' + '6464' + '6464',
+      kick: '9....7..8.......',
+      snare: '....9..2..3.9...',
+      shaker: '6.5.6.5.6.5.6.5.',
+      hat: '5...5...5...5...',
     },
   },
   {
@@ -1421,9 +1726,9 @@ const DRUM_STYLES = [
     meters: ['4/4'],
     steps: 16,
     lanes: {
-      kick: '9...' + '..5.' + '8...' + '....',
-      snare: '....' + '7...' + '....' + '7...',
-      shaker: '5353' + '5353' + '5353' + '5353',
+      kick: '9....7..8.......',
+      snare: '....8..2....8..2',
+      shaker: '5353535353535353',
     },
   },
   {
@@ -1432,11 +1737,23 @@ const DRUM_STYLES = [
     kit: 'lofi',
     meters: ['4/4'],
     steps: 16,
-    swing: 0.28,
+    swing: 0.3,
     lanes: {
-      kick: '8...' + '...5' + '..7.' + '....',
-      snare: '....' + '7...' + '....' + '7...',
-      hat: '5..4' + '5..4' + '5..4' + '5.4.',
+      kick: '8......5..7.....',
+      snare: '....7.......7...',
+      hat: '5..45..45..45.4.',
+    },
+  },
+  {
+    id: 'halfTime',
+    label: 'Half-Time Groove',
+    kit: 'lofi',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9.......5..7....',
+      snare: '........9.......',
+      hat: '6.4.6.4.6.4.6.4.',
     },
   },
   {
@@ -1446,69 +1763,106 @@ const DRUM_STYLES = [
     meters: ['4/4'],
     steps: 16,
     lanes: {
-      kick: '9.9.' + '..9.' + '9...' + '9.9.',
-      snare: '....' + '....' + '9...' + '....',
-      ride: '7...' + '6...' + '7...' + '6...',
+      crash: '8.......8.......',
+      kick: '9.9...9.9...9.9.',
+      snare: '........9.......',
+      ride: '7...6...7...6...',
+    },
+  },
+  {
+    id: 'metalDrive',
+    label: 'Metal Double-Kick',
+    kit: 'metal',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9898989898989898',
+      snare: '....9.......9...',
+      ride: '7.6.7.6.7.6.7.6.',
+      crash: '8...............',
     },
   },
 ];
 
-/** Two-beat fills, played at the end of a phrase. Keyed by steps-per-bar. */
-const FILLS = {
-  16: { snare: '........' + '5768', tom: '........' + '..7.', hat: '............' },
-  12: { snare: '......' + '5768', tom: '......' + '..7.', hat: '............' },
-};
-
 const DRUM_STYLE_BY_ID = Object.fromEntries(DRUM_STYLES.map((s) => [s.id, s]));
 
-/** Styles that make sense in a given time signature. */
+/** Two-beat fills, keyed by steps-per-bar. Applied to the bar's second half. */
+const FILLS = {
+  16: { snare: '........5.6.7.8.', tom: '..........7.8.9.', hat: '................' },
+  12: { snare: '......5.6.7.', tom: '........8.9.', hat: '............' },
+};
+
+/** Styles that fit a given metre; falls back to 4/4 so the list is never empty. */
 function stylesForMeter(timeSig) {
   const matching = DRUM_STYLES.filter((s) => s.meters.includes(timeSig));
   return matching.length ? matching : DRUM_STYLES.filter((s) => s.meters.includes('4/4'));
 }
 
-/**
- * Expand a pattern into scheduled hits.
- * @returns {Array<{voice:string, t:number, velocity:number}>} `t` is a
- *   fraction of the bar, so the caller multiplies by the bar's real duration.
- */
-function patternHits(style, { fill = false } = {}) {
-  const hits = [];
-  const steps = style.steps;
-  const swing = style.swing || 0;
+/** Lane string -> array of velocities 0-9, padded to `steps`. */
+function laneToSteps(lane, steps) {
+  const out = new Array(steps).fill(0);
+  for (let i = 0; i < steps; i++) {
+    const ch = lane[i];
+    if (!ch || ch === '.') continue;
+    const n = Number(ch);
+    if (Number.isFinite(n)) out[i] = n;
+  }
+  return out;
+}
 
-  const lanes = { ...style.lanes };
+/**
+ * Expand a style into the editable grid the sequencer plays and the UI shows.
+ * Every voice gets a lane, so a row can be drawn on even if the style left it
+ * empty.
+ */
+function styleToPattern(style, voices) {
+  const lanes = {};
+  for (const voice of voices) {
+    lanes[voice] = laneToSteps(style.lanes[voice] || '', style.steps);
+  }
+  return { steps: style.steps, swing: style.swing || 0, lanes };
+}
+
+/**
+ * Turn a grid into scheduled hits.
+ * @returns {Array<{voice:string, t:number, velocity:number}>} `t` is a fraction
+ *   of the bar, so the caller multiplies by the bar's real duration.
+ */
+function patternHits(pattern, { fill = false } = {}) {
+  const { steps, swing = 0 } = pattern;
+  const lanes = { ...pattern.lanes };
+
   if (fill) {
     const f = FILLS[steps];
     if (f) {
-      // A fill replaces the second half of the bar, keeping the groove's first half.
+      const half = Math.floor(steps / 2);
       for (const [voice, lane] of Object.entries(f)) {
-        const existing = (lanes[voice] || '.'.repeat(steps)).padEnd(steps, '.');
-        lanes[voice] = existing.slice(0, steps / 2) + lane.padEnd(steps, '.').slice(steps / 2, steps);
+        const base = (lanes[voice] || new Array(steps).fill(0)).slice();
+        const replacement = laneToSteps(lane, steps);
+        for (let i = half; i < steps; i++) base[i] = replacement[i];
+        lanes[voice] = base;
       }
-      // Cymbals and hats step aside so the fill reads clearly.
-      if (lanes.hat) lanes.hat = lanes.hat.slice(0, steps / 2) + '.'.repeat(steps / 2);
+      // Cymbals step aside so the fill reads clearly.
+      for (const voice of ['hat', 'openhat', 'ride', 'shaker']) {
+        if (!lanes[voice]) continue;
+        const lane = lanes[voice].slice();
+        for (let i = half; i < steps; i++) lane[i] = 0;
+        lanes[voice] = lane;
+      }
     }
   }
 
+  const hits = [];
   for (const [voice, lane] of Object.entries(lanes)) {
+    if (!lane) continue;
     for (let i = 0; i < steps; i++) {
-      const ch = lane[i];
-      if (!ch || ch === '.') continue;
-
-      // `o` marks an open hi-hat at a fixed level; digits are velocities.
-      const isOpen = ch === 'o';
-      const velocity = isOpen ? 0.7 : Number(ch) / 9;
-      if (!isOpen && !Number.isFinite(velocity)) continue;
-
+      const vel = lane[i];
+      if (!vel) continue;
       let t = i / steps;
-      // Swing delays every second subdivision.
       if (swing && i % 2 === 1) t += (swing * 0.5) / steps;
-
-      hits.push({ voice: isOpen ? 'openhat' : voice, t, velocity });
+      hits.push({ voice, t, velocity: vel / 9 });
     }
   }
-
   return hits.sort((a, b) => a.t - b.t);
 }
 
@@ -1912,85 +2266,115 @@ function driveCurve(amount = 0.4, steps = 2048) {
 /**
  * Drum synthesis.
  *
- * Every voice is built from oscillators and noise rather than samples, for the
- * same reason the guitar is modelled: the app ships no audio assets, works
- * offline, and loads instantly. Drums are far more forgiving than a plucked
- * string here — a kick really is a pitch-swept sine, and a hat really is
- * band-limited noise — so synthesis costs very little realism.
+ * Synthesised rather than sampled for the same reason the guitar is: the app
+ * ships no audio assets, works offline, and loads instantly.
  *
- * Voices are scheduled against the AudioContext clock, so they line up with the
- * guitar to the sample rather than to a timer.
+ * The one thing worth getting right is metal. Filtered white noise is the
+ * obvious way to make a hi-hat and it is the reason cheap drum machines sound
+ * cheap — real cymbals are a dense cluster of *inharmonic* partials, not noise.
+ * Hats, rides and crashes here use the TR-808 approach: six square oscillators
+ * at deliberately non-integer ratios, band-limited and enveloped. Skins (kick,
+ * snare, toms) are pitch-swept sines, which is genuinely what they are.
  */
 
-/** Kits differ by voice tuning and level, not by which voices exist. */
+/** Inharmonic ratios behind every metal voice — the 808 cymbal cluster. */
+const METAL_RATIOS = [1, 1.4830, 1.8004, 2.5460, 2.6300, 3.8970];
+const METAL_BASE = 205.3;
+
+/**
+ * Kits vary voice tuning, envelope and level. Every kit has every voice, so a
+ * pattern can be played by any kit without gaps.
+ */
 const DRUM_KITS = {
   rock: {
     label: 'Rock Standard',
-    kick: { freq: 55, drop: 110, decay: 0.34, click: 0.5, gain: 1.0 },
-    snare: { tone: 190, noise: 0.85, decay: 0.19, hp: 1400, gain: 0.85 },
-    hat: { decay: 0.045, open: 0.32, hp: 7500, gain: 0.42 },
-    rim: { freq: 420, decay: 0.06, gain: 0.6 },
-    ride: { decay: 0.9, hp: 5200, gain: 0.3 },
-    shaker: { decay: 0.06, hp: 6000, gain: 0.3 },
-    tom: { freq: 150, drop: 60, decay: 0.32, gain: 0.75 },
+    kick: { freq: 48, punch: 95, decay: 0.36, click: 0.55, sub: 0.35, gain: 1.0 },
+    snare: { low: 185, high: 330, noise: 0.9, decay: 0.19, bp: 2400, q: 0.7, gain: 0.9 },
+    hat: { base: 1.0, decay: 0.05, open: 0.36, hp: 7800, gain: 0.4 },
+    ride: { base: 0.72, decay: 1.5, hp: 4400, gain: 0.3, ping: 0.5 },
+    crash: { base: 0.86, decay: 2.2, hp: 3400, gain: 0.34 },
+    rim: { freq: 420, decay: 0.055, gain: 0.62 },
+    tom: { freq: 150, punch: 70, decay: 0.34, gain: 0.8 },
+    shaker: { decay: 0.055, hp: 6200, gain: 0.3 },
+    clap: { decay: 0.18, bp: 1500, gain: 0.6 },
   },
   acoustic: {
-    label: 'Cajon & Shaker',
-    kick: { freq: 62, drop: 55, decay: 0.26, click: 0.75, gain: 0.92 },
-    snare: { tone: 260, noise: 0.6, decay: 0.12, hp: 1900, gain: 0.6 },
-    hat: { decay: 0.05, open: 0.2, hp: 5200, gain: 0.3 },
-    rim: { freq: 520, decay: 0.05, gain: 0.5 },
-    ride: { decay: 0.5, hp: 4200, gain: 0.2 },
-    shaker: { decay: 0.075, hp: 4200, gain: 0.42 },
-    tom: { freq: 130, drop: 45, decay: 0.28, gain: 0.6 },
+    label: 'Cajon & Percussion',
+    kick: { freq: 62, punch: 45, decay: 0.24, click: 0.8, sub: 0.15, gain: 0.94 },
+    snare: { low: 240, high: 420, noise: 0.55, decay: 0.11, bp: 2600, q: 1.2, gain: 0.62 },
+    hat: { base: 1.15, decay: 0.045, open: 0.2, hp: 6400, gain: 0.26 },
+    ride: { base: 0.8, decay: 0.9, hp: 4000, gain: 0.2, ping: 0.35 },
+    crash: { base: 0.9, decay: 1.4, hp: 3200, gain: 0.24 },
+    rim: { freq: 540, decay: 0.045, gain: 0.55 },
+    tom: { freq: 128, punch: 40, decay: 0.28, gain: 0.62 },
+    shaker: { decay: 0.08, hp: 4600, gain: 0.44 },
+    clap: { decay: 0.15, bp: 1700, gain: 0.5 },
   },
   reggae: {
     label: 'Reggae / Dub',
-    kick: { freq: 44, drop: 70, decay: 0.42, click: 0.25, gain: 1.05 },
-    snare: { tone: 330, noise: 0.35, decay: 0.13, hp: 900, gain: 0.7 },
-    hat: { decay: 0.038, open: 0.26, hp: 8200, gain: 0.36 },
-    rim: { freq: 470, decay: 0.075, gain: 0.9 },
-    ride: { decay: 0.7, hp: 5000, gain: 0.24 },
-    shaker: { decay: 0.05, hp: 6500, gain: 0.26 },
-    tom: { freq: 120, drop: 55, decay: 0.36, gain: 0.7 },
+    kick: { freq: 41, punch: 60, decay: 0.46, click: 0.2, sub: 0.6, gain: 1.05 },
+    snare: { low: 330, high: 520, noise: 0.3, decay: 0.12, bp: 1400, q: 1.6, gain: 0.72 },
+    hat: { base: 1.05, decay: 0.04, open: 0.28, hp: 8400, gain: 0.34 },
+    ride: { base: 0.75, decay: 1.1, hp: 4200, gain: 0.22, ping: 0.3 },
+    crash: { base: 0.88, decay: 1.8, hp: 3200, gain: 0.28 },
+    rim: { freq: 470, decay: 0.08, gain: 0.95 },
+    tom: { freq: 118, punch: 55, decay: 0.38, gain: 0.72 },
+    shaker: { decay: 0.05, hp: 6800, gain: 0.26 },
+    clap: { decay: 0.2, bp: 1300, gain: 0.5 },
   },
   jazz: {
     label: 'Jazz Brushes',
-    kick: { freq: 58, drop: 45, decay: 0.24, click: 0.15, gain: 0.6 },
-    snare: { tone: 240, noise: 0.95, decay: 0.16, hp: 2400, gain: 0.42 },
-    hat: { decay: 0.06, open: 0.3, hp: 6800, gain: 0.28 },
+    kick: { freq: 56, punch: 30, decay: 0.22, click: 0.1, sub: 0.2, gain: 0.55 },
+    snare: { low: 250, high: 380, noise: 1.0, decay: 0.17, bp: 3200, q: 0.5, gain: 0.4 },
+    hat: { base: 0.95, decay: 0.06, open: 0.32, hp: 7000, gain: 0.26 },
+    ride: { base: 0.7, decay: 1.9, hp: 4200, gain: 0.44, ping: 0.75 },
+    crash: { base: 0.84, decay: 2.0, hp: 3000, gain: 0.28 },
     rim: { freq: 500, decay: 0.05, gain: 0.55 },
-    ride: { decay: 1.3, hp: 4600, gain: 0.42 },
-    shaker: { decay: 0.09, hp: 4800, gain: 0.3 },
-    tom: { freq: 140, drop: 50, decay: 0.3, gain: 0.55 },
+    tom: { freq: 140, punch: 45, decay: 0.3, gain: 0.55 },
+    shaker: { decay: 0.1, hp: 5000, gain: 0.3 },
+    clap: { decay: 0.16, bp: 1800, gain: 0.42 },
   },
   lofi: {
     label: 'Lo-Fi / Chillhop',
-    kick: { freq: 50, drop: 65, decay: 0.4, click: 0.3, gain: 0.95 },
-    snare: { tone: 200, noise: 0.7, decay: 0.17, hp: 1100, gain: 0.65 },
-    hat: { decay: 0.05, open: 0.24, hp: 5600, gain: 0.3 },
+    kick: { freq: 46, punch: 55, decay: 0.42, click: 0.28, sub: 0.5, gain: 0.98 },
+    snare: { low: 200, high: 300, noise: 0.72, decay: 0.16, bp: 1700, q: 0.9, gain: 0.66 },
+    hat: { base: 0.88, decay: 0.05, open: 0.24, hp: 5200, gain: 0.28 },
+    ride: { base: 0.68, decay: 0.9, hp: 3600, gain: 0.22, ping: 0.4 },
+    crash: { base: 0.8, decay: 1.5, hp: 2800, gain: 0.26 },
     rim: { freq: 440, decay: 0.06, gain: 0.5 },
-    ride: { decay: 0.6, hp: 4200, gain: 0.22 },
-    shaker: { decay: 0.07, hp: 5000, gain: 0.26 },
-    tom: { freq: 135, drop: 50, decay: 0.34, gain: 0.6 },
+    tom: { freq: 132, punch: 45, decay: 0.34, gain: 0.6 },
+    shaker: { decay: 0.07, hp: 4800, gain: 0.26 },
+    clap: { decay: 0.19, bp: 1400, gain: 0.58 },
   },
   metal: {
     label: 'Hard Rock / Metal',
-    kick: { freq: 52, drop: 130, decay: 0.22, click: 0.95, gain: 1.1 },
-    snare: { tone: 210, noise: 0.9, decay: 0.22, hp: 1600, gain: 1.0 },
-    hat: { decay: 0.04, open: 0.4, hp: 8500, gain: 0.45 },
+    kick: { freq: 50, punch: 150, decay: 0.2, click: 1.0, sub: 0.3, gain: 1.1 },
+    snare: { low: 200, high: 360, noise: 1.0, decay: 0.23, bp: 2200, q: 0.6, gain: 1.0 },
+    hat: { base: 1.1, decay: 0.042, open: 0.45, hp: 8600, gain: 0.44 },
+    ride: { base: 0.78, decay: 1.6, hp: 5000, gain: 0.4, ping: 0.6 },
+    crash: { base: 0.92, decay: 2.6, hp: 3600, gain: 0.4 },
     rim: { freq: 400, decay: 0.05, gain: 0.6 },
-    ride: { decay: 1.1, hp: 5600, gain: 0.4 },
+    tom: { freq: 160, punch: 80, decay: 0.3, gain: 0.92 },
     shaker: { decay: 0.05, hp: 7000, gain: 0.28 },
-    tom: { freq: 160, drop: 70, decay: 0.3, gain: 0.9 },
+    clap: { decay: 0.17, bp: 1600, gain: 0.62 },
   },
 };
 
+/** Every voice a pattern may address, in the order the grid shows them. */
+const DRUM_VOICES = [
+  { id: 'kick', label: 'Kick' },
+  { id: 'snare', label: 'Snare' },
+  { id: 'clap', label: 'Clap' },
+  { id: 'rim', label: 'Rim' },
+  { id: 'hat', label: 'Hat' },
+  { id: 'openhat', label: 'Open Hat' },
+  { id: 'ride', label: 'Ride' },
+  { id: 'crash', label: 'Crash' },
+  { id: 'tom', label: 'Tom' },
+  { id: 'shaker', label: 'Shaker' },
+];
+
 class DrumKit {
-  /**
-   * @param {AudioContext} ctx
-   * @param {AudioNode} destination
-   */
   constructor(ctx, destination) {
     this.ctx = ctx;
     this.kitId = 'rock';
@@ -1998,19 +2382,19 @@ class DrumKit {
     this.out = ctx.createGain();
     this.out.gain.value = 0.7;
 
-    // Drums get their own glue compressor so a busy pattern stays even without
-    // pumping the guitar, which sits on a separate bus.
+    // Drums get their own glue compressor: a busy pattern should stay even
+    // without pumping the guitar, which sits on a different bus.
     this.comp = ctx.createDynamicsCompressor();
     this.comp.threshold.value = -14;
     this.comp.knee.value = 12;
     this.comp.ratio.value = 4;
-    this.comp.attack.value = 0.003;
+    this.comp.attack.value = 0.002;
     this.comp.release.value = 0.12;
 
     this.out.connect(this.comp).connect(destination);
 
-    // One noise buffer, reused by every noise-based voice.
-    const len = Math.floor(ctx.sampleRate * 1.2);
+    // One noise buffer shared by every noise-based voice.
+    const len = Math.floor(ctx.sampleRate * 2);
     this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noiseBuffer.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -2020,113 +2404,161 @@ class DrumKit {
     return DRUM_KITS[this.kitId] || DRUM_KITS.rock;
   }
 
-  setKit(id) {
-    if (DRUM_KITS[id]) this.kitId = id;
+  setKit(id) { if (DRUM_KITS[id]) this.kitId = id; }
+
+  setVolume(v) { this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); }
+
+  _env(when, peak, decay, { attack = 0.001, hold = 0 } = {}) {
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + attack);
+    if (hold) g.gain.setValueAtTime(peak, when + attack + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + attack + hold + decay);
+    return g;
   }
 
-  setVolume(v) {
-    this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
-  }
-
-  _noise(when, duration, { hp = 0, bp = 0, q = 1, gain = 1, decay = 0.05 }) {
+  _noise(when, { hp = 0, bp = 0, q = 1, gain = 1, decay = 0.05, attack = 0.001 }) {
     const ctx = this.ctx;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
-    src.playbackRate.value = 1;
-    // Start at a random offset so repeated hits are not bit-identical.
-    const offset = Math.random() * (this.noiseBuffer.duration - duration - 0.01);
 
     let node = src;
     if (hp) {
       const f = ctx.createBiquadFilter();
-      f.type = 'highpass';
-      f.frequency.value = hp;
+      f.type = 'highpass'; f.frequency.value = hp;
       node = node.connect(f);
     }
     if (bp) {
       const f = ctx.createBiquadFilter();
-      f.type = 'bandpass';
-      f.frequency.value = bp;
-      f.Q.value = q;
+      f.type = 'bandpass'; f.frequency.value = bp; f.Q.value = q;
       node = node.connect(f);
     }
 
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(gain, when + 0.001);
-    g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
-    node.connect(g).connect(this.out);
-
-    src.start(when, Math.max(0, offset), decay + 0.05);
-    src.stop(when + decay + 0.06);
+    node.connect(this._env(when, gain, decay, { attack })).connect(this.out);
+    // Random start offset so repeated hits are not bit-identical.
+    src.start(when, Math.random() * (this.noiseBuffer.duration - decay - 0.1), decay + 0.1);
+    src.stop(when + decay + 0.12);
   }
 
-  _tone(when, { freq, drop = 0, decay = 0.2, gain = 1, type = 'sine' }) {
+  /** Pitch-swept sine — the physical behaviour of a struck drum head. */
+  _skin(when, { freq, punch = 0, decay = 0.2, gain = 1, type = 'sine', sweep = 0.5 }) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = type;
-    osc.frequency.setValueAtTime(freq + drop, when);
-    if (drop) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq), when + decay * 0.55);
-
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(gain, when + 0.002);
-    g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
-
-    osc.connect(g).connect(this.out);
+    osc.frequency.setValueAtTime(freq + punch, when);
+    if (punch) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq), when + decay * sweep);
+    osc.connect(this._env(when, gain, decay)).connect(this.out);
     osc.start(when);
-    osc.stop(when + decay + 0.03);
+    osc.stop(when + decay + 0.05);
   }
 
   /**
-   * Fire one drum voice.
-   * @param {string} voice kick|snare|hat|openhat|rim|ride|shaker|tom
+   * Inharmonic metal cluster. Six squares at non-integer ratios through a
+   * highpass is what separates a cymbal from a hiss.
+   */
+  _metal(when, { base = 1, decay = 0.05, hp = 7000, gain = 0.4, bp = 0, attack = 0.0005 }) {
+    const ctx = this.ctx;
+    const bus = this._env(when, gain, decay, { attack });
+
+    let node = bus;
+    const hpf = ctx.createBiquadFilter();
+    hpf.type = 'highpass';
+    hpf.frequency.value = hp;
+    node = node.connect(hpf);
+
+    if (bp) {
+      const bpf = ctx.createBiquadFilter();
+      bpf.type = 'bandpass'; bpf.frequency.value = bp; bpf.Q.value = 0.6;
+      node = node.connect(bpf);
+    }
+    node.connect(this.out);
+
+    for (const ratio of METAL_RATIOS) {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = METAL_BASE * base * ratio;
+      osc.connect(bus);
+      osc.start(when);
+      osc.stop(when + decay + 0.05);
+    }
+  }
+
+  /**
+   * Fire one voice.
+   * @param {string} voice one of DRUM_VOICES
    * @param {number} when AudioContext timestamp
    * @param {number} velocity 0..1
    */
   hit(voice, when, velocity = 1) {
     const k = this.kit;
-    const v = Math.max(0.05, Math.min(1.4, velocity));
+    const v = Math.max(0.04, Math.min(1.3, velocity));
 
     switch (voice) {
-      case 'kick':
-        this._tone(when, { freq: k.kick.freq, drop: k.kick.drop, decay: k.kick.decay, gain: k.kick.gain * v });
+      case 'kick': {
+        this._skin(when, { freq: k.kick.freq, punch: k.kick.punch, decay: k.kick.decay, gain: k.kick.gain * v, sweep: 0.28 });
+        // A sub layer with no pitch sweep gives weight the swept tone loses.
+        if (k.kick.sub) {
+          this._skin(when, { freq: k.kick.freq * 0.6, decay: k.kick.decay * 1.2, gain: k.kick.sub * k.kick.gain * v });
+        }
         if (k.kick.click) {
-          this._noise(when, 0.02, { hp: 1200, gain: 0.22 * k.kick.click * v, decay: 0.018 });
+          this._noise(when, { hp: 1800, gain: 0.3 * k.kick.click * v, decay: 0.014 });
         }
         break;
+      }
 
-      case 'snare':
-        // Body plus noise: the tone gives it pitch, the noise gives it snap.
-        this._tone(when, { freq: k.snare.tone, decay: k.snare.decay * 0.55, gain: 0.5 * k.snare.gain * v, type: 'triangle' });
-        this._noise(when, 0.2, { hp: k.snare.hp, gain: k.snare.noise * k.snare.gain * v, decay: k.snare.decay });
+      case 'snare': {
+        // Two head tones plus band-limited noise: pitch from the shell, snap
+        // from the wires.
+        this._skin(when, { freq: k.snare.low, decay: k.snare.decay * 0.5, gain: 0.5 * k.snare.gain * v, type: 'triangle' });
+        this._skin(when, { freq: k.snare.high, decay: k.snare.decay * 0.32, gain: 0.3 * k.snare.gain * v, type: 'triangle' });
+        this._noise(when, { bp: k.snare.bp, q: k.snare.q, gain: k.snare.noise * k.snare.gain * v, decay: k.snare.decay });
+        this._noise(when, { hp: 6000, gain: 0.3 * k.snare.gain * v, decay: k.snare.decay * 0.45 });
         break;
+      }
 
       case 'hat':
-        this._noise(when, 0.08, { hp: k.hat.hp, gain: k.hat.gain * v, decay: k.hat.decay });
+        this._metal(when, { base: k.hat.base, decay: k.hat.decay, hp: k.hat.hp, gain: k.hat.gain * v });
         break;
 
       case 'openhat':
-        this._noise(when, 0.4, { hp: k.hat.hp * 0.9, gain: k.hat.gain * 0.9 * v, decay: k.hat.open });
-        break;
-
-      case 'rim':
-        this._tone(when, { freq: k.rim.freq, decay: k.rim.decay, gain: k.rim.gain * v, type: 'square' });
-        this._noise(when, 0.05, { bp: 2400, q: 3, gain: 0.35 * k.rim.gain * v, decay: k.rim.decay });
+        this._metal(when, { base: k.hat.base, decay: k.hat.open, hp: k.hat.hp * 0.92, gain: k.hat.gain * 0.92 * v });
         break;
 
       case 'ride':
-        this._noise(when, 1.4, { hp: k.ride.hp, gain: k.ride.gain * v, decay: k.ride.decay });
-        this._tone(when, { freq: 3200, decay: 0.12, gain: 0.08 * k.ride.gain * v, type: 'square' });
+        // The stick "ping" is a short bright transient over the long wash.
+        this._metal(when, { base: k.ride.base, decay: k.ride.decay, hp: k.ride.hp, gain: k.ride.gain * v });
+        if (k.ride.ping) {
+          this._metal(when, { base: k.ride.base * 2.4, decay: 0.09, hp: k.ride.hp * 1.6, gain: k.ride.ping * k.ride.gain * v });
+        }
         break;
 
-      case 'shaker':
-        this._noise(when, 0.12, { hp: k.shaker.hp, gain: k.shaker.gain * v, decay: k.shaker.decay });
+      case 'crash':
+        this._metal(when, { base: k.crash.base, decay: k.crash.decay, hp: k.crash.hp, gain: k.crash.gain * v, attack: 0.004 });
+        this._noise(when, { hp: k.crash.hp * 1.3, gain: 0.28 * k.crash.gain * v, decay: k.crash.decay * 0.7, attack: 0.004 });
+        break;
+
+      case 'rim':
+        this._skin(when, { freq: k.rim.freq, decay: k.rim.decay, gain: k.rim.gain * v, type: 'square' });
+        this._noise(when, { bp: 2600, q: 3.5, gain: 0.4 * k.rim.gain * v, decay: k.rim.decay });
         break;
 
       case 'tom':
-        this._tone(when, { freq: k.tom.freq, drop: k.tom.drop, decay: k.tom.decay, gain: k.tom.gain * v });
+        this._skin(when, { freq: k.tom.freq, punch: k.tom.punch, decay: k.tom.decay, gain: k.tom.gain * v, sweep: 0.4 });
+        this._noise(when, { bp: k.tom.freq * 4, q: 1.5, gain: 0.12 * k.tom.gain * v, decay: k.tom.decay * 0.4 });
         break;
+
+      case 'shaker':
+        this._noise(when, { hp: k.shaker.hp, gain: k.shaker.gain * v, decay: k.shaker.decay, attack: 0.004 });
+        break;
+
+      case 'clap': {
+        // A clap is several hands slightly out of sync — three quick bursts
+        // into one tail is what makes it read as a clap and not a snare.
+        for (const [offset, level] of [[0, 0.7], [0.011, 0.85], [0.021, 1]]) {
+          this._noise(when + offset, { bp: k.clap.bp, q: 0.8, gain: level * k.clap.gain * v, decay: offset === 0.021 ? k.clap.decay : 0.03 });
+        }
+        break;
+      }
 
       default:
         break;
@@ -2844,16 +3276,14 @@ class Sequencer {
    * the same audio clock from the same bar start.
    */
   _scheduleDrums(startTime, dur, st) {
-    if (!this.drums || !st.drumsOn || !st.drumStyle) return;
-    const style = DRUM_STYLE_BY_ID[st.drumStyle];
-    if (!style) return;
+    if (!this.drums || !st.drumsOn || !st.drumPattern) return;
 
     // A fill on the last bar of the loop signals the turnaround.
     const bars = st.bars.length;
     const isLastBar = bars > 1 && this.barIndex === bars - 1;
     const fill = !!st.drumFills && isLastBar;
 
-    for (const hit of patternHits(style, { fill })) {
+    for (const hit of patternHits(st.drumPattern, { fill })) {
       this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
     }
   }
@@ -2977,10 +3407,11 @@ const TONE_COLOR = {
 const TABS = [
   { id: 'circle', label: 'Circle', glyph: 'circle' },
   { id: 'tone', label: 'Tone', glyph: 'square' },
+  { id: 'drums', label: 'Drums', glyph: 'grid' },
   { id: 'compose', label: 'Compose', glyph: 'diamond' },
   { id: 'timeline', label: 'Timeline', glyph: 'bars' },
-  { id: 'learn', label: 'Learn', glyph: 'book' },
   { id: 'assist', label: 'Assist', glyph: 'spark' },
+  { id: 'learn', label: 'Learn', glyph: 'book' },
 ];
 
 const params = new URLSearchParams(location.search);
@@ -3025,6 +3456,11 @@ const state = {
   drumKit: 'rock',
   drumVolume: 0.7,
   drumFills: true,
+  /**
+   * The editable grid. A style seeds it, after which this is what plays — so
+   * anything typed into the sequencer is heard, not overwritten by the preset.
+   */
+  drumPattern: null,
 
   activeTab: 'circle',
   moodId: null,
@@ -3078,7 +3514,7 @@ const sequencer = new Sequencer(engine, () => ({
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
   drumsOn: state.drumsOn,
-  drumStyle: state.drumStyle,
+  drumPattern: state.drumPattern,
   drumFills: state.drumFills,
 }));
 
@@ -3326,6 +3762,7 @@ function render() {
   renderTransport();
   renderCircle();
   renderTone();
+  renderDrums();
   renderCompose();
   renderTimeline();
   renderLearn();
@@ -3359,6 +3796,9 @@ function glyph(kind, active) {
     diamond: `width:13px;height:13px;transform:rotate(45deg);border:2px solid ${col};`,
     bars: `width:16px;height:12px;background:linear-gradient(90deg,${col} 3px,transparent 3px);background-size:6px 100%;`,
     book: `width:13px;height:11px;border:2px solid ${col};border-radius:1px 4px 4px 1px;`,
+    grid: `width:15px;height:11px;background:
+      linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
+      linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
@@ -3648,11 +4088,28 @@ function renderTone() {
     b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
     list.appendChild(b);
   }
-
-  renderDrums();
 }
 
+/** Seed the editable grid from a named groove. */
+function loadDrumStyle(id, { keepKit = false } = {}) {
+  const style = DRUM_STYLE_BY_ID[id];
+  if (!style) return;
+  state.drumStyle = id;
+  state.drumPattern = styleToPattern(style, DRUM_VOICES.map((v) => v.id));
+  if (!keepKit) {
+    state.drumKit = style.kit;
+    if (engine.drums) engine.drums.setKit(state.drumKit);
+  }
+}
+
+/** Steps cycle off -> soft -> medium -> hard, so one tap edits without a menu. */
+const STEP_LEVELS = [0, 4, 6, 9];
+const nextStepLevel = (v) => STEP_LEVELS[(STEP_LEVELS.indexOf(v) + 1) % STEP_LEVELS.length] ?? 0;
+
 function renderDrums() {
+  if (!state.drumPattern) loadDrumStyle(state.drumStyle);
+  const pattern = state.drumPattern;
+
   for (const id of ['drumsBtn', 'drumsQuickBtn']) {
     const b = $(id);
     b.setAttribute('aria-pressed', String(state.drumsOn));
@@ -3674,23 +4131,65 @@ function renderDrums() {
   }
   kitSel.value = state.drumKit;
 
-  // Only offer grooves that fit the current metre — a 6/8 clave in 4/4 is not
-  // a useful option, it is a bug waiting to be reported.
-  const list = $('drumStyleList');
-  list.replaceChildren();
-  for (const style of stylesForMeter(state.timeSig)) {
-    const b = el('button', `list-btn${state.drumStyle === style.id ? ' active' : ''}`);
-    b.append(el('span', '', style.label), el('span', 'tag', style.meters.join(' ')));
-    b.onclick = () => {
-      state.drumStyle = style.id;
-      // Each groove names the kit it was written for; follow it unless the
-      // user has since chosen one deliberately.
-      state.drumKit = style.kit;
-      if (engine.drums) engine.drums.setKit(state.drumKit);
-      if (!state.drumsOn) toggleDrums(true);
-      renderDrums();
+  // Only grooves that fit the current metre — a 6/8 clave in 4/4 is not a
+  // useful option, it is a bug waiting to be reported.
+  const styleSel = $('drumStyleSelect');
+  const available = stylesForMeter(state.timeSig);
+  styleSel.replaceChildren();
+  for (const style of available) {
+    const o = document.createElement('option');
+    o.value = style.id;
+    o.textContent = style.label;
+    styleSel.appendChild(o);
+  }
+  if (available.some((s) => s.id === state.drumStyle)) styleSel.value = state.drumStyle;
+
+  const swing = $('drumSwing');
+  swing.value = pattern.swing || 0;
+  $('drumSwingOut').textContent = `${Math.round((pattern.swing || 0) * 100)}%`;
+
+  // --- the grid ---
+  const grid = $('drumGrid');
+  grid.replaceChildren();
+  grid.style.setProperty('--steps', pattern.steps);
+  // Group boundaries land every 4 steps in 4/4 and every 3 in compound metres.
+  const group = pattern.steps % 4 === 0 && pattern.steps !== 12 ? 4 : 3;
+
+  for (const voice of DRUM_VOICES) {
+    const lane = pattern.lanes[voice.id] || new Array(pattern.steps).fill(0);
+
+    const name = el('button', 'seq-name', voice.label);
+    name.title = `Preview ${voice.label}`;
+    name.onclick = async () => {
+      if (!(await ensureAudio())) return;
+      engine.drums.hit(voice.id, engine.currentTime + 0.02, 0.9);
     };
-    list.appendChild(b);
+    grid.appendChild(name);
+
+    const row = el('div', 'seq-row');
+    lane.forEach((vel, i) => {
+      const cell = el('button', `seq-cell${vel ? ' on' : ''}${i % group === 0 ? ' beat' : ''}`);
+      cell.dataset.step = String(i);
+      cell.dataset.voice = voice.id;
+      if (vel) cell.dataset.level = vel >= 9 ? 'hard' : vel >= 6 ? 'med' : 'soft';
+      cell.setAttribute('aria-label', `${voice.label} step ${i + 1}`);
+      cell.onclick = async () => {
+        lane[i] = nextStepLevel(lane[i]);
+        pattern.lanes[voice.id] = lane;
+        renderDrums();
+        // Audition the edit so the grid answers back.
+        if (lane[i] && (await ensureAudio())) {
+          engine.drums.hit(voice.id, engine.currentTime + 0.02, lane[i] / 9);
+        }
+      };
+      row.appendChild(cell);
+    });
+    grid.appendChild(row);
+
+    const clear = el('button', 'seq-clear', '✕');
+    clear.title = `Clear ${voice.label}`;
+    clear.onclick = () => { pattern.lanes[voice.id] = new Array(pattern.steps).fill(0); renderDrums(); };
+    grid.appendChild(clear);
   }
 }
 
@@ -4101,6 +4600,10 @@ function wire() {
     state.timeSig = timeSig.value;
     renderTransport();
     renderTone(); // audition-length labels depend on beats per bar
+    // Grooves are metre-specific; move to one that fits if the current one does not.
+    const fits = stylesForMeter(state.timeSig);
+    if (!fits.some((s) => s.id === state.drumStyle)) loadDrumStyle(fits[0].id);
+    renderDrums();
   };
 
   const modeSel = $('modeSelect');
@@ -4232,6 +4735,33 @@ function wire() {
     state.drumKit = e.target.value;
     if (engine.drums) engine.drums.setKit(state.drumKit);
   };
+  $('drumStyleSelect').onchange = (e) => {
+    loadDrumStyle(e.target.value);
+    if (!state.drumsOn) toggleDrums(true);
+    renderDrums();
+  };
+  $('drumClearBtn').onclick = () => {
+    for (const v of DRUM_VOICES) {
+      state.drumPattern.lanes[v.id] = new Array(state.drumPattern.steps).fill(0);
+    }
+    renderDrums();
+  };
+  $('drumResetBtn').onclick = () => { loadDrumStyle(state.drumStyle, { keepKit: true }); renderDrums(); };
+  $('drumDoubleBtn').onclick = () => {
+    // Write a one-bar idea in the first half, then fill the bar with it.
+    const p = state.drumPattern;
+    const half = Math.floor(p.steps / 2);
+    for (const v of DRUM_VOICES) {
+      const lane = p.lanes[v.id];
+      for (let i = 0; i < half; i++) lane[half + i] = lane[i];
+    }
+    renderDrums();
+  };
+  const swing = $('drumSwing');
+  swing.oninput = () => {
+    state.drumPattern.swing = Number(swing.value);
+    $('drumSwingOut').textContent = `${Math.round(state.drumPattern.swing * 100)}%`;
+  };
   const drumVol = $('drumVolume');
   drumVol.oninput = () => {
     state.drumVolume = Number(drumVol.value);
@@ -4281,7 +4811,7 @@ function exportSong() {
     tone: state.tone,
     rhythm: state.rhythm,
     tuning: state.tuningId,
-    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills },
+    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
     sections: state.sections.map((sec) => ({
       name: sec.name,
@@ -4323,6 +4853,9 @@ function importSong(e) {
         if (DRUM_KITS[data.drums.kit]) state.drumKit = data.drums.kit;
         if (Number.isFinite(data.drums.volume)) state.drumVolume = data.drums.volume;
         state.drumFills = data.drums.fills !== false;
+        // Prefer the saved grid over the style's defaults: it may have been edited.
+        if (data.drums.pattern && data.drums.pattern.lanes) state.drumPattern = data.drums.pattern;
+        else loadDrumStyle(state.drumStyle, { keepKit: true });
       }
 
       // v1 held a single loop; v2 holds named sections. Reading a v1 file just

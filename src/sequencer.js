@@ -8,7 +8,7 @@
 
 import { getPattern, swingTime } from './patterns.js';
 import { resolveVoicing, voicingNotes } from './fretboard.js';
-import { DRUM_STYLE_BY_ID, patternHits } from './drum-patterns.js';
+import { patternHits } from './drum-patterns.js';
 
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.15;
@@ -173,16 +173,14 @@ export class Sequencer {
    * the same audio clock from the same bar start.
    */
   _scheduleDrums(startTime, dur, st) {
-    if (!this.drums || !st.drumsOn || !st.drumStyle) return;
-    const style = DRUM_STYLE_BY_ID[st.drumStyle];
-    if (!style) return;
+    if (!this.drums || !st.drumsOn || !st.drumPattern) return;
 
     // A fill on the last bar of the loop signals the turnaround.
     const bars = st.bars.length;
     const isLastBar = bars > 1 && this.barIndex === bars - 1;
     const fill = !!st.drumFills && isLastBar;
 
-    for (const hit of patternHits(style, { fill })) {
+    for (const hit of patternHits(st.drumPattern, { fill })) {
       this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
     }
   }

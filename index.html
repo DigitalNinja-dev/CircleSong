@@ -142,26 +142,44 @@
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="stack" id="rhythmList"></div>
 
-      <h2 class="mt">/04 DRUMS</h2>
-      <div class="row between">
-        <div>
-          <span class="setting-name">Backing drums</span>
-          <span class="setting-note">Locked to the transport, bar for bar</span>
-        </div>
-        <button id="drumsBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+    </section>
+
+    <!-- DRUM MACHINE -->
+    <section class="panel" id="tab-drums" hidden>
+      <div class="head">
+        <h2>/03 DRUM_MACHINE</h2>
+        <button id="drumsBtn" class="chip toggle solid small" aria-pressed="false">Off</button>
       </div>
-      <div class="row mt-s">
-        <span class="micro-label">KIT</span>
-        <select id="drumKitSelect" class="select grow" aria-label="Drum kit"></select>
+
+      <div class="row gap-xs mb-s">
+        <select id="drumStyleSelect" class="select grow" aria-label="Groove"></select>
+        <select id="drumKitSelect" class="select" aria-label="Drum kit"></select>
       </div>
-      <div class="stack mt-s" id="drumStyleList"></div>
-      <div class="sliders mt-s">
+
+      <div class="seq-wrap">
+        <div class="seq" id="drumGrid" role="grid" aria-label="Drum step sequencer"></div>
+      </div>
+      <p class="hint block">Tap a step to cycle it through soft, medium and hard, then off. Tap a voice name to preview it; the ✕ clears that row.</p>
+
+      <div class="row gap-s">
+        <button id="drumClearBtn" class="chip small">Clear grid</button>
+        <button id="drumResetBtn" class="chip small">Reset groove</button>
+        <button id="drumDoubleBtn" class="chip small" title="Copy the first half onto the second">Double</button>
+      </div>
+
+      <div class="sliders mt">
         <div class="slider-row">
           <label for="drumVolume">DRUM VOL</label>
           <input id="drumVolume" type="range" min="0" max="1" step="0.01" value="0.7" class="grow">
           <output id="drumVolumeOut">70%</output>
         </div>
+        <div class="slider-row">
+          <label for="drumSwing">SWING</label>
+          <input id="drumSwing" type="range" min="0" max="0.6" step="0.01" value="0" class="grow">
+          <output id="drumSwingOut">0%</output>
+        </div>
       </div>
+
       <div class="row between mt-s">
         <div>
           <span class="setting-name">Fill before the loop turns</span>

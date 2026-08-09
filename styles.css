@@ -429,3 +429,40 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .chip.queued.active { background: transparent; color: var(--b); }
 .chip[disabled] { opacity: 0.35; cursor: not-allowed; }
 .chip[disabled]:hover { border-color: var(--border); }
+
+/* ---------- drum step sequencer ---------- */
+.seq-wrap { overflow-x: auto; margin-bottom: 10px; padding-bottom: 4px; }
+.seq {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 3px 6px;
+  min-width: max-content;
+}
+.seq-name {
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font: 500 10px var(--mono); color: oklch(0.78 0.008 250);
+  text-align: left; white-space: nowrap;
+}
+.seq-name:hover { color: var(--a); }
+.seq-row { display: grid; grid-template-columns: repeat(var(--steps), 1fr); gap: 3px; min-width: 246px; }
+.seq-cell {
+  height: 20px; min-width: 13px; padding: 0; cursor: pointer;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  background: oklch(0.15 0.008 250);
+}
+/* The first step of each group is marked so the beat is readable at a glance. */
+.seq-cell.beat { border-color: oklch(0.65 0.2 135 / 0.35); background: oklch(0.18 0.01 250); }
+.seq-cell.on { border-color: transparent; }
+.seq-cell.on[data-level='soft'] { background: oklch(0.55 0.13 135); }
+.seq-cell.on[data-level='med'] { background: oklch(0.72 0.19 135); }
+.seq-cell.on[data-level='hard'] { background: var(--a); }
+.seq-cell:focus-visible { outline: 2px solid var(--a); outline-offset: 1px; }
+.seq-clear {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  color: var(--dimmer); font-size: 10px; line-height: 1;
+}
+.seq-clear:hover { color: oklch(0.7 0.15 25); }
+
+/* Seven tabs need a little more room than six. */
+.tabbar button { font-size: 9px; padding: 4px 1px; gap: 3px; }
