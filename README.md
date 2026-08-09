@@ -111,8 +111,8 @@ adds Play Console signing and review; nothing about the app itself changes.
   colouring, and instant auditioning of root position, 1st/2nd inversion,
   Drop-2 and Drop-3 voicings. Cycle alternative shapes for any chord.
 - **Custom Tone & Strum Engine** — six modelled instruments (acoustic steel,
-  nylon classical, electric clean, crunch, jazz archtop, reggae) and seven
-  eighteen strum and picking patterns — folk D-DU-UDU, driving 16ths, muted
+  nylon classical, electric clean, crunch, jazz archtop, reggae) and eighteen
+  strum and picking patterns — folk D-DU-UDU, driving 16ths, muted
   chucks, ska, Charleston comping, rumba clave, waltz, 6/8 ballad, Travis
   picking and more — plus live control over sustain, brightness, and pick
   position. Five tunings including Drop D, DADGAD and Open G.
