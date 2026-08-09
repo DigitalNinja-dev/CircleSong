@@ -85,6 +85,18 @@ export class Sequencer {
     if (this.onPlayhead) this.onPlayhead(-1);
   }
 
+  /**
+   * Where the bar currently sounding started, and how long it lasts. The UI
+   * uses this to draw a playhead from the audio clock rather than from a timer,
+   * so what is highlighted is what is actually being heard.
+   */
+  currentBarWindow() {
+    const head = this.scheduled[0];
+    if (!this.playing || !head) return null;
+    const st = this.getState();
+    return { start: head.time, duration: barDuration(st.timeSig, st.bpm) };
+  }
+
   /** Restart the loop from the top without dropping the audio clock. */
   rewind() {
     if (!this.playing) return;
@@ -180,8 +192,15 @@ export class Sequencer {
     const isLastBar = bars > 1 && this.barIndex === bars - 1;
     const fill = !!st.drumFills && isLastBar;
 
+    // Humanise: a real drummer's placement drifts by a few milliseconds and
+    // their velocity by a few percent. The downbeat drifts least — that is the
+    // reference everything else is heard against.
+    const h = st.drumHumanize || 0;
     for (const hit of patternHits(st.drumPattern, { fill })) {
-      this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
+      const anchor = hit.t === 0 ? 0.25 : 1;
+      const drift = h ? (Math.random() - 0.5) * 0.014 * h * anchor : 0;
+      const vel = h ? hit.velocity * (1 + (Math.random() - 0.5) * 0.24 * h) : hit.velocity;
+      this.drums.hit(hit.voice, startTime + hit.t * dur + drift, Math.max(0.05, Math.min(1.2, vel)));
     }
   }
 

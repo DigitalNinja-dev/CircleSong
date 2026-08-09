@@ -165,6 +165,7 @@
         <button id="drumClearBtn" class="chip small">Clear grid</button>
         <button id="drumResetBtn" class="chip small">Reset groove</button>
         <button id="drumDoubleBtn" class="chip small" title="Copy the first half onto the second">Double</button>
+        <button id="drumVaryBtn" class="chip small filled-b" title="Nudge the groove into a variation of itself">✦ Vary</button>
       </div>
 
       <div class="sliders mt">
@@ -177,6 +178,11 @@
           <label for="drumSwing">SWING</label>
           <input id="drumSwing" type="range" min="0" max="0.6" step="0.01" value="0" class="grow">
           <output id="drumSwingOut">0%</output>
+        </div>
+        <div class="slider-row">
+          <label for="drumHumanize">HUMANIZE</label>
+          <input id="drumHumanize" type="range" min="0" max="1" step="0.01" value="0.35" class="grow">
+          <output id="drumHumanizeOut">35%</output>
         </div>
       </div>
 
@@ -294,7 +300,9 @@
       <div class="chip-row" id="sectionRow"></div>
       <div class="stack" id="sectionVariants"></div>
 
-      <h3>// HIT_SONG_TEMPLATES</h3>
+      <h3>// PROGRESSION_LIBRARY</h3>
+      <p class="hint block">Tap a card to hear it in the current key; Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
+      <div class="chip-row" id="templateFamilyRow"></div>
       <div class="stack" id="templateList"></div>
     </section>
 

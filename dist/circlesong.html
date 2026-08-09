@@ -485,6 +485,24 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
 /* Seven tabs need a little more room than six. */
 .tabbar button { font-size: 9px; padding: 4px 1px; gap: 3px; }
+/* The step being heard right now, driven from the audio clock. */
+.seq-cell.playing { box-shadow: inset 0 0 0 2px var(--b); }
+.seq-cell.playing:not(.on) { background: oklch(0.28 0.04 85); }
+
+/* ---------- progression library ---------- */
+.template-card {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 13px; cursor: pointer;
+  background: var(--raised); border: 1px solid var(--border);
+}
+.template-card:hover { border-color: var(--a); }
+.template-card.active { background: var(--raised-hi); border-color: var(--a); }
+.template-card .label { font: 600 13px var(--display); color: oklch(0.93 0.006 250); }
+.template-numerals { font: 600 12px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+.template-chords { font: 500 11px var(--mono); color: oklch(0.7 0.008 250); }
+.template-card p { margin: 4px 0 0; font: 400 11px/1.5 var(--sans); color: oklch(0.66 0.008 250); }
+.template-meta { font: 400 9px var(--mono); color: var(--dimmer); letter-spacing: 0.05em; text-transform: uppercase; }
+.variant-numerals { display: block; margin-top: 4px; font: 600 11px var(--mono); color: var(--c); }
 
 </style>
 </head>
@@ -633,6 +651,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <button id="drumClearBtn" class="chip small">Clear grid</button>
         <button id="drumResetBtn" class="chip small">Reset groove</button>
         <button id="drumDoubleBtn" class="chip small" title="Copy the first half onto the second">Double</button>
+        <button id="drumVaryBtn" class="chip small filled-b" title="Nudge the groove into a variation of itself">✦ Vary</button>
       </div>
 
       <div class="sliders mt">
@@ -645,6 +664,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <label for="drumSwing">SWING</label>
           <input id="drumSwing" type="range" min="0" max="0.6" step="0.01" value="0" class="grow">
           <output id="drumSwingOut">0%</output>
+        </div>
+        <div class="slider-row">
+          <label for="drumHumanize">HUMANIZE</label>
+          <input id="drumHumanize" type="range" min="0" max="1" step="0.01" value="0.35" class="grow">
+          <output id="drumHumanizeOut">35%</output>
         </div>
       </div>
 
@@ -762,7 +786,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       <div class="chip-row" id="sectionRow"></div>
       <div class="stack" id="sectionVariants"></div>
 
-      <h3>// HIT_SONG_TEMPLATES</h3>
+      <h3>// PROGRESSION_LIBRARY</h3>
+      <p class="hint block">Tap a card to hear it in the current key; Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
+      <div class="chip-row" id="templateFamilyRow"></div>
       <div class="stack" id="templateList"></div>
     </section>
 
@@ -924,7 +950,15 @@ function diatonicChords(tonicPc, modeId, sevenths = false) {
     };
     const rootPc = (tonicPc + rootAbs) % 12;
     const isMinorish = ['min', 'min7', 'dim', 'dim7', 'm7b5', 'min6', 'minMaj7'].includes(quality.id);
-    let numeral = isMinorish ? ROMAN[d].toLowerCase() : ROMAN[d];
+
+    // Modal degrees are numbered against the major scale, so a degree the mode
+    // lowers or raises carries the accidental: Mixolydian's seventh is ♭VII,
+    // not VII, and Lydian's fourth is ♯IV. Without this the numeral names a
+    // chord from a different scale than the one being played.
+    const alteration = steps[d] - MAJOR_STEPS[d];
+    const accidental = alteration < 0 ? '♭' : alteration > 0 ? '♯' : '';
+
+    let numeral = accidental + (isMinorish ? ROMAN[d].toLowerCase() : ROMAN[d]);
     if (quality.id === 'dim' || quality.id === 'dim7') numeral += '°';
     if (quality.id === 'm7b5') numeral += 'ø';
     if (quality.id === 'aug') numeral += '+';
@@ -1531,6 +1565,7 @@ function getPattern(id) {
 const DRUM_STYLES = [
   {
     id: 'rockDrive',
+    family: 'Rock & Pop',
     label: 'Modern Rock Drive',
     kit: 'rock',
     meters: ['4/4'],
@@ -1545,6 +1580,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'pop16',
+    family: 'Rock & Pop',
     label: 'Pop / Funk 16ths',
     kit: 'rock',
     meters: ['4/4'],
@@ -1557,6 +1593,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'funkGhost',
+    family: 'Funk & Soul',
     label: 'Funk Ghost Notes',
     kit: 'rock',
     meters: ['4/4'],
@@ -1569,6 +1606,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'indie8',
+    family: 'Rock & Pop',
     label: 'Indie Straight-8',
     kit: 'rock',
     meters: ['4/4'],
@@ -1581,6 +1619,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'disco',
+    family: 'Electronic & Dance',
     label: 'Disco Four-on-Floor',
     kit: 'rock',
     meters: ['4/4'],
@@ -1594,6 +1633,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'reggaeOneDrop',
+    family: 'Reggae & Caribbean',
     label: 'Reggae One-Drop',
     kit: 'reggae',
     meters: ['4/4'],
@@ -1607,6 +1647,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'reggaeSteppers',
+    family: 'Reggae & Caribbean',
     label: 'Reggae Steppers',
     kit: 'reggae',
     meters: ['4/4'],
@@ -1620,6 +1661,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'bossa',
+    family: 'Latin',
     label: 'Bossa Nova',
     kit: 'jazz',
     meters: ['4/4'],
@@ -1632,19 +1674,97 @@ const DRUM_STYLES = [
     },
   },
   {
-    id: 'sambaLite',
-    label: 'Samba (light)',
+    id: 'samba',
+    family: 'Latin',
+    label: 'Samba',
     kit: 'acoustic',
     meters: ['4/4'],
     steps: 16,
+    // The surdo carries samba and it leans on beats 2 and 4, not 1 — that
+    // weighting is what stops it sounding like a march. Tamborim plays the
+    // teleco-teco figure over a continuous caixa sixteenth.
     lanes: {
-      kick: '9..7.9..9..7.9..',
-      rim: '..6..6..6..6..6.',
+      kick: '5...9...5...9...',
+      rim: '9..7..9...9.7...',
       shaker: '6454645464546454',
     },
   },
   {
+    id: 'sambaPartido',
+    family: 'Latin',
+    label: 'Partido Alto',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '5...9...5...9...',
+      rim: '..9.7..9..9.7..9',
+      shaker: '6454645464546454',
+      tom: '.......6.......7',
+    },
+  },
+  {
+    id: 'cumbiaClasica',
+    family: 'Latin',
+    label: 'Cumbia Clásica',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    // Cumbia's signature is the güira scraping steady eighths over a bass drum
+    // on one and three, with the wood/rim answering on the backbeat.
+    lanes: {
+      kick: '9.......9.......',
+      rim: '....8.......8...',
+      shaker: '6.4.6.4.6.4.6.4.',
+      tom: '..............6.',
+    },
+  },
+  {
+    id: 'cumbiaModerna',
+    family: 'Latin',
+    label: 'Cumbia Moderna',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    // The sonidera variant: same skeleton, busier güira and a tom pickup into
+    // the turnaround.
+    lanes: {
+      kick: '9.....7.9.....7.',
+      rim: '....8.......8...',
+      shaker: '6454645464546454',
+      tom: '............6.8.',
+    },
+  },
+  {
+    id: 'merengue',
+    family: 'Latin',
+    label: 'Merengue',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...5...9...5...',
+      rim: '..7...7...7...7.',
+      shaker: '7575757575757575',
+    },
+  },
+  {
+    id: 'sonMontuno',
+    family: 'Latin',
+    label: 'Son Montuno (2-3)',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    // Son clave, 2-3 direction: the two-side first, then the three-side.
+    lanes: {
+      kick: '......8.......8.',
+      rim: '....9...9..9..9.',
+      shaker: '6.5.6.5.6.5.6.5.',
+    },
+  },
+  {
     id: 'afro68',
+    family: 'Latin',
     label: 'Afro-Cuban 6/8',
     kit: 'acoustic',
     meters: ['6/8', '12/8'],
@@ -1658,6 +1778,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'blues68',
+    family: 'Jazz & Blues',
     label: 'Slow Blues Shuffle',
     kit: 'jazz',
     meters: ['6/8', '12/8'],
@@ -1671,6 +1792,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'jazzSwing',
+    family: 'Jazz & Blues',
     label: 'Jazz Swing Ride',
     kit: 'jazz',
     meters: ['4/4', '12/8'],
@@ -1683,6 +1805,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'waltz',
+    family: 'Acoustic & Folk',
     label: 'Folk Waltz',
     kit: 'acoustic',
     meters: ['3/4'],
@@ -1696,6 +1819,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'ballad68',
+    family: 'Acoustic & Folk',
     label: 'Ballad 6/8',
     kit: 'acoustic',
     meters: ['6/8', '3/8', '12/8'],
@@ -1708,6 +1832,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'motown',
+    family: 'Funk & Soul',
     label: 'Motown Pocket',
     kit: 'rock',
     meters: ['4/4'],
@@ -1721,6 +1846,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'cajon',
+    family: 'Acoustic & Folk',
     label: 'Acoustic Cajon',
     kit: 'acoustic',
     meters: ['4/4'],
@@ -1733,6 +1859,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'lofiSwing',
+    family: 'Hip-Hop & Lo-Fi',
     label: 'Lo-Fi Chillhop',
     kit: 'lofi',
     meters: ['4/4'],
@@ -1746,6 +1873,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'halfTime',
+    family: 'Hip-Hop & Lo-Fi',
     label: 'Half-Time Groove',
     kit: 'lofi',
     meters: ['4/4'],
@@ -1758,6 +1886,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'metalHalf',
+    family: 'Metal',
     label: 'Metal Half-Time',
     kit: 'metal',
     meters: ['4/4'],
@@ -1771,6 +1900,7 @@ const DRUM_STYLES = [
   },
   {
     id: 'metalDrive',
+    family: 'Metal',
     label: 'Metal Double-Kick',
     kit: 'metal',
     meters: ['4/4'],
@@ -1780,6 +1910,147 @@ const DRUM_STYLES = [
       snare: '....9.......9...',
       ride: '7.6.7.6.7.6.7.6.',
       crash: '8...............',
+    },
+  },
+  {
+    id: 'house',
+    family: 'Electronic & Dance',
+    label: 'House',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    // Four-on-the-floor with the open hat on every offbeat — that alternation
+    // between closed and open is the whole engine of house.
+    lanes: {
+      kick: '9...9...9...9...',
+      clap: '....9.......9...',
+      hat: '5...5...5...5...',
+      openhat: '..7...7...7...7.',
+      shaker: '..4...4...4...4.',
+    },
+  },
+  {
+    id: 'deepHouse',
+    family: 'Electronic & Dance',
+    label: 'Deep House',
+    kit: 'lofi',
+    meters: ['4/4'],
+    steps: 16,
+    swing: 0.16,
+    lanes: {
+      kick: '9...9...9...9...',
+      clap: '....8.......8...',
+      hat: '..4.5.4...4.5.4.',
+      openhat: '......6.......6.',
+      rim: '..........5.....',
+    },
+  },
+  {
+    id: 'techno',
+    family: 'Electronic & Dance',
+    label: 'Techno',
+    kit: 'metal',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...9...9...9...',
+      hat: '..6...6...6...6.',
+      openhat: '..............7.',
+      rim: '....7.......7...',
+      shaker: '5353535353535353',
+    },
+  },
+  {
+    id: 'breakbeat',
+    family: 'Electronic & Dance',
+    label: 'Breakbeat',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9.....9...9.....',
+      snare: '....9.......9..3',
+      hat: '6.5.6.5.6.5.6.5.',
+    },
+  },
+  {
+    id: 'trap',
+    family: 'Hip-Hop & Lo-Fi',
+    label: 'Trap',
+    kit: 'lofi',
+    meters: ['4/4'],
+    steps: 16,
+    // Rolling hats against a sparse 808 — the roll is the point.
+    lanes: {
+      kick: '9.......9..7....',
+      clap: '........9.......',
+      hat: '6353635365656565',
+    },
+  },
+  {
+    id: 'boomBap',
+    family: 'Hip-Hop & Lo-Fi',
+    label: 'Boom Bap',
+    kit: 'lofi',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9.....7.9.......',
+      snare: '....9.......9...',
+      hat: '6.5.6.5.6.5.6.5.',
+    },
+  },
+  {
+    id: 'countryTrain',
+    family: 'Acoustic & Folk',
+    label: 'Country Train',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...5...9...5...',
+      snare: '..6.9.6...6.9.6.',
+      hat: '5.5.5.5.5.5.5.5.',
+    },
+  },
+  {
+    id: 'punkDbeat',
+    family: 'Metal',
+    label: 'Punk D-Beat',
+    kit: 'metal',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...9.9.9...9.9.',
+      snare: '....9.......9...',
+      hat: '6.6.6.6.6.6.6.6.',
+    },
+  },
+  {
+    id: 'soca',
+    family: 'Reggae & Caribbean',
+    label: 'Soca',
+    kit: 'reggae',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...9...9...9...',
+      rim: '..7...7...7...7.',
+      hat: '5353535353535353',
+      openhat: '..............7.',
+    },
+  },
+  {
+    id: 'gospelShuffle',
+    family: 'Funk & Soul',
+    label: 'Gospel Shuffle',
+    kit: 'rock',
+    meters: ['4/4', '12/8'],
+    steps: 12,
+    lanes: {
+      kick: '8...7.8...7.',
+      snare: '...9.....9..',
+      hat: '6.46.46.46.4',
     },
   },
 ];
@@ -1821,6 +2092,84 @@ function styleToPattern(style, voices) {
     lanes[voice] = laneToSteps(style.lanes[voice] || '', style.steps);
   }
   return { steps: style.steps, swing: style.swing || 0, lanes };
+}
+
+/** Group styles by family, preserving each family's first-seen order. */
+function stylesByFamily(styles) {
+  const groups = new Map();
+  for (const style of styles) {
+    const key = style.family || 'Other';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(style);
+  }
+  return [...groups.entries()];
+}
+
+/**
+ * Nudge a groove into a variation of itself.
+ *
+ * Deliberately not random: random edits to a drum pattern almost always sound
+ * worse, because the strong beats are what make it a groove at all. So the
+ * anchors — the downbeat kick and the backbeat snare — are left alone, and
+ * changes are limited to the moves a drummer actually makes: adding or dropping
+ * a ghost note, displacing a syncopated kick, opening a hat into the turnaround.
+ */
+function varyPattern(pattern) {
+  const steps = pattern.steps;
+  const lanes = {};
+  for (const [k, v] of Object.entries(pattern.lanes)) lanes[k] = v.slice();
+
+  const quarter = Math.max(1, Math.round(steps / 4));
+  const isDownbeat = (i) => i === 0;
+  const isBackbeat = (i) => i === quarter || i === quarter * 3;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const weakSteps = [];
+  for (let i = 0; i < steps; i++) if (!isDownbeat(i) && !isBackbeat(i)) weakSteps.push(i);
+
+  const moves = [
+    // A ghost note: quiet, always off the strong beats.
+    () => {
+      if (!lanes.snare) return;
+      const i = pick(weakSteps.filter((x) => x % quarter !== 0));
+      if (i === undefined) return;
+      lanes.snare[i] = lanes.snare[i] ? 0 : 2;
+    },
+    // Move a syncopated kick, never the one on the downbeat.
+    () => {
+      if (!lanes.kick) return;
+      const candidates = weakSteps.filter((x) => lanes.kick[x] > 0);
+      const empties = weakSteps.filter((x) => !lanes.kick[x]);
+      if (candidates.length && empties.length && Math.random() < 0.6) {
+        const from = pick(candidates);
+        const to = pick(empties);
+        lanes.kick[to] = lanes.kick[from];
+        lanes.kick[from] = 0;
+      } else if (empties.length) {
+        lanes.kick[pick(empties)] = 6;
+      }
+    },
+    // Open the hat late in the bar, which is where a drummer opens it.
+    () => {
+      if (!lanes.openhat) return;
+      const i = steps - Math.max(1, Math.round(steps / 8));
+      lanes.openhat[i] = lanes.openhat[i] ? 0 : 6;
+    },
+    // Shift a hi-hat accent so the line breathes differently.
+    () => {
+      const lane = lanes.hat || lanes.ride || lanes.shaker;
+      if (!lane) return;
+      const active = [];
+      for (let i = 0; i < steps; i++) if (lane[i]) active.push(i);
+      if (active.length < 2) return;
+      const i = pick(active);
+      lane[i] = lane[i] >= 7 ? 4 : 7;
+    },
+  ];
+
+  const count = 2 + Math.floor(Math.random() * 2);
+  for (let n = 0; n < count; n++) pick(moves)();
+
+  return { ...pattern, lanes };
 }
 
 /**
@@ -1942,95 +2291,183 @@ const MODE_INFO = [
   },
 ];
 
+/**
+ * Mood suggestions. Each carries the mode it belongs in, so a "dreamy" idea
+ * lands in Lydian and a "dark" one in Phrygian rather than being forced into
+ * whatever key happens to be selected.
+ */
 const MOODS = [
-  {
-    id: 'melancholic',
-    label: 'Melancholic',
-    degrees: [5, 2, 0, 4],
-    seventh: false,
-    text: 'vi–iii–I–V — a wistful loop that never fully settles.',
-  },
-  {
-    id: 'energetic',
-    label: 'Energetic',
-    degrees: [0, 3, 4, 3],
-    seventh: false,
-    text: 'I–IV–V–IV — a driving, anthemic push forward.',
-  },
-  {
-    id: 'dreamy',
-    label: 'Dreamy',
-    degrees: [3, 0, 5, 4],
-    seventh: true,
-    text: 'IVmaj7–Imaj7–vi–V7 — floating, cinematic pads.',
-  },
-  {
-    id: 'heroic',
-    label: 'Heroic',
-    degrees: [0, 3, 0, 4],
-    seventh: false,
-    text: 'I–IV–I–V — bold, triumphant, forward motion.',
-  },
-  {
-    id: 'bluesy',
-    label: 'Bluesy',
-    degrees: [0, 3, 4, 0],
-    seventh: true,
-    text: 'I7–IV7–V7–I7 — grit and swagger, blues turnaround flavor.',
-  },
+  { id: 'melancholic', label: 'Melancholic', mode: 'ionian', degrees: [5, 2, 0, 4], seventh: false,
+    text: 'Begins on the relative minor and circles home without ever quite settling.' },
+  { id: 'energetic', label: 'Energetic', mode: 'ionian', degrees: [0, 3, 4, 3], seventh: false,
+    text: 'Primary triads, no minor chords, constant forward push.' },
+  { id: 'dreamy', label: 'Dreamy', mode: 'lydian', degrees: [0, 1, 0, 4], seventh: true,
+    text: 'Lydian major sevenths — the raised 4th keeps the tonic floating.' },
+  { id: 'heroic', label: 'Heroic', mode: 'ionian', degrees: [0, 3, 0, 4], seventh: false,
+    text: 'Tonic and subdominant trading places, then the dominant to lift it.' },
+  { id: 'bluesy', label: 'Bluesy', mode: 'mixolydian', degrees: [0, 3, 4, 0], seventh: true,
+    text: 'Dominant sevenths on every degree — grit rather than sweetness.' },
+  { id: 'epic', label: 'Epic', mode: 'aeolian', degrees: [0, 5, 2, 6], seventh: false,
+    text: 'Minor tonic under three major chords. Scale without brightness.' },
+  { id: 'dark', label: 'Dark', mode: 'phrygian', degrees: [0, 1, 0, 6], seventh: false,
+    text: 'The ♭2 pressing against the tonic — unresolved and menacing.' },
+  { id: 'hopeful', label: 'Hopeful', mode: 'ionian', degrees: [3, 0, 4, 5], seventh: false,
+    text: 'Starts away from the tonic so arriving home reads as relief.' },
+  { id: 'nostalgic', label: 'Nostalgic', mode: 'ionian', degrees: [0, 5, 3, 4], seventh: false,
+    text: 'The doo-wop turnaround. Familiar to the point of comfort.' },
+  { id: 'hypnotic', label: 'Hypnotic', mode: 'dorian', degrees: [0, 3], seventh: false,
+    text: 'Two chords, minor with a major 6th. Built for playing over.' },
+  { id: 'sophisticated', label: 'Sophisticated', mode: 'ionian', degrees: [1, 4, 0, 0], seventh: true,
+    text: 'ii–V–I with sevenths throughout — the jazz cadence.' },
+  { id: 'restless', label: 'Restless', mode: 'aeolian', degrees: [0, 6, 5, 4], seventh: false,
+    text: 'A stepwise descent that keeps arriving somewhere new.' },
+  { id: 'tender', label: 'Tender', mode: 'ionian', degrees: [0, 2, 5, 3], seventh: true,
+    text: 'Gentle mediant motion — close voicings, little movement in the bass.' },
+  { id: 'triumphant', label: 'Triumphant', mode: 'mixolydian', degrees: [0, 6, 3, 0], seventh: false,
+    text: 'The ♭VII gives it swagger without losing the major tonic.' },
 ];
 
+/**
+ * Song sections. Variants are alternatives for the same job, so a verse idea is
+ * never just "a progression" but a progression with a role.
+ */
 const SECTIONS = [
   {
-    id: 'intro',
-    label: 'Intro',
+    id: 'intro', label: 'Intro',
     variants: [
-      { label: 'Simple & Open', degrees: [0, 3], seventh: false, blurb: 'I–IV vamp — establishes the key calmly before the verse enters.' },
-      { label: 'Suspended Mood', degrees: [5, 3], seventh: false, blurb: 'vi–IV — opens on a softer, unresolved color.' },
+      { label: 'Simple & Open', degrees: [0, 3], seventh: false, blurb: 'Establishes the key calmly before the verse enters.' },
+      { label: 'Suspended Mood', degrees: [5, 3], seventh: false, blurb: 'Opens on a softer, unresolved colour.' },
+      { label: 'Single-Chord Drone', degrees: [0, 0], seventh: false, blurb: 'Holds the tonic so the first vocal line does the work.' },
+      { label: 'Dominant Tease', degrees: [4, 3, 0], seventh: false, blurb: 'Starts on tension and resolves into bar one.' },
     ],
   },
   {
-    id: 'verse',
-    label: 'Verse',
+    id: 'verse', label: 'Verse',
     variants: [
-      { label: 'Narrative Motion', degrees: [0, 5, 3, 4], seventh: false, blurb: 'I–vi–IV–V — steady storytelling motion, familiar and grounded.' },
-      { label: 'Understated', degrees: [0, 3, 0, 3], seventh: false, blurb: 'I–IV–I–IV — restrained, leaves room for the chorus to lift.' },
+      { label: 'Narrative Motion', degrees: [0, 5, 3, 4], seventh: false, blurb: 'Steady storytelling motion, familiar and grounded.' },
+      { label: 'Understated', degrees: [0, 3, 0, 3], seventh: false, blurb: 'Restrained — leaves room for the chorus to lift.' },
+      { label: 'Descending Line', degrees: [0, 4, 5, 3], seventh: false, blurb: 'The axis loop, which never tires of being sung over.' },
+      { label: 'Minor Verse', degrees: [5, 3, 0, 4], seventh: false, blurb: 'Same chords starting on the relative minor — darker footing.' },
     ],
   },
   {
-    id: 'chorus',
-    label: 'Chorus',
+    id: 'prechorus', label: 'Pre-Chorus',
     variants: [
-      { label: 'Big Lift', degrees: [3, 0, 4, 5], seventh: false, blurb: 'IV–I–V–vi — climbs above the verse for a euphoric hook.' },
-      { label: 'Anthemic', degrees: [0, 4, 5, 3], seventh: false, blurb: 'I–V–vi–IV — instantly singable, the classic pop lift.' },
+      { label: 'Rising Tension', degrees: [3, 4, 5, 4], seventh: false, blurb: 'Climbs and holds the dominant so the chorus can release it.' },
+      { label: 'Stepwise Build', degrees: [1, 2, 3, 4], seventh: false, blurb: 'Walks up the scale — momentum without a key change.' },
+      { label: 'Hold the Five', degrees: [3, 3, 4, 4], seventh: false, blurb: 'Two chords, twice as long each. Maximum anticipation.' },
     ],
   },
   {
-    id: 'bridge',
-    label: 'Bridge',
+    id: 'chorus', label: 'Chorus',
     variants: [
-      { label: 'Harmonic Detour', degrees: [5, 1, 4], seventh: true, blurb: 'vi–ii7–V7 — borrows jazz motion to contrast the chorus.' },
-      { label: 'Minor Shift', degrees: [2, 3, 0], seventh: false, blurb: 'iii–IV–I — a brief modal-interchange color before the final chorus.' },
+      { label: 'Big Lift', degrees: [3, 0, 4, 5], seventh: false, blurb: 'Climbs above the verse for a euphoric hook.' },
+      { label: 'Anthemic', degrees: [0, 4, 5, 3], seventh: false, blurb: 'Instantly singable — the classic pop lift.' },
+      { label: 'Plagal Power', degrees: [0, 3, 0, 3], seventh: false, blurb: 'Tonic and subdominant only. Hymn-like and immovable.' },
+      { label: 'Minor Hook', degrees: [5, 4, 3, 0], seventh: false, blurb: 'Begins minor and resolves major — bittersweet.' },
     ],
   },
   {
-    id: 'outro',
-    label: 'Outro',
+    id: 'bridge', label: 'Bridge',
     variants: [
-      { label: 'Fade Home', degrees: [3, 4, 0], seventh: false, blurb: 'IV–V–I — a final cadence that settles the song.' },
-      { label: 'Loop & Dissolve', degrees: [0, 5], seventh: false, blurb: 'I–vi — a gentle vamp to fade out on.' },
+      { label: 'Harmonic Detour', degrees: [5, 1, 4], seventh: true, blurb: 'Borrows jazz motion to contrast the chorus.' },
+      { label: 'Mediant Shift', degrees: [2, 3, 0], seventh: false, blurb: 'A brief modal colour before the final chorus.' },
+      { label: 'Relative Minor', degrees: [5, 2, 3, 4], seventh: false, blurb: 'Moves the centre of gravity to the relative minor.' },
+      { label: 'Suspended Halt', degrees: [3, 4], seventh: false, blurb: 'Two chords, held. The pause before the last chorus.' },
+    ],
+  },
+  {
+    id: 'outro', label: 'Outro',
+    variants: [
+      { label: 'Fade Home', degrees: [3, 4, 0], seventh: false, blurb: 'A final cadence that settles the song.' },
+      { label: 'Loop & Dissolve', degrees: [0, 5], seventh: false, blurb: 'A gentle vamp to fade out on.' },
+      { label: 'Plagal Amen', degrees: [3, 0], seventh: false, blurb: 'The IV–I "amen" cadence — restful, conclusive.' },
+      { label: 'Unresolved', degrees: [0, 4], seventh: false, blurb: 'Ends on the dominant, leaving the question open.' },
     ],
   },
 ];
 
+/**
+ * Progression library.
+ *
+ * Degrees index the diatonic chords of the template's own `mode`, so applying
+ * one switches to that mode and the chords are correct by construction. That
+ * matters for anything with a flat degree: ♭VII is not available in Ionian, so
+ * "I–♭VII–IV" is stored as a Mixolydian progression rather than as a label
+ * stuck on the wrong scale.
+ *
+ * Roman numerals are never hardcoded — the UI computes them from the chords
+ * that will actually play, so the label cannot drift from the sound.
+ */
 const TEMPLATES = [
-  { id: 'fifties', label: '50s Progression', tag: 'I–vi–IV–V', degrees: [0, 5, 3, 4], seventh: false },
-  { id: 'axis', label: 'Axis of Awesome', tag: 'I–V–vi–IV', degrees: [0, 4, 5, 3], seventh: false },
-  { id: 'andalucian', label: 'Andalusian Cadence', tag: 'i–VII–VI–V', degrees: [0, 6, 5, 4], seventh: false },
-  { id: 'canon', label: "Pachelbel's Canon", tag: 'I–V–vi–iii–IV–I–IV–V', degrees: [0, 4, 5, 2, 3, 0, 3, 4], seventh: false },
-  { id: 'turnaround', label: 'ii–V–I Turnaround', tag: 'jazz', degrees: [1, 4, 0], seventh: true },
-  { id: 'blues12', label: '12-Bar Blues', tag: 'I7–IV7–V7', degrees: [0, 0, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4], seventh: true },
+  // --- Pop & rock ---
+  { id: 'axis', family: 'Pop & Rock', label: 'Axis of Awesome', mode: 'ionian', degrees: [0, 4, 5, 3], seventh: false,
+    blurb: 'The four chords behind a startling share of the charts. Endlessly singable.' },
+  { id: 'axisMinor', family: 'Pop & Rock', label: 'Axis, Minor Start', mode: 'ionian', degrees: [5, 3, 0, 4], seventh: false,
+    blurb: 'The same loop rotated to begin on the relative minor — wistful rather than triumphant.' },
+  { id: 'fifties', family: 'Pop & Rock', label: '50s Doo-Wop', mode: 'ionian', degrees: [0, 5, 3, 4], seventh: false,
+    blurb: 'Ballads, prom scenes, "Stand By Me". Warm and instantly nostalgic.' },
+  { id: 'threeChord', family: 'Pop & Rock', label: 'Three-Chord Rock', mode: 'ionian', degrees: [0, 3, 4, 3], seventh: false,
+    blurb: 'The primary triads and nothing else. Direct, and hard to make sound wrong.' },
+  { id: 'popPunk', family: 'Pop & Rock', label: 'Pop-Punk Lift', mode: 'ionian', degrees: [3, 0, 4, 5], seventh: false,
+    blurb: 'Starts away from home so the chorus lands as a return.' },
+  { id: 'balladClimb', family: 'Pop & Rock', label: 'Ballad Climb', mode: 'ionian', degrees: [0, 2, 3, 4], seventh: false,
+    blurb: 'A stepwise rise through the scale — builds tension without a key change.' },
+  { id: 'canon', family: 'Pop & Rock', label: "Pachelbel's Canon", mode: 'ionian', degrees: [0, 4, 5, 2, 3, 0, 3, 4], seventh: false,
+    blurb: 'A descending sequence that has outlived three centuries of fashion.' },
+
+  // --- Modal rock ---
+  { id: 'mixoRock', family: 'Modal Rock', label: 'Mixolydian Rock', mode: 'mixolydian', degrees: [0, 6, 3, 0], seventh: false,
+    blurb: 'The ♭VII is what makes this rock rather than pop — think "Sweet Home Alabama".' },
+  { id: 'dorianVamp', family: 'Modal Rock', label: 'Dorian Vamp', mode: 'dorian', degrees: [0, 3, 0, 3], seventh: false,
+    blurb: 'Minor with a bright 6th. Hypnotic, jam-friendly, never fully sad.' },
+  { id: 'grunge', family: 'Modal Rock', label: 'Grunge ♭VI–♭VII', mode: 'aeolian', degrees: [0, 5, 6, 0], seventh: false,
+    blurb: 'Heavy and modal — the flat 6th and 7th give it the weight.' },
+  { id: 'lydianLift', family: 'Modal Rock', label: 'Lydian Lift', mode: 'lydian', degrees: [0, 1, 0, 4], seventh: false,
+    blurb: 'The ♯4 floats the tonic. Cinematic wonder in two chords.' },
+  { id: 'phrygianDark', family: 'Modal Rock', label: 'Phrygian Descent', mode: 'phrygian', degrees: [0, 1, 0, 6], seventh: false,
+    blurb: 'The ♭2 leaning on the tonic — flamenco and metal share this one.' },
+
+  // --- Minor keys ---
+  { id: 'andalusian', family: 'Minor Keys', label: 'Andalusian Cadence', mode: 'aeolian', degrees: [0, 6, 5, 4], seventh: false,
+    blurb: 'A stepwise descent from the tonic. Dramatic, and older than most of what it appears in.' },
+  { id: 'epicMinor', family: 'Minor Keys', label: 'Epic Minor', mode: 'aeolian', degrees: [0, 5, 2, 6], seventh: false,
+    blurb: 'i–VI–III–VII. Trailers, anthems, anything that needs scale.' },
+  { id: 'minorBallad', family: 'Minor Keys', label: 'Minor Ballad', mode: 'aeolian', degrees: [0, 5, 3, 4], seventh: false,
+    blurb: 'The doo-wop shape in minor — familiar bones, darker colour.' },
+  { id: 'minorClimb', family: 'Minor Keys', label: 'Minor Climb', mode: 'aeolian', degrees: [0, 2, 5, 6], seventh: false,
+    blurb: 'Rises through the relative major before falling back to the tonic.' },
+
+  // --- Jazz ---
+  { id: 'turnaround', family: 'Jazz', label: 'ii–V–I Turnaround', mode: 'ionian', degrees: [1, 4, 0, 0], seventh: true,
+    blurb: 'The central cadence of jazz. Learn it in all twelve keys and half the language follows.' },
+  { id: 'rhythmChanges', family: 'Jazz', label: 'Rhythm Changes A', mode: 'ionian', degrees: [0, 5, 1, 4], seventh: true,
+    blurb: 'I–vi–ii–V, the most-played eight bars in the standard repertoire.' },
+  { id: 'jazzBlues', family: 'Jazz', label: 'Jazz Blues Head', mode: 'mixolydian', degrees: [0, 3, 0, 4], seventh: true,
+    blurb: 'Dominant sevenths throughout — the blues with a jazz accent.' },
+  { id: 'circleFifths', family: 'Jazz', label: 'Circle of Fifths Run', mode: 'ionian', degrees: [2, 5, 1, 4, 0], seventh: true,
+    blurb: 'Root movement by fourths all the way home — every chord pulls to the next.' },
+  { id: 'bossaTurn', family: 'Jazz', label: 'Bossa Turnaround', mode: 'ionian', degrees: [0, 1, 4, 0], seventh: true,
+    blurb: 'Major sevenths and a gentle ii–V. Nylon strings and brushes.' },
+
+  // --- Blues ---
+  { id: 'blues12', family: 'Blues', label: '12-Bar Blues', mode: 'mixolydian', degrees: [0, 0, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4], seventh: true,
+    blurb: 'The form. Twelve bars, three chords, a century of music.' },
+  { id: 'quickChange', family: 'Blues', label: '12-Bar Quick Change', mode: 'mixolydian', degrees: [0, 3, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4], seventh: true,
+    blurb: 'Moves to the IV in bar two — more motion early on.' },
+  { id: 'minorBlues', family: 'Blues', label: 'Minor Blues', mode: 'aeolian', degrees: [0, 0, 0, 0, 3, 3, 0, 0, 5, 4, 0, 4], seventh: true,
+    blurb: 'The same twelve bars in minor. Slower, heavier, more room to bend.' },
+
+  // --- Folk & country ---
+  { id: 'folkCircle', family: 'Folk & Country', label: 'Folk Circle', mode: 'ionian', degrees: [0, 3, 0, 4], seventh: false,
+    blurb: 'Home, away, home, away. The campfire progression.' },
+  { id: 'countryTrain', family: 'Folk & Country', label: 'Country I–IV–V', mode: 'ionian', degrees: [0, 0, 3, 4], seventh: false,
+    blurb: 'Sits on the tonic before moving — leaves space for the vocal.' },
+  { id: 'celticVamp', family: 'Folk & Country', label: 'Celtic Vamp', mode: 'mixolydian', degrees: [0, 6, 0, 3], seventh: false,
+    blurb: 'The ♭VII again, this time in a jig. Works beautifully in DADGAD.' },
 ];
+
+const TEMPLATE_FAMILIES = [...new Set(TEMPLATES.map((t) => t.family))];
 
 const MODE_NAMES = ['Ionian', 'Dorian', 'Phrygian', 'Lydian', 'Mixolydian', 'Aeolian', 'Locrian'];
 
@@ -3188,6 +3625,18 @@ class Sequencer {
     if (this.onPlayhead) this.onPlayhead(-1);
   }
 
+  /**
+   * Where the bar currently sounding started, and how long it lasts. The UI
+   * uses this to draw a playhead from the audio clock rather than from a timer,
+   * so what is highlighted is what is actually being heard.
+   */
+  currentBarWindow() {
+    const head = this.scheduled[0];
+    if (!this.playing || !head) return null;
+    const st = this.getState();
+    return { start: head.time, duration: barDuration(st.timeSig, st.bpm) };
+  }
+
   /** Restart the loop from the top without dropping the audio clock. */
   rewind() {
     if (!this.playing) return;
@@ -3283,8 +3732,15 @@ class Sequencer {
     const isLastBar = bars > 1 && this.barIndex === bars - 1;
     const fill = !!st.drumFills && isLastBar;
 
+    // Humanise: a real drummer's placement drifts by a few milliseconds and
+    // their velocity by a few percent. The downbeat drifts least — that is the
+    // reference everything else is heard against.
+    const h = st.drumHumanize || 0;
     for (const hit of patternHits(st.drumPattern, { fill })) {
-      this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
+      const anchor = hit.t === 0 ? 0.25 : 1;
+      const drift = h ? (Math.random() - 0.5) * 0.014 * h * anchor : 0;
+      const vel = h ? hit.velocity * (1 + (Math.random() - 0.5) * 0.24 * h) : hit.velocity;
+      this.drums.hit(hit.voice, startTime + hit.t * dur + drift, Math.max(0.05, Math.min(1.2, vel)));
     }
   }
 
@@ -3456,6 +3912,7 @@ const state = {
   drumKit: 'rock',
   drumVolume: 0.7,
   drumFills: true,
+  drumHumanize: 0.35,
   /**
    * The editable grid. A style seeds it, after which this is what plays — so
    * anything typed into the sequencer is heard, not overwritten by the preset.
@@ -3466,6 +3923,7 @@ const state = {
   moodId: null,
   sectionId: null,
   templateId: null,
+  templateFamily: 'All',
   showAbout: false,
 
   /**
@@ -3516,6 +3974,7 @@ const sequencer = new Sequencer(engine, () => ({
   drumsOn: state.drumsOn,
   drumPattern: state.drumPattern,
   drumFills: state.drumFills,
+  drumHumanize: state.drumHumanize,
 }));
 
 sequencer.onPlayhead = (idx) => {
@@ -3736,7 +4195,10 @@ function addHalfBar(barIdx) {
   renderTimeline();
 }
 
-function applyDegrees(degrees, seventh) {
+function applyDegrees(degrees, seventh, mode = null) {
+  // A suggestion carries the mode it belongs in. Applying it without switching
+  // would silently produce different chords from the ones it is named for.
+  if (mode && MODE_IDS.includes(mode)) state.modeIdx = MODE_IDS.indexOf(mode);
   const prevSeventh = state.seventh;
   state.seventh = !!seventh;
   const size = nearestBarSize(degrees.length);
@@ -4102,6 +4564,35 @@ function loadDrumStyle(id, { keepKit = false } = {}) {
   }
 }
 
+/**
+ * Highlight the step currently sounding. Driven from the audio clock, so the
+ * column shown is the one being heard rather than one a timer guessed at.
+ */
+let drumPlayheadRaf = null;
+function watchDrumPlayhead() {
+  cancelAnimationFrame(drumPlayheadRaf);
+  const step = () => {
+    const grid = $('drumGrid');
+    const visible = state.activeTab === 'drums' && !$('tab-drums').hidden;
+    if (visible) {
+      const win = sequencer.currentBarWindow();
+      let current = -1;
+      if (win && state.drumPattern) {
+        const through = (engine.currentTime - win.start) / win.duration;
+        if (through >= 0 && through < 1) current = Math.floor(through * state.drumPattern.steps);
+      }
+      if (grid.dataset.playStep !== String(current)) {
+        grid.dataset.playStep = String(current);
+        for (const cell of grid.querySelectorAll('.seq-cell')) {
+          cell.classList.toggle('playing', Number(cell.dataset.step) === current);
+        }
+      }
+    }
+    drumPlayheadRaf = requestAnimationFrame(step);
+  };
+  drumPlayheadRaf = requestAnimationFrame(step);
+}
+
 /** Steps cycle off -> soft -> medium -> hard, so one tap edits without a menu. */
 const STEP_LEVELS = [0, 4, 6, 9];
 const nextStepLevel = (v) => STEP_LEVELS[(STEP_LEVELS.indexOf(v) + 1) % STEP_LEVELS.length] ?? 0;
@@ -4136,17 +4627,26 @@ function renderDrums() {
   const styleSel = $('drumStyleSelect');
   const available = stylesForMeter(state.timeSig);
   styleSel.replaceChildren();
-  for (const style of available) {
-    const o = document.createElement('option');
-    o.value = style.id;
-    o.textContent = style.label;
-    styleSel.appendChild(o);
+  // Grouped by family: thirty-five grooves in one flat list is a wall.
+  for (const [family, styles] of stylesByFamily(available)) {
+    const group = document.createElement('optgroup');
+    group.label = family;
+    for (const style of styles) {
+      const o = document.createElement('option');
+      o.value = style.id;
+      o.textContent = style.label;
+      group.appendChild(o);
+    }
+    styleSel.appendChild(group);
   }
   if (available.some((s) => s.id === state.drumStyle)) styleSel.value = state.drumStyle;
 
   const swing = $('drumSwing');
   swing.value = pattern.swing || 0;
   $('drumSwingOut').textContent = `${Math.round((pattern.swing || 0) * 100)}%`;
+  const human = $('drumHumanize');
+  human.value = state.drumHumanize;
+  $('drumHumanizeOut').textContent = `${Math.round(state.drumHumanize * 100)}%`;
 
   // --- the grid ---
   const grid = $('drumGrid');
@@ -4512,6 +5012,24 @@ function startQuiz() {
   playModeVamp(correct);
 }
 
+/**
+ * The roman-numeral summary of a progression, derived from the chords it will
+ * actually produce. Computing it rather than storing it means the label can
+ * never drift from the sound — which is the whole point of showing it.
+ */
+function numeralsFor(degrees, seventh, mode) {
+  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
+  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
+  return degrees.map((d) => chords[d % 7].numeral).join('–');
+}
+
+/** The chord names a progression produces in the current key. */
+function chordNamesFor(degrees, seventh, mode) {
+  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
+  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
+  return degrees.map((d) => chords[d % 7].symbol).join(' ');
+}
+
 function renderAssist() {
   const moodRow = $('moodRow');
   moodRow.replaceChildren();
@@ -4525,8 +5043,9 @@ function renderAssist() {
   const mood = MOODS.find((m) => m.id === state.moodId);
   $('suggestionCard').hidden = !mood;
   if (mood) {
-    $('suggestionLabel').textContent = `${mood.label} progression`;
-    $('suggestionText').textContent = mood.text;
+    $('suggestionLabel').textContent = `${mood.label} — ${numeralsFor(mood.degrees, mood.seventh, mood.mode)}`;
+    $('suggestionText').textContent =
+      `${chordNamesFor(mood.degrees, mood.seventh, mood.mode)} · ${mood.text}`;
   }
 
   const secRow = $('sectionRow');
@@ -4549,23 +5068,83 @@ function renderAssist() {
       const apply = el('button', 'chip', 'Apply');
       apply.onclick = () => applyDegrees(v.degrees, v.seventh);
       head.appendChild(apply);
-      card.append(head, el('p', '', v.blurb));
+      card.append(head);
+      card.append(el('span', 'variant-numerals', `${numeralsFor(v.degrees, v.seventh)}  ·  ${chordNamesFor(v.degrees, v.seventh)}`));
+      card.append(el('p', '', v.blurb));
       variants.appendChild(card);
     }
   }
 
+  // --- progression library, grouped by family ---
+  const familyRow = $('templateFamilyRow');
+  familyRow.replaceChildren();
+  const families = ['All', ...TEMPLATE_FAMILIES];
+  for (const fam of families) {
+    const active = (state.templateFamily || 'All') === fam;
+    const b = el('button', `chip${active ? ' active' : ''}`, fam);
+    if (active) { b.style.background = 'var(--a)'; b.style.borderColor = 'var(--a)'; }
+    b.onclick = () => { state.templateFamily = fam; renderAssist(); };
+    familyRow.appendChild(b);
+  }
+
   const tpl = $('templateList');
   tpl.replaceChildren();
+  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
   for (const t of TEMPLATES) {
-    const b = el('button', `list-btn${state.templateId === t.id ? ' active' : ''}`);
-    b.append(el('span', 'main', t.label), el('span', 'tag', t.tag));
-    b.onclick = () => {
+    if (wanted && t.family !== wanted) continue;
+    const card = el('div', `template-card${state.templateId === t.id ? ' active' : ''}`);
+
+    const head = el('div', 'row between');
+    head.append(el('span', 'label', t.label));
+    const apply = el('button', 'chip small filled-a', 'Apply');
+    apply.onclick = () => {
       state.templateId = t.id;
       state.moodId = null;
-      applyDegrees(t.degrees, t.seventh);
+      applyDegrees(t.degrees, t.seventh, t.mode);
     };
-    tpl.appendChild(b);
+    head.appendChild(apply);
+
+    // Both lines are derived from the chords this template will produce in the
+    // current key, so what is promised is what is heard.
+    const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
+    const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
+    const meta = el('span', 'template-meta', `${MODE_NAMES[MODE_IDS.indexOf(t.mode)]} · ${t.degrees.length} bars`);
+
+    card.append(head, numerals, names, el('p', '', t.blurb), meta);
+
+    // Tapping the card auditions the progression without replacing the timeline.
+    card.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      previewProgression(t);
+    };
+    tpl.appendChild(card);
   }
+}
+
+/**
+ * Audition a progression without committing it — hear before you overwrite the
+ * timeline. Chords are scheduled back to back at the current tempo.
+ */
+async function previewProgression(t) {
+  if (!(await ensureAudio())) return;
+  if (sequencer.playing) { toast('Stop playback to preview a progression.'); return; }
+
+  const modeName = t.mode && MODE_IDS.includes(t.mode) ? t.mode : modeId();
+  const chords = diatonicChords(state.rootPc, modeName, !!t.seventh);
+  const dur = barDuration(state.timeSig, state.bpm);
+  const t0 = auditionStart();
+
+  t.degrees.slice(0, 8).forEach((d, i) => {
+    const chord = chords[d % 7];
+    const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+    if (!v) return;
+    sequencer.scheduleChord({ chord, voicing: v }, t0 + i * dur, dur, {
+      rhythm: state.rhythm,
+      tuning: tuning(),
+      velocity: 1,
+    });
+  });
+  toast(`Previewing ${t.label} — tap Apply to keep it.`);
 }
 
 // ------------------------------------------------------------ static wiring
@@ -4762,6 +5341,15 @@ function wire() {
     state.drumPattern.swing = Number(swing.value);
     $('drumSwingOut').textContent = `${Math.round(state.drumPattern.swing * 100)}%`;
   };
+  const human = $('drumHumanize');
+  human.oninput = () => {
+    state.drumHumanize = Number(human.value);
+    $('drumHumanizeOut').textContent = `${Math.round(state.drumHumanize * 100)}%`;
+  };
+  $('drumVaryBtn').onclick = () => {
+    state.drumPattern = varyPattern(state.drumPattern);
+    renderDrums();
+  };
   const drumVol = $('drumVolume');
   drumVol.oninput = () => {
     state.drumVolume = Number(drumVol.value);
@@ -4926,6 +5514,8 @@ if (
     });
   });
 }
+
+watchDrumPlayhead();
 
 // Expose for debugging in the console.
 window.CircleSong = {

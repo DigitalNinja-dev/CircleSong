@@ -116,7 +116,15 @@ export function diatonicChords(tonicPc, modeId, sevenths = false) {
     };
     const rootPc = (tonicPc + rootAbs) % 12;
     const isMinorish = ['min', 'min7', 'dim', 'dim7', 'm7b5', 'min6', 'minMaj7'].includes(quality.id);
-    let numeral = isMinorish ? ROMAN[d].toLowerCase() : ROMAN[d];
+
+    // Modal degrees are numbered against the major scale, so a degree the mode
+    // lowers or raises carries the accidental: Mixolydian's seventh is ♭VII,
+    // not VII, and Lydian's fourth is ♯IV. Without this the numeral names a
+    // chord from a different scale than the one being played.
+    const alteration = steps[d] - MAJOR_STEPS[d];
+    const accidental = alteration < 0 ? '♭' : alteration > 0 ? '♯' : '';
+
+    let numeral = accidental + (isMinorish ? ROMAN[d].toLowerCase() : ROMAN[d]);
     if (quality.id === 'dim' || quality.id === 'dim7') numeral += '°';
     if (quality.id === 'm7b5') numeral += 'ø';
     if (quality.id === 'aug') numeral += '+';

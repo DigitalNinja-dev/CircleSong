@@ -9,7 +9,7 @@
  * the old files.
  */
 
-const CACHE = 'circlesong-v3';
+const CACHE = 'circlesong-v4';
 
 const SHELL = [
   './',

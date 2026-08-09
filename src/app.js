@@ -30,7 +30,7 @@ import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
-import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern } from './drum-patterns.js';
+import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
   FUNCTION_NAMES,
   FUNCTION_BLURB,
@@ -44,6 +44,7 @@ import {
   BAR_SIZES,
   TIME_SIGS,
   INTERVAL_NAMES,
+  TEMPLATE_FAMILIES,
   nearestBarSize,
 } from './content.js';
 
@@ -113,6 +114,7 @@ const state = {
   drumKit: 'rock',
   drumVolume: 0.7,
   drumFills: true,
+  drumHumanize: 0.35,
   /**
    * The editable grid. A style seeds it, after which this is what plays — so
    * anything typed into the sequencer is heard, not overwritten by the preset.
@@ -123,6 +125,7 @@ const state = {
   moodId: null,
   sectionId: null,
   templateId: null,
+  templateFamily: 'All',
   showAbout: false,
 
   /**
@@ -173,6 +176,7 @@ const sequencer = new Sequencer(engine, () => ({
   drumsOn: state.drumsOn,
   drumPattern: state.drumPattern,
   drumFills: state.drumFills,
+  drumHumanize: state.drumHumanize,
 }));
 
 sequencer.onPlayhead = (idx) => {
@@ -393,7 +397,10 @@ function addHalfBar(barIdx) {
   renderTimeline();
 }
 
-function applyDegrees(degrees, seventh) {
+function applyDegrees(degrees, seventh, mode = null) {
+  // A suggestion carries the mode it belongs in. Applying it without switching
+  // would silently produce different chords from the ones it is named for.
+  if (mode && MODE_IDS.includes(mode)) state.modeIdx = MODE_IDS.indexOf(mode);
   const prevSeventh = state.seventh;
   state.seventh = !!seventh;
   const size = nearestBarSize(degrees.length);
@@ -759,6 +766,35 @@ function loadDrumStyle(id, { keepKit = false } = {}) {
   }
 }
 
+/**
+ * Highlight the step currently sounding. Driven from the audio clock, so the
+ * column shown is the one being heard rather than one a timer guessed at.
+ */
+let drumPlayheadRaf = null;
+function watchDrumPlayhead() {
+  cancelAnimationFrame(drumPlayheadRaf);
+  const step = () => {
+    const grid = $('drumGrid');
+    const visible = state.activeTab === 'drums' && !$('tab-drums').hidden;
+    if (visible) {
+      const win = sequencer.currentBarWindow();
+      let current = -1;
+      if (win && state.drumPattern) {
+        const through = (engine.currentTime - win.start) / win.duration;
+        if (through >= 0 && through < 1) current = Math.floor(through * state.drumPattern.steps);
+      }
+      if (grid.dataset.playStep !== String(current)) {
+        grid.dataset.playStep = String(current);
+        for (const cell of grid.querySelectorAll('.seq-cell')) {
+          cell.classList.toggle('playing', Number(cell.dataset.step) === current);
+        }
+      }
+    }
+    drumPlayheadRaf = requestAnimationFrame(step);
+  };
+  drumPlayheadRaf = requestAnimationFrame(step);
+}
+
 /** Steps cycle off -> soft -> medium -> hard, so one tap edits without a menu. */
 const STEP_LEVELS = [0, 4, 6, 9];
 const nextStepLevel = (v) => STEP_LEVELS[(STEP_LEVELS.indexOf(v) + 1) % STEP_LEVELS.length] ?? 0;
@@ -793,17 +829,26 @@ function renderDrums() {
   const styleSel = $('drumStyleSelect');
   const available = stylesForMeter(state.timeSig);
   styleSel.replaceChildren();
-  for (const style of available) {
-    const o = document.createElement('option');
-    o.value = style.id;
-    o.textContent = style.label;
-    styleSel.appendChild(o);
+  // Grouped by family: thirty-five grooves in one flat list is a wall.
+  for (const [family, styles] of stylesByFamily(available)) {
+    const group = document.createElement('optgroup');
+    group.label = family;
+    for (const style of styles) {
+      const o = document.createElement('option');
+      o.value = style.id;
+      o.textContent = style.label;
+      group.appendChild(o);
+    }
+    styleSel.appendChild(group);
   }
   if (available.some((s) => s.id === state.drumStyle)) styleSel.value = state.drumStyle;
 
   const swing = $('drumSwing');
   swing.value = pattern.swing || 0;
   $('drumSwingOut').textContent = `${Math.round((pattern.swing || 0) * 100)}%`;
+  const human = $('drumHumanize');
+  human.value = state.drumHumanize;
+  $('drumHumanizeOut').textContent = `${Math.round(state.drumHumanize * 100)}%`;
 
   // --- the grid ---
   const grid = $('drumGrid');
@@ -1169,6 +1214,24 @@ function startQuiz() {
   playModeVamp(correct);
 }
 
+/**
+ * The roman-numeral summary of a progression, derived from the chords it will
+ * actually produce. Computing it rather than storing it means the label can
+ * never drift from the sound — which is the whole point of showing it.
+ */
+function numeralsFor(degrees, seventh, mode) {
+  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
+  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
+  return degrees.map((d) => chords[d % 7].numeral).join('–');
+}
+
+/** The chord names a progression produces in the current key. */
+function chordNamesFor(degrees, seventh, mode) {
+  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
+  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
+  return degrees.map((d) => chords[d % 7].symbol).join(' ');
+}
+
 function renderAssist() {
   const moodRow = $('moodRow');
   moodRow.replaceChildren();
@@ -1182,8 +1245,9 @@ function renderAssist() {
   const mood = MOODS.find((m) => m.id === state.moodId);
   $('suggestionCard').hidden = !mood;
   if (mood) {
-    $('suggestionLabel').textContent = `${mood.label} progression`;
-    $('suggestionText').textContent = mood.text;
+    $('suggestionLabel').textContent = `${mood.label} — ${numeralsFor(mood.degrees, mood.seventh, mood.mode)}`;
+    $('suggestionText').textContent =
+      `${chordNamesFor(mood.degrees, mood.seventh, mood.mode)} · ${mood.text}`;
   }
 
   const secRow = $('sectionRow');
@@ -1206,23 +1270,83 @@ function renderAssist() {
       const apply = el('button', 'chip', 'Apply');
       apply.onclick = () => applyDegrees(v.degrees, v.seventh);
       head.appendChild(apply);
-      card.append(head, el('p', '', v.blurb));
+      card.append(head);
+      card.append(el('span', 'variant-numerals', `${numeralsFor(v.degrees, v.seventh)}  ·  ${chordNamesFor(v.degrees, v.seventh)}`));
+      card.append(el('p', '', v.blurb));
       variants.appendChild(card);
     }
   }
 
+  // --- progression library, grouped by family ---
+  const familyRow = $('templateFamilyRow');
+  familyRow.replaceChildren();
+  const families = ['All', ...TEMPLATE_FAMILIES];
+  for (const fam of families) {
+    const active = (state.templateFamily || 'All') === fam;
+    const b = el('button', `chip${active ? ' active' : ''}`, fam);
+    if (active) { b.style.background = 'var(--a)'; b.style.borderColor = 'var(--a)'; }
+    b.onclick = () => { state.templateFamily = fam; renderAssist(); };
+    familyRow.appendChild(b);
+  }
+
   const tpl = $('templateList');
   tpl.replaceChildren();
+  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
   for (const t of TEMPLATES) {
-    const b = el('button', `list-btn${state.templateId === t.id ? ' active' : ''}`);
-    b.append(el('span', 'main', t.label), el('span', 'tag', t.tag));
-    b.onclick = () => {
+    if (wanted && t.family !== wanted) continue;
+    const card = el('div', `template-card${state.templateId === t.id ? ' active' : ''}`);
+
+    const head = el('div', 'row between');
+    head.append(el('span', 'label', t.label));
+    const apply = el('button', 'chip small filled-a', 'Apply');
+    apply.onclick = () => {
       state.templateId = t.id;
       state.moodId = null;
-      applyDegrees(t.degrees, t.seventh);
+      applyDegrees(t.degrees, t.seventh, t.mode);
     };
-    tpl.appendChild(b);
+    head.appendChild(apply);
+
+    // Both lines are derived from the chords this template will produce in the
+    // current key, so what is promised is what is heard.
+    const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
+    const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
+    const meta = el('span', 'template-meta', `${MODE_NAMES[MODE_IDS.indexOf(t.mode)]} · ${t.degrees.length} bars`);
+
+    card.append(head, numerals, names, el('p', '', t.blurb), meta);
+
+    // Tapping the card auditions the progression without replacing the timeline.
+    card.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      previewProgression(t);
+    };
+    tpl.appendChild(card);
   }
+}
+
+/**
+ * Audition a progression without committing it — hear before you overwrite the
+ * timeline. Chords are scheduled back to back at the current tempo.
+ */
+async function previewProgression(t) {
+  if (!(await ensureAudio())) return;
+  if (sequencer.playing) { toast('Stop playback to preview a progression.'); return; }
+
+  const modeName = t.mode && MODE_IDS.includes(t.mode) ? t.mode : modeId();
+  const chords = diatonicChords(state.rootPc, modeName, !!t.seventh);
+  const dur = barDuration(state.timeSig, state.bpm);
+  const t0 = auditionStart();
+
+  t.degrees.slice(0, 8).forEach((d, i) => {
+    const chord = chords[d % 7];
+    const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+    if (!v) return;
+    sequencer.scheduleChord({ chord, voicing: v }, t0 + i * dur, dur, {
+      rhythm: state.rhythm,
+      tuning: tuning(),
+      velocity: 1,
+    });
+  });
+  toast(`Previewing ${t.label} — tap Apply to keep it.`);
 }
 
 // ------------------------------------------------------------ static wiring
@@ -1419,6 +1543,15 @@ function wire() {
     state.drumPattern.swing = Number(swing.value);
     $('drumSwingOut').textContent = `${Math.round(state.drumPattern.swing * 100)}%`;
   };
+  const human = $('drumHumanize');
+  human.oninput = () => {
+    state.drumHumanize = Number(human.value);
+    $('drumHumanizeOut').textContent = `${Math.round(state.drumHumanize * 100)}%`;
+  };
+  $('drumVaryBtn').onclick = () => {
+    state.drumPattern = varyPattern(state.drumPattern);
+    renderDrums();
+  };
   const drumVol = $('drumVolume');
   drumVol.oninput = () => {
     state.drumVolume = Number(drumVol.value);
@@ -1583,6 +1716,8 @@ if (
     });
   });
 }
+
+watchDrumPlayhead();
 
 // Expose for debugging in the console.
 window.CircleSong = {

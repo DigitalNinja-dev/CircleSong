@@ -101,12 +101,13 @@ adds Play Console signing and review; nothing about the app itself changes.
 - **Multiple loops per song** — build a verse, a chorus and a turnaround as
   separate loops and switch between them while playing. A switch waits for the
   bar line, so the change lands on the beat instead of cutting mid-phrase.
-- **Drum machine with a step sequencer** — twenty grooves across rock, funk,
-  disco, reggae, ska, bossa, samba, Afro-Cuban 6/8, blues shuffle, jazz, waltz,
-  Motown, cajon, lo-fi and metal, over six kits and ten voices. Every groove
-  loads into an editable grid: tap a step to cycle it through soft, medium and
-  hard. Scheduled against the same audio clock as the guitar, so it stays locked
-  bar for bar in any time signature, with swing and an optional turnaround fill.
+- **Drum machine with a step sequencer** — thirty-five grooves in nine families:
+  rock, funk and soul, house/techno/breakbeat, reggae and soca, Latin (samba,
+  partido alto, two cumbias, bossa, merengue, son montuno, Afro-Cuban 6/8), jazz
+  and blues, folk, hip-hop and metal. Six kits, ten voices. Every groove loads
+  into an editable grid — tap a step to cycle it through soft, medium and hard —
+  with swing, humanise, a musical **Vary** button, and a live playhead driven
+  from the audio clock. Locked to the guitar bar for bar in any time signature.
 - **Dynamic Fretboard & Inversion Switcher** — exact fingerings with chord-tone
   colouring, and instant auditioning of root position, 1st/2nd inversion,
   Drop-2 and Drop-3 voicings. Cycle alternative shapes for any chord.
@@ -130,9 +131,14 @@ adds Play Console signing and review; nothing about the app itself changes.
   major scale, then test yourself with the "guess the mode" quiz, which tracks
   your streak and which modes you have identified.
 - **About panel** — tap the wordmark for what CircleSong is and who made it.
-- **Songwriting Assistant** — mood-based chord suggestions, song-section ideas,
-  and progression templates inspired by hit songs. Everything applies straight
-  to the timeline in the current key.
+- **Songwriting Assistant** — fourteen moods, six song sections with
+  twenty-three variants, and a **progression library of twenty-seven
+  templates** grouped by family: pop and rock, modal rock, minor keys, jazz,
+  blues, folk and country. Tap a card to hear it in your key, Apply to write it
+  to the timeline. Every template carries the mode it belongs in, so ♭VII
+  progressions land in Mixolydian rather than being mislabelled in Ionian, and
+  the roman numerals shown are computed from the chords that will actually
+  sound.
 - **Save / load** — export and re-import songs as JSON. Progressions are stored
   as scale degrees, so re-importing into a different key transposes the song.
 
