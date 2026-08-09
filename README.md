@@ -79,14 +79,6 @@ The service worker serves the cached shell first, so an installed app keeps
 running the version it cached. After deploying changes, bump `CACHE` in
 `sw.js` — installed copies then fetch the new files on their next launch.
 
-### If you need a real APK
-
-A PWA covers testing and everyday use. For a Play Store listing or a `.apk`
-file, wrap this same URL in a Trusted Web Activity with
-[PWABuilder](https://www.pwabuilder.com/) or Google's Bubblewrap — both take
-the manifest already in this repo and emit a signed Android package. That path
-adds Play Console signing and review; nothing about the app itself changes.
-
 ---
 
 ## Key Features
