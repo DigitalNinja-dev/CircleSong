@@ -54,6 +54,11 @@
 
 * { box-sizing: border-box; }
 
+/* Taps should feel like buttons, not like text: kill the selection flash and
+   the 300 ms delay, and stop double-tap zoom on controls. */
+button, .slot, .wheel, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button, .slot { user-select: none; -webkit-user-select: none; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -65,6 +70,13 @@ body {
 a { color: var(--a); }
 
 .stage { display: flex; justify-content: center; width: 100%; min-height: 100vh; background: var(--bg); }
+/* Mobile toolbars change the viewport height as they hide and show; dvh tracks
+   the space actually visible, where vh stays at the largest size and leaves the
+   tab bar sitting below the fold. */
+@supports (height: 100dvh) {
+  .stage { min-height: 100dvh; }
+  .phone { min-height: 100dvh; }
+}
 
 .phone {
   position: relative;
@@ -426,6 +438,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   * { transition: none !important; animation: none !important; }
 }
 
+/* ---------- loops / sections ---------- */
+.section-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.chip-row.tight-row { margin-bottom: 0; padding-bottom: 0; flex: 1; }
+#sectionTabs .chip { flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 10px; }
+#sectionTabs .chip .tag { font: 400 9px var(--mono); opacity: 0.65; }
+/* A queued loop has been asked for but is waiting for the bar line. */
+.chip.queued { border-color: var(--b); border-style: dashed; color: var(--b); }
+.chip.queued.active { background: transparent; color: var(--b); }
+.chip[disabled] { opacity: 0.35; cursor: not-allowed; }
+.chip[disabled]:hover { border-color: var(--border); }
+
 </style>
 </head>
 <body>
@@ -480,6 +503,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <span class="led"></span><span>Metro</span>
         </button>
         <button id="loopBtn" class="chip toggle" aria-pressed="true">Loop</button>
+        <button id="drumsQuickBtn" class="chip toggle" aria-pressed="false" title="Backing drums">
+          <span class="led"></span><span>Drums</span>
+        </button>
       </div>
     </header>
 
@@ -546,6 +572,34 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="stack" id="rhythmList"></div>
+
+      <h2 class="mt">/04 DRUMS</h2>
+      <div class="row between">
+        <div>
+          <span class="setting-name">Backing drums</span>
+          <span class="setting-note">Locked to the transport, bar for bar</span>
+        </div>
+        <button id="drumsBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
+      <div class="row mt-s">
+        <span class="micro-label">KIT</span>
+        <select id="drumKitSelect" class="select grow" aria-label="Drum kit"></select>
+      </div>
+      <div class="stack mt-s" id="drumStyleList"></div>
+      <div class="sliders mt-s">
+        <div class="slider-row">
+          <label for="drumVolume">DRUM VOL</label>
+          <input id="drumVolume" type="range" min="0" max="1" step="0.01" value="0.7" class="grow">
+          <output id="drumVolumeOut">70%</output>
+        </div>
+      </div>
+      <div class="row between mt-s">
+        <div>
+          <span class="setting-name">Fill before the loop turns</span>
+          <span class="setting-note">A short fill on the last bar</span>
+        </div>
+        <button id="drumFillBtn" class="chip toggle solid" aria-pressed="true">On</button>
+      </div>
     </section>
 
     <!-- /04 COMPOSE -->
@@ -589,7 +643,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <h2>/05 TIMELINE</h2>
         <div class="row gap-xs" id="barSizeRow"></div>
       </div>
-      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar.</p>
+      <div class="section-bar">
+        <div class="chip-row tight-row" id="sectionTabs"></div>
+        <div class="row gap-xs">
+          <button id="addSectionBtn" class="chip small" title="Add an empty loop">+ Loop</button>
+          <button id="dupSectionBtn" class="chip small" title="Duplicate this loop">Duplicate</button>
+          <button id="delSectionBtn" class="chip small" title="Delete this loop">Delete</button>
+        </div>
+      </div>
+      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar. While playing, switching loops waits for the bar line.</p>
       <div class="grid-4" id="timelineGrid"></div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
@@ -1228,6 +1290,228 @@ function getPattern(id) {
   return RHYTHM_PATTERNS[id] || RHYTHM_PATTERNS.straight8;
 }
 
+/* ===== src/drum-patterns.js ===== */
+/**
+ * Drum patterns.
+ *
+ * A pattern is a set of voice lanes. Each lane is a string of steps where a
+ * digit 1-9 is a hit at that velocity (9 loudest) and `.` is a rest, so a
+ * groove reads like a drum machine's grid rather than like an array literal.
+ *
+ * `steps` is how many subdivisions fill one bar, which is what lets a 6/8
+ * pattern and a 4/4 pattern share the same scheduler: the bar is divided into
+ * `steps`, whatever its length in seconds.
+ */
+
+const DRUM_STYLES = [
+  {
+    id: 'rockDrive',
+    label: 'Modern Rock Drive',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...' + '..7.' + '8...' + '....',
+      snare: '....' + '8...' + '....' + '8...',
+      hat: '6.5.' + '6.5.' + '6.5.' + '6.5o',
+    },
+  },
+  {
+    id: 'pop16',
+    label: 'Pop / Funk 16ths',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...' + '..6.' + '.8..' + '..5.',
+      snare: '....' + '8...' + '....' + '8..3',
+      hat: '7353' + '7353' + '7353' + '7353',
+    },
+  },
+  {
+    id: 'indie8',
+    label: 'Indie Straight-8',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '8...' + '8...' + '8...' + '8...',
+      rim: '....' + '7...' + '....' + '7...',
+      hat: '6.6.' + '6.6.' + '6.6.' + '6.6.',
+    },
+  },
+  {
+    id: 'reggaeOneDrop',
+    label: 'Reggae One-Drop',
+    kit: 'reggae',
+    meters: ['4/4'],
+    steps: 16,
+    // Beat 1 is deliberately empty — that silence is the whole point of the feel.
+    lanes: {
+      kick: '....' + '....' + '9...' + '....',
+      rim: '....' + '....' + '9...' + '....',
+      hat: '..6.' + '..6.' + '..6.' + '..6.',
+    },
+  },
+  {
+    id: 'bossa',
+    label: 'Bossa Nova',
+    kit: 'jazz',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '7...' + '..5.' + '7...' + '..5.',
+      rim: '..6.' + '6...' + '...6' + '.6..',
+      ride: '5.4.' + '5.4.' + '5.4.' + '5.4.',
+    },
+  },
+  {
+    id: 'afro68',
+    label: 'Afro-Cuban 6/8',
+    kit: 'acoustic',
+    meters: ['6/8', '12/8'],
+    steps: 12,
+    lanes: {
+      kick: '8..' + '...' + '7..' + '...',
+      rim: '..6' + '.6.' + '..6' + '6..',
+      shaker: '654' + '654' + '654' + '654',
+    },
+  },
+  {
+    id: 'blues68',
+    label: 'Slow Blues Shuffle',
+    kit: 'jazz',
+    meters: ['6/8', '12/8'],
+    steps: 12,
+    lanes: {
+      kick: '8..' + '...' + '7..' + '...',
+      snare: '...' + '8..' + '...' + '8..',
+      ride: '6.4' + '6.4' + '6.4' + '6.4',
+    },
+  },
+  {
+    id: 'waltz',
+    label: 'Folk Waltz',
+    kit: 'acoustic',
+    meters: ['3/4'],
+    steps: 12,
+    // "boom-chick-chick": weight on one, brushes on two and three.
+    lanes: {
+      kick: '9...' + '....' + '....',
+      snare: '....' + '5...' + '5...',
+      hat: '5..3' + '5..3' + '5..3',
+    },
+  },
+  {
+    id: 'motown',
+    label: 'Motown Pocket',
+    kit: 'rock',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...' + '..5.' + '7...' + '....',
+      snare: '....' + '8..2' + '..3.' + '8...',
+      hat: '6464' + '6464' + '6464' + '6464',
+    },
+  },
+  {
+    id: 'cajon',
+    label: 'Acoustic Cajon',
+    kit: 'acoustic',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9...' + '..5.' + '8...' + '....',
+      snare: '....' + '7...' + '....' + '7...',
+      shaker: '5353' + '5353' + '5353' + '5353',
+    },
+  },
+  {
+    id: 'lofiSwing',
+    label: 'Lo-Fi Chillhop',
+    kit: 'lofi',
+    meters: ['4/4'],
+    steps: 16,
+    swing: 0.28,
+    lanes: {
+      kick: '8...' + '...5' + '..7.' + '....',
+      snare: '....' + '7...' + '....' + '7...',
+      hat: '5..4' + '5..4' + '5..4' + '5.4.',
+    },
+  },
+  {
+    id: 'metalHalf',
+    label: 'Metal Half-Time',
+    kit: 'metal',
+    meters: ['4/4'],
+    steps: 16,
+    lanes: {
+      kick: '9.9.' + '..9.' + '9...' + '9.9.',
+      snare: '....' + '....' + '9...' + '....',
+      ride: '7...' + '6...' + '7...' + '6...',
+    },
+  },
+];
+
+/** Two-beat fills, played at the end of a phrase. Keyed by steps-per-bar. */
+const FILLS = {
+  16: { snare: '........' + '5768', tom: '........' + '..7.', hat: '............' },
+  12: { snare: '......' + '5768', tom: '......' + '..7.', hat: '............' },
+};
+
+const DRUM_STYLE_BY_ID = Object.fromEntries(DRUM_STYLES.map((s) => [s.id, s]));
+
+/** Styles that make sense in a given time signature. */
+function stylesForMeter(timeSig) {
+  const matching = DRUM_STYLES.filter((s) => s.meters.includes(timeSig));
+  return matching.length ? matching : DRUM_STYLES.filter((s) => s.meters.includes('4/4'));
+}
+
+/**
+ * Expand a pattern into scheduled hits.
+ * @returns {Array<{voice:string, t:number, velocity:number}>} `t` is a
+ *   fraction of the bar, so the caller multiplies by the bar's real duration.
+ */
+function patternHits(style, { fill = false } = {}) {
+  const hits = [];
+  const steps = style.steps;
+  const swing = style.swing || 0;
+
+  const lanes = { ...style.lanes };
+  if (fill) {
+    const f = FILLS[steps];
+    if (f) {
+      // A fill replaces the second half of the bar, keeping the groove's first half.
+      for (const [voice, lane] of Object.entries(f)) {
+        const existing = (lanes[voice] || '.'.repeat(steps)).padEnd(steps, '.');
+        lanes[voice] = existing.slice(0, steps / 2) + lane.padEnd(steps, '.').slice(steps / 2, steps);
+      }
+      // Cymbals and hats step aside so the fill reads clearly.
+      if (lanes.hat) lanes.hat = lanes.hat.slice(0, steps / 2) + '.'.repeat(steps / 2);
+    }
+  }
+
+  for (const [voice, lane] of Object.entries(lanes)) {
+    for (let i = 0; i < steps; i++) {
+      const ch = lane[i];
+      if (!ch || ch === '.') continue;
+
+      // `o` marks an open hi-hat at a fixed level; digits are velocities.
+      const isOpen = ch === 'o';
+      const velocity = isOpen ? 0.7 : Number(ch) / 9;
+      if (!isOpen && !Number.isFinite(velocity)) continue;
+
+      let t = i / steps;
+      // Swing delays every second subdivision.
+      if (swing && i % 2 === 1) t += (swing * 0.5) / steps;
+
+      hits.push({ voice: isOpen ? 'openhat' : voice, t, velocity });
+    }
+  }
+
+  return hits.sort((a, b) => a.t - b.t);
+}
+
 /* ===== src/content.js ===== */
 // Editorial content: harmonic-function copy, mode lessons, and the rule-based
 // songwriting suggestions. Ported from the CircleSong design prototype.
@@ -1624,6 +1908,232 @@ function driveCurve(amount = 0.4, steps = 2048) {
   return curve;
 }
 
+/* ===== src/audio/drums.js ===== */
+/**
+ * Drum synthesis.
+ *
+ * Every voice is built from oscillators and noise rather than samples, for the
+ * same reason the guitar is modelled: the app ships no audio assets, works
+ * offline, and loads instantly. Drums are far more forgiving than a plucked
+ * string here — a kick really is a pitch-swept sine, and a hat really is
+ * band-limited noise — so synthesis costs very little realism.
+ *
+ * Voices are scheduled against the AudioContext clock, so they line up with the
+ * guitar to the sample rather than to a timer.
+ */
+
+/** Kits differ by voice tuning and level, not by which voices exist. */
+const DRUM_KITS = {
+  rock: {
+    label: 'Rock Standard',
+    kick: { freq: 55, drop: 110, decay: 0.34, click: 0.5, gain: 1.0 },
+    snare: { tone: 190, noise: 0.85, decay: 0.19, hp: 1400, gain: 0.85 },
+    hat: { decay: 0.045, open: 0.32, hp: 7500, gain: 0.42 },
+    rim: { freq: 420, decay: 0.06, gain: 0.6 },
+    ride: { decay: 0.9, hp: 5200, gain: 0.3 },
+    shaker: { decay: 0.06, hp: 6000, gain: 0.3 },
+    tom: { freq: 150, drop: 60, decay: 0.32, gain: 0.75 },
+  },
+  acoustic: {
+    label: 'Cajon & Shaker',
+    kick: { freq: 62, drop: 55, decay: 0.26, click: 0.75, gain: 0.92 },
+    snare: { tone: 260, noise: 0.6, decay: 0.12, hp: 1900, gain: 0.6 },
+    hat: { decay: 0.05, open: 0.2, hp: 5200, gain: 0.3 },
+    rim: { freq: 520, decay: 0.05, gain: 0.5 },
+    ride: { decay: 0.5, hp: 4200, gain: 0.2 },
+    shaker: { decay: 0.075, hp: 4200, gain: 0.42 },
+    tom: { freq: 130, drop: 45, decay: 0.28, gain: 0.6 },
+  },
+  reggae: {
+    label: 'Reggae / Dub',
+    kick: { freq: 44, drop: 70, decay: 0.42, click: 0.25, gain: 1.05 },
+    snare: { tone: 330, noise: 0.35, decay: 0.13, hp: 900, gain: 0.7 },
+    hat: { decay: 0.038, open: 0.26, hp: 8200, gain: 0.36 },
+    rim: { freq: 470, decay: 0.075, gain: 0.9 },
+    ride: { decay: 0.7, hp: 5000, gain: 0.24 },
+    shaker: { decay: 0.05, hp: 6500, gain: 0.26 },
+    tom: { freq: 120, drop: 55, decay: 0.36, gain: 0.7 },
+  },
+  jazz: {
+    label: 'Jazz Brushes',
+    kick: { freq: 58, drop: 45, decay: 0.24, click: 0.15, gain: 0.6 },
+    snare: { tone: 240, noise: 0.95, decay: 0.16, hp: 2400, gain: 0.42 },
+    hat: { decay: 0.06, open: 0.3, hp: 6800, gain: 0.28 },
+    rim: { freq: 500, decay: 0.05, gain: 0.55 },
+    ride: { decay: 1.3, hp: 4600, gain: 0.42 },
+    shaker: { decay: 0.09, hp: 4800, gain: 0.3 },
+    tom: { freq: 140, drop: 50, decay: 0.3, gain: 0.55 },
+  },
+  lofi: {
+    label: 'Lo-Fi / Chillhop',
+    kick: { freq: 50, drop: 65, decay: 0.4, click: 0.3, gain: 0.95 },
+    snare: { tone: 200, noise: 0.7, decay: 0.17, hp: 1100, gain: 0.65 },
+    hat: { decay: 0.05, open: 0.24, hp: 5600, gain: 0.3 },
+    rim: { freq: 440, decay: 0.06, gain: 0.5 },
+    ride: { decay: 0.6, hp: 4200, gain: 0.22 },
+    shaker: { decay: 0.07, hp: 5000, gain: 0.26 },
+    tom: { freq: 135, drop: 50, decay: 0.34, gain: 0.6 },
+  },
+  metal: {
+    label: 'Hard Rock / Metal',
+    kick: { freq: 52, drop: 130, decay: 0.22, click: 0.95, gain: 1.1 },
+    snare: { tone: 210, noise: 0.9, decay: 0.22, hp: 1600, gain: 1.0 },
+    hat: { decay: 0.04, open: 0.4, hp: 8500, gain: 0.45 },
+    rim: { freq: 400, decay: 0.05, gain: 0.6 },
+    ride: { decay: 1.1, hp: 5600, gain: 0.4 },
+    shaker: { decay: 0.05, hp: 7000, gain: 0.28 },
+    tom: { freq: 160, drop: 70, decay: 0.3, gain: 0.9 },
+  },
+};
+
+class DrumKit {
+  /**
+   * @param {AudioContext} ctx
+   * @param {AudioNode} destination
+   */
+  constructor(ctx, destination) {
+    this.ctx = ctx;
+    this.kitId = 'rock';
+
+    this.out = ctx.createGain();
+    this.out.gain.value = 0.7;
+
+    // Drums get their own glue compressor so a busy pattern stays even without
+    // pumping the guitar, which sits on a separate bus.
+    this.comp = ctx.createDynamicsCompressor();
+    this.comp.threshold.value = -14;
+    this.comp.knee.value = 12;
+    this.comp.ratio.value = 4;
+    this.comp.attack.value = 0.003;
+    this.comp.release.value = 0.12;
+
+    this.out.connect(this.comp).connect(destination);
+
+    // One noise buffer, reused by every noise-based voice.
+    const len = Math.floor(ctx.sampleRate * 1.2);
+    this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = this.noiseBuffer.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  get kit() {
+    return DRUM_KITS[this.kitId] || DRUM_KITS.rock;
+  }
+
+  setKit(id) {
+    if (DRUM_KITS[id]) this.kitId = id;
+  }
+
+  setVolume(v) {
+    this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+  }
+
+  _noise(when, duration, { hp = 0, bp = 0, q = 1, gain = 1, decay = 0.05 }) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    src.playbackRate.value = 1;
+    // Start at a random offset so repeated hits are not bit-identical.
+    const offset = Math.random() * (this.noiseBuffer.duration - duration - 0.01);
+
+    let node = src;
+    if (hp) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'highpass';
+      f.frequency.value = hp;
+      node = node.connect(f);
+    }
+    if (bp) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = bp;
+      f.Q.value = q;
+      node = node.connect(f);
+    }
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+    node.connect(g).connect(this.out);
+
+    src.start(when, Math.max(0, offset), decay + 0.05);
+    src.stop(when + decay + 0.06);
+  }
+
+  _tone(when, { freq, drop = 0, decay = 0.2, gain = 1, type = 'sine' }) {
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq + drop, when);
+    if (drop) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq), when + decay * 0.55);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+
+    osc.connect(g).connect(this.out);
+    osc.start(when);
+    osc.stop(when + decay + 0.03);
+  }
+
+  /**
+   * Fire one drum voice.
+   * @param {string} voice kick|snare|hat|openhat|rim|ride|shaker|tom
+   * @param {number} when AudioContext timestamp
+   * @param {number} velocity 0..1
+   */
+  hit(voice, when, velocity = 1) {
+    const k = this.kit;
+    const v = Math.max(0.05, Math.min(1.4, velocity));
+
+    switch (voice) {
+      case 'kick':
+        this._tone(when, { freq: k.kick.freq, drop: k.kick.drop, decay: k.kick.decay, gain: k.kick.gain * v });
+        if (k.kick.click) {
+          this._noise(when, 0.02, { hp: 1200, gain: 0.22 * k.kick.click * v, decay: 0.018 });
+        }
+        break;
+
+      case 'snare':
+        // Body plus noise: the tone gives it pitch, the noise gives it snap.
+        this._tone(when, { freq: k.snare.tone, decay: k.snare.decay * 0.55, gain: 0.5 * k.snare.gain * v, type: 'triangle' });
+        this._noise(when, 0.2, { hp: k.snare.hp, gain: k.snare.noise * k.snare.gain * v, decay: k.snare.decay });
+        break;
+
+      case 'hat':
+        this._noise(when, 0.08, { hp: k.hat.hp, gain: k.hat.gain * v, decay: k.hat.decay });
+        break;
+
+      case 'openhat':
+        this._noise(when, 0.4, { hp: k.hat.hp * 0.9, gain: k.hat.gain * 0.9 * v, decay: k.hat.open });
+        break;
+
+      case 'rim':
+        this._tone(when, { freq: k.rim.freq, decay: k.rim.decay, gain: k.rim.gain * v, type: 'square' });
+        this._noise(when, 0.05, { bp: 2400, q: 3, gain: 0.35 * k.rim.gain * v, decay: k.rim.decay });
+        break;
+
+      case 'ride':
+        this._noise(when, 1.4, { hp: k.ride.hp, gain: k.ride.gain * v, decay: k.ride.decay });
+        this._tone(when, { freq: 3200, decay: 0.12, gain: 0.08 * k.ride.gain * v, type: 'square' });
+        break;
+
+      case 'shaker':
+        this._noise(when, 0.12, { hp: k.shaker.hp, gain: k.shaker.gain * v, decay: k.shaker.decay });
+        break;
+
+      case 'tom':
+        this._tone(when, { freq: k.tom.freq, drop: k.tom.drop, decay: k.tom.decay, gain: k.tom.gain * v });
+        break;
+
+      default:
+        break;
+    }
+  }
+}
+
 /* ===== src/audio/engine.js ===== */
 /**
  * Audio engine: owns the AudioContext, the string worklet, and the post chain.
@@ -1726,6 +2236,74 @@ class AudioEngine {
     this.masterVolume = 0.8;
     /** User tweaks layered on top of the preset's string parameters. */
     this.overrides = {};
+    /**
+     * When each string is expected to have gone quiet. The model has exactly
+     * six voices, so single notes have to be spread across them deliberately —
+     * otherwise a run keeps landing on the same string and each note chokes the
+     * one before it.
+     */
+    this._stringFree = new Float64Array(6);
+  }
+
+  /**
+   * Choose the string to play a note on.
+   *
+   * `layer: true` means the note should ring alongside whatever is already
+   * sounding (jamming a scale), so a string that has gone quiet is strongly
+   * preferred and the longest-ringing one is stolen only as a last resort.
+   * `layer: false` just wants the most comfortable fret.
+   */
+  allocateString(midi, tuning, { layer = false, maxFret = 15, at = null } = {}) {
+    // Judge availability at the moment the note will sound, not at call time —
+    // a scheduled run allocates all its notes up front.
+    const now = at ?? this.currentTime;
+    let best = -1;
+    let bestScore = -Infinity;
+
+    for (let s = 0; s < 6; s++) {
+      const fret = midi - tuning[s];
+      if (fret < 0 || fret > maxFret) continue;
+
+      // Frets around the middle of the neck are the most playable, and open
+      // strings are always fine.
+      let score = -Math.abs(fret - 5) * 0.5;
+      if (fret === 0) score += 2;
+
+      if (layer) {
+        const quiet = this._stringFree[s] <= now;
+        // A free string outweighs any fret-comfort consideration.
+        score += quiet ? 100 : -(this._stringFree[s] - now) * 4;
+      }
+
+      if (score > bestScore) { bestScore = score; best = s; }
+    }
+    return best;
+  }
+
+  /**
+   * Play a single note, choosing the string for you. Returns the string used,
+   * or -1 when the note is out of range in this tuning.
+   */
+  pluckNote({ midi, tuning, when, velocity = 0.85, layer = false }) {
+    if (!this.ready) return -1;
+    const t = when ?? this.currentTime + 0.02;
+    const string = this.allocateString(midi, tuning, { layer, at: t });
+    if (string < 0) return -1;
+    this.pluck({ string, midi, when: t, velocity });
+    // Assume it is audible for most of its decay; good enough for allocation.
+    this._stringFree[string] = t + this.stringParams.decay * 0.55;
+    return string;
+  }
+
+  /** A single strum of a voicing — one stroke, not a bar of a rhythm pattern. */
+  strumOnce({ midi, when, velocity = 0.85, direction = 'D', spread = 0.028 }) {
+    if (!this.ready) return;
+    const t = when ?? this.currentTime + 0.02;
+    this.strum({ midi, when: t, direction, velocity, spread });
+    const decay = this.stringParams.decay * 0.55;
+    for (let s = 0; s < 6; s++) {
+      if (midi[s] !== null && midi[s] !== undefined) this._stringFree[s] = t + decay;
+    }
   }
 
   /** Merged string parameters: preset defaults with user overrides applied. */
@@ -2102,6 +2680,7 @@ class AudioEngine {
 
 
 
+
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.15;
 
@@ -2132,6 +2711,25 @@ class Sequencer {
     this.onPlayhead = null;
     this._raf = null;
     this._lastReported = -1;
+    /** Drum voices; assigned by the app once the context exists. */
+    this.drums = null;
+    /** Work deferred to the next bar line, so edits land musically. */
+    this._pending = null;
+    this._barsPlayed = 0;
+  }
+
+  /**
+   * Run `fn` at the next bar line rather than immediately, and restart the loop
+   * from its first bar. Switching sections mid-bar is what makes a change sound
+   * like a mistake; waiting for the bar is what makes it sound intentional.
+   *
+   * When the transport is stopped there is no bar line to wait for, so the
+   * change applies at once.
+   */
+  atNextBar(fn) {
+    if (!this.playing) { fn(); return false; }
+    this._pending = fn;
+    return true;
   }
 
   start() {
@@ -2174,6 +2772,20 @@ class Sequencer {
     let guard = 0;
 
     while (this.nextBarTime < horizon && guard++ < 32) {
+      // Apply a queued change exactly on the bar line, then silence the old
+      // material at that same instant. The replacement is scheduled after this
+      // point, so the cut takes the outgoing loop and leaves the incoming one.
+      if (this._pending) {
+        const apply = this._pending;
+        this._pending = null;
+        apply();
+        this.engine.cut(this.nextBarTime, { level: 1, time: 0.02 });
+        this.barIndex = 0;
+        this.scheduled.length = 0;
+        this._lastReported = -1;
+        return this._tick();
+      }
+
       const idx = this.barIndex;
       const dur = barDuration(st.timeSig, st.bpm);
       this._scheduleBar(bars[idx], this.nextBarTime, dur, st);
@@ -2201,6 +2813,8 @@ class Sequencer {
   }
 
   _scheduleBar(bar, startTime, dur, st) {
+    this._scheduleDrums(startTime, dur, st);
+
     if (st.metronome) {
       const { beats, unit } = parseTimeSig(st.timeSig);
       const beatDur = dur / beats;
@@ -2221,6 +2835,27 @@ class Sequencer {
       this.scheduleChord(slot, startTime + i * slotDur, slotDur, st);
     });
     void slots;
+  }
+
+  /**
+   * Lay the drum pattern over one bar. Hits carry a fraction of the bar, so the
+   * same grid works in any time signature — the bar's duration does the rest,
+   * and the drums stay locked to the guitar because both are scheduled against
+   * the same audio clock from the same bar start.
+   */
+  _scheduleDrums(startTime, dur, st) {
+    if (!this.drums || !st.drumsOn || !st.drumStyle) return;
+    const style = DRUM_STYLE_BY_ID[st.drumStyle];
+    if (!style) return;
+
+    // A fill on the last bar of the loop signals the turnaround.
+    const bars = st.bars.length;
+    const isLastBar = bars > 1 && this.barIndex === bars - 1;
+    const fill = !!st.drumFills && isLastBar;
+
+    for (const hit of patternHits(style, { fill })) {
+      this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
+    }
   }
 
   /**
@@ -2323,6 +2958,8 @@ class Sequencer {
 
 
 
+
+
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -2374,8 +3011,20 @@ const state = {
   /** How many beats of the rhythm pattern an audition plays. */
   previewBeats: 4,
 
-  barCount: 8,
-  bars: makeBars(8),
+  /**
+   * Sections are the song's loops — a verse, a chorus, a turnaround. Only one
+   * plays at a time; switching while the transport runs waits for the bar line.
+   */
+  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }],
+  activeSection: 0,
+  /** Section queued to take over at the next bar line, or null. */
+  queuedSection: null,
+
+  drumsOn: false,
+  drumStyle: 'rockDrive',
+  drumKit: 'rock',
+  drumVolume: 0.7,
+  drumFills: true,
 
   activeTab: 'circle',
   moodId: null,
@@ -2405,9 +3054,22 @@ function makeBars(n, existing = []) {
   return Array.from({ length: n }, (_, i) => existing[i] || { slots: [null] });
 }
 
+/** The section currently being edited and played. */
+function activeSection() {
+  return state.sections[state.activeSection] || state.sections[0];
+}
+const bars = () => activeSection().bars;
+const barCount = () => activeSection().barCount;
+
+function setBars(nextBars, count) {
+  const sec = activeSection();
+  sec.bars = nextBars;
+  sec.barCount = count ?? nextBars.length;
+}
+
 const engine = new AudioEngine();
 const sequencer = new Sequencer(engine, () => ({
-  bars: state.bars,
+  bars: bars(),
   bpm: state.bpm,
   timeSig: state.timeSig,
   loop: state.loop,
@@ -2415,6 +3077,9 @@ const sequencer = new Sequencer(engine, () => ({
   rhythm: state.rhythm,
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
+  drumsOn: state.drumsOn,
+  drumStyle: state.drumStyle,
+  drumFills: state.drumFills,
 }));
 
 sequencer.onPlayhead = (idx) => {
@@ -2439,6 +3104,16 @@ async function ensureAudio() {
     await engine.init();
     engine.setPreset(state.tone);
     engine.setMasterVolume(state.volume);
+
+    // Drums join the chain at the master bus: after the guitar's body and
+    // cabinet colouring, before the limiter, so a loud groove cannot clip the
+    // output and both instruments share one master fader.
+    if (!engine.drums) {
+      engine.drums = new DrumKit(engine.ctx, engine.master);
+      sequencer.drums = engine.drums;
+    }
+    engine.drums.setKit(state.drumKit);
+    engine.drums.setVolume(state.drumVolume);
     audioError = null;
     renderTransport();
     return true;
@@ -2535,17 +3210,16 @@ async function playModeScale(idx) {
   if (!(await ensureAudio())) return;
   const steps = modeStepsAbsolute(MODE_IDS[idx]).concat([12]);
   const t0 = auditionStart();
-  const strings = tuning();
   steps.forEach((off, i) => {
-    const target = 60 + state.rootPc + off;
-    // Play each degree on whichever string can reach it most naturally.
-    let best = 0;
-    let bestFret = 99;
-    for (let s = 0; s < 6; s++) {
-      const fret = target - strings[s];
-      if (fret >= 0 && fret <= 14 && fret < bestFret) { best = s; bestFret = fret; }
-    }
-    engine.pluck({ string: best, midi: target, when: t0 + i * 0.26, velocity: 0.8 });
+    // Spread the run across strings so the notes ring into each other the way
+    // a played scale does, instead of each one choking the last.
+    engine.pluckNote({
+      midi: 60 + state.rootPc + off,
+      tuning: tuning(),
+      when: t0 + i * 0.26,
+      velocity: 0.8,
+      layer: true,
+    });
   });
 }
 
@@ -2576,7 +3250,7 @@ async function togglePlay() {
     if (!(await ensureAudio())) return;
     // An empty timeline still plays: the metronome runs, which is what you
     // want when working out a tempo or a feel before committing chords.
-    if (!state.bars.some((b) => b.slots.some(Boolean)) && !state.metronome) {
+    if (!bars().some((b) => b.slots.some(Boolean)) && !state.metronome) {
       toast('Timeline is empty — add chords, or switch the metronome on.');
     }
     sequencer.start();
@@ -2605,14 +3279,14 @@ function slotFromDegree(degree) {
 
 function assignSlot(barIdx, slotIdx, degree) {
   const d = degree != null ? degree : state.activeDegree;
-  const bar = state.bars[barIdx];
+  const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots[slotIdx] = slotFromDegree(d);
   renderTimeline();
 }
 
 function clearSlot(barIdx, slotIdx) {
-  const bar = state.bars[barIdx];
+  const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots[slotIdx] = null;
   if (bar.slots.length === 2 && !bar.slots[0] && !bar.slots[1]) bar.slots = [null];
@@ -2620,7 +3294,7 @@ function clearSlot(barIdx, slotIdx) {
 }
 
 function addHalfBar(barIdx) {
-  const bar = state.bars[barIdx];
+  const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots = [bar.slots[0] || null, slotFromDegree(state.activeDegree)];
   renderTimeline();
@@ -2630,11 +3304,10 @@ function applyDegrees(degrees, seventh) {
   const prevSeventh = state.seventh;
   state.seventh = !!seventh;
   const size = nearestBarSize(degrees.length);
-  const bars = makeBars(size);
-  degrees.forEach((d, i) => { bars[i] = { slots: [slotFromDegree(d)] }; });
+  const nextBars = makeBars(size);
+  degrees.forEach((d, i) => { nextBars[i] = { slots: [slotFromDegree(d)] }; });
   state.seventh = prevSeventh || !!seventh;
-  state.barCount = size;
-  state.bars = bars;
+  setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
   toast(`Loaded ${degrees.length} chords into ${size} bars.`);
@@ -2642,7 +3315,7 @@ function applyDegrees(degrees, seventh) {
 
 /** Re-derive every stored shape — used after a key, tuning, or mode change. */
 function reresolveAll() {
-  for (const bar of state.bars) {
+  for (const bar of bars()) {
     bar.slots = bar.slots.map((slot) => (slot ? slotFromDegree(slot.degree) : null));
   }
 }
@@ -2801,17 +3474,18 @@ function renderCircle() {
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
     const b = el('button', i === 0 ? 'tonic' : '', noteName(pc, preferFlats()));
     b.title = `Scale degree ${i + 1}`;
+    // Scale degrees are for jamming: they layer over whatever is sounding
+    // instead of cutting it, and each one is placed on a free string so a run
+    // rings like a real player moving across the neck.
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
-      const strings = tuning();
-      const target = 60 + pc + (pc < state.rootPc ? 12 : 0);
-      let s = 0;
-      let bestFret = 99;
-      for (let k = 0; k < 6; k++) {
-        const f = target - strings[k];
-        if (f >= 0 && f <= 14 && f < bestFret) { s = k; bestFret = f; }
-      }
-      engine.pluck({ string: s, midi: target, when: auditionStart(), velocity: 0.85 });
+      engine.pluckNote({
+        midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
+        tuning: tuning(),
+        when: engine.currentTime + 0.02,
+        velocity: 0.85,
+        layer: true,
+      });
     };
     strip.appendChild(b);
   });
@@ -2862,27 +3536,27 @@ function renderExplore() {
   card.hidden = false;
 }
 
-/** Sound the current explore selection as a chord or as a single note. */
+/**
+ * Sound the current explore selection.
+ *
+ * Exploring the wheel is a question — "what does this one sound like?" — so it
+ * answers with a single strum and stops. Running the whole rhythm pattern here
+ * meant one tap kept strumming for a full bar, which read as a note that would
+ * not stop.
+ */
 async function playExplore() {
   const target = exploreTarget();
   if (!target || !(await ensureAudio())) return;
+  const when = auditionStart();
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) { await playChordNow(target.chord, v); return; }
+    if (v) { engine.strumOnce({ midi: v.midi, when, velocity: 0.9 }); return; }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
-  const strings = tuning();
-  const midi = 60 + target.note;
-  let string = 0;
-  let bestFret = 99;
-  for (let k = 0; k < 6; k++) {
-    const fret = midi - strings[k];
-    if (fret >= 0 && fret <= 14 && fret < bestFret) { string = k; bestFret = fret; }
-  }
-  engine.pluck({ string, midi, when: auditionStart(), velocity: 0.85 });
+  engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
 }
 
 function renderTone() {
@@ -2974,6 +3648,56 @@ function renderTone() {
     b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
     list.appendChild(b);
   }
+
+  renderDrums();
+}
+
+function renderDrums() {
+  for (const id of ['drumsBtn', 'drumsQuickBtn']) {
+    const b = $(id);
+    b.setAttribute('aria-pressed', String(state.drumsOn));
+    if (id === 'drumsBtn') b.textContent = state.drumsOn ? 'On' : 'Off';
+  }
+
+  const fills = $('drumFillBtn');
+  fills.setAttribute('aria-pressed', String(state.drumFills));
+  fills.textContent = state.drumFills ? 'On' : 'Off';
+
+  const kitSel = $('drumKitSelect');
+  if (!kitSel.options.length) {
+    for (const [id, kit] of Object.entries(DRUM_KITS)) {
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = kit.label;
+      kitSel.appendChild(o);
+    }
+  }
+  kitSel.value = state.drumKit;
+
+  // Only offer grooves that fit the current metre — a 6/8 clave in 4/4 is not
+  // a useful option, it is a bug waiting to be reported.
+  const list = $('drumStyleList');
+  list.replaceChildren();
+  for (const style of stylesForMeter(state.timeSig)) {
+    const b = el('button', `list-btn${state.drumStyle === style.id ? ' active' : ''}`);
+    b.append(el('span', '', style.label), el('span', 'tag', style.meters.join(' ')));
+    b.onclick = () => {
+      state.drumStyle = style.id;
+      // Each groove names the kit it was written for; follow it unless the
+      // user has since chosen one deliberately.
+      state.drumKit = style.kit;
+      if (engine.drums) engine.drums.setKit(state.drumKit);
+      if (!state.drumsOn) toggleDrums(true);
+      renderDrums();
+    };
+    list.appendChild(b);
+  }
+}
+
+async function toggleDrums(on = !state.drumsOn) {
+  state.drumsOn = on;
+  if (on && !(await ensureAudio())) { state.drumsOn = false; }
+  renderDrums();
 }
 
 function renderCompose() {
@@ -3098,14 +3822,53 @@ function renderDiagram(chord) {
   $('shapeLabel').textContent = `${voicingToString(v)}  ·  ${state.voicingIndex % list.length + 1}/${list.length}`;
 }
 
+/**
+ * Switch the loop being played and edited. While the transport runs the change
+ * is deferred to the next bar line so it lands musically; the chip shows a
+ * queued state until it does.
+ */
+function selectSection(index) {
+  if (index === state.activeSection && state.queuedSection === null) return;
+  const apply = () => {
+    state.activeSection = index;
+    state.queuedSection = null;
+    renderTimeline();
+  };
+  if (sequencer.atNextBar(apply)) {
+    state.queuedSection = index;
+    renderTimeline();
+  }
+}
+
+function renderSectionTabs() {
+  const tabs = $('sectionTabs');
+  tabs.replaceChildren();
+  state.sections.forEach((sec, i) => {
+    const active = i === state.activeSection;
+    const queued = state.queuedSection === i;
+    const filled = sec.bars.filter((b) => b.slots.some(Boolean)).length;
+    const b = el('button', `chip small${active ? ' active' : ''}${queued ? ' queued' : ''}`);
+    b.append(el('span', '', sec.name));
+    b.append(el('span', 'tag', `${filled}/${sec.barCount}`));
+    b.title = queued ? 'Starts at the next bar' : `Loop ${sec.name}`;
+    b.onclick = () => selectSection(i);
+    b.ondblclick = () => {
+      const name = prompt('Loop name', sec.name);
+      if (name) { sec.name = name.slice(0, 12); renderTimeline(); }
+    };
+    tabs.appendChild(b);
+  });
+  $('delSectionBtn').disabled = state.sections.length < 2;
+}
+
 function renderTimeline() {
+  renderSectionTabs();
   const row = $('barSizeRow');
   row.replaceChildren();
   for (const size of BAR_SIZES) {
-    const b = el('button', `chip small${state.barCount === size ? ' active' : ''}`, String(size));
+    const b = el('button', `chip small${barCount() === size ? ' active' : ''}`, String(size));
     b.onclick = () => {
-      state.barCount = size;
-      state.bars = makeBars(size, state.bars);
+      setBars(makeBars(size, bars()), size);
       renderTimeline();
     };
     row.appendChild(b);
@@ -3113,7 +3876,7 @@ function renderTimeline() {
 
   const grid = $('timelineGrid');
   grid.replaceChildren();
-  state.bars.forEach((bar, idx) => {
+  bars().forEach((bar, idx) => {
     const cell = el('div', `bar-cell${idx === state.playheadIndex ? ' playhead' : ''}`);
     const inner = el('div', 'bar-row');
     const n = bar.slots.length;
@@ -3422,8 +4185,62 @@ function wire() {
     if (mood) applyDegrees(mood.degrees, mood.seventh);
   };
 
+  // --- loops / sections ---
+  const nextName = () => {
+    const used = new Set(state.sections.map((s) => s.name));
+    for (let i = 0; i < 26; i++) {
+      const name = String.fromCharCode(65 + i);
+      if (!used.has(name)) return name;
+    }
+    return `L${state.sections.length + 1}`;
+  };
+
+  $('addSectionBtn').onclick = () => {
+    const count = barCount();
+    state.sections.push({ id: Date.now(), name: nextName(), barCount: count, bars: makeBars(count) });
+    selectSection(state.sections.length - 1);
+    renderTimeline();
+  };
+
+  $('dupSectionBtn').onclick = () => {
+    const sec = activeSection();
+    state.sections.splice(state.activeSection + 1, 0, {
+      id: Date.now(),
+      name: nextName(),
+      barCount: sec.barCount,
+      // Slots are re-derived rather than shared, so editing the copy cannot
+      // reach back into the original.
+      bars: sec.bars.map((b) => ({ slots: b.slots.map((s) => (s ? { ...s } : null)) })),
+    });
+    selectSection(state.activeSection + 1);
+    renderTimeline();
+  };
+
+  $('delSectionBtn').onclick = () => {
+    if (state.sections.length < 2) return;
+    state.sections.splice(state.activeSection, 1);
+    state.activeSection = Math.max(0, Math.min(state.activeSection, state.sections.length - 1));
+    state.queuedSection = null;
+    renderTimeline();
+  };
+
+  // --- drums ---
+  $('drumsBtn').onclick = () => toggleDrums();
+  $('drumsQuickBtn').onclick = () => toggleDrums();
+  $('drumFillBtn').onclick = () => { state.drumFills = !state.drumFills; renderDrums(); };
+  $('drumKitSelect').onchange = (e) => {
+    state.drumKit = e.target.value;
+    if (engine.drums) engine.drums.setKit(state.drumKit);
+  };
+  const drumVol = $('drumVolume');
+  drumVol.oninput = () => {
+    state.drumVolume = Number(drumVol.value);
+    $('drumVolumeOut').textContent = `${Math.round(state.drumVolume * 100)}%`;
+    if (engine.drums) engine.drums.setVolume(state.drumVolume);
+  };
+
   $('clearTimelineBtn').onclick = () => {
-    state.bars = makeBars(state.barCount);
+    setBars(makeBars(barCount()), barCount());
     renderTimeline();
   };
   $('exportBtn').onclick = exportSong;
@@ -3455,7 +4272,7 @@ function wire() {
 
 function exportSong() {
   const data = {
-    format: 'circlesong.v1',
+    format: 'circlesong.v2',
     title: state.projectTitle,
     bpm: state.bpm,
     timeSig: state.timeSig,
@@ -3464,8 +4281,13 @@ function exportSong() {
     tone: state.tone,
     rhythm: state.rhythm,
     tuning: state.tuningId,
-    barCount: state.barCount,
-    bars: state.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills },
+    activeSection: state.activeSection,
+    sections: state.sections.map((sec) => ({
+      name: sec.name,
+      barCount: sec.barCount,
+      bars: sec.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+    })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -3483,7 +4305,9 @@ function importSong(e) {
   reader.onload = () => {
     try {
       const data = JSON.parse(String(reader.result));
-      if (data.format !== 'circlesong.v1') throw new Error('Unrecognised file format');
+      if (!String(data.format || '').startsWith('circlesong.v')) {
+        throw new Error('Unrecognised file format');
+      }
       state.projectTitle = data.title || 'Untitled Song';
       state.bpm = Number(data.bpm) || 96;
       state.timeSig = TIME_SIGS.includes(data.timeSig) ? data.timeSig : '4/4';
@@ -3492,24 +4316,47 @@ function importSong(e) {
       state.tone = PRESETS[data.tone] ? data.tone : 'acoustic';
       state.rhythm = data.rhythm || 'straight8';
       state.tuningId = TUNINGS[data.tuning] ? data.tuning : 'standard';
-      state.barCount = Number(data.barCount) || 8;
-      state.bars = makeBars(state.barCount);
-      (data.bars || []).forEach((slots, i) => {
-        if (!state.bars[i]) return;
-        state.bars[i] = {
-          slots: slots.map((s) => {
-            if (!s) return null;
-            const prev = state.seventh;
-            state.seventh = !!s.seventh;
-            const prevMode = state.voicingMode;
-            state.voicingMode = VOICING_MODES[s.voicingMode] ? s.voicingMode : 'root';
-            const slot = slotFromDegree(s.degree);
-            state.seventh = prev;
-            state.voicingMode = prevMode;
-            return slot;
-          }),
-        };
+
+      if (data.drums) {
+        state.drumsOn = !!data.drums.on;
+        if (DRUM_STYLE_BY_ID[data.drums.style]) state.drumStyle = data.drums.style;
+        if (DRUM_KITS[data.drums.kit]) state.drumKit = data.drums.kit;
+        if (Number.isFinite(data.drums.volume)) state.drumVolume = data.drums.volume;
+        state.drumFills = data.drums.fills !== false;
+      }
+
+      // v1 held a single loop; v2 holds named sections. Reading a v1 file just
+      // means treating its one loop as the first section.
+      const incoming = data.sections || [
+        { name: 'A', barCount: data.barCount, bars: data.bars },
+      ];
+
+      state.sections = incoming.map((sec, i) => {
+        const count = Number(sec.barCount) || 8;
+        const built = makeBars(count);
+        (sec.bars || []).forEach((slots, b) => {
+          if (!built[b] || !Array.isArray(slots)) return;
+          built[b] = {
+            slots: slots.map((slot) => {
+              if (!slot) return null;
+              // slotFromDegree reads the live seventh/voicing settings, so they
+              // are borrowed for the rebuild and put straight back.
+              const prevSeventh = state.seventh;
+              const prevMode = state.voicingMode;
+              state.seventh = !!slot.seventh;
+              state.voicingMode = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              const rebuilt = slotFromDegree(slot.degree);
+              state.seventh = prevSeventh;
+              state.voicingMode = prevMode;
+              return rebuilt;
+            }),
+          };
+        });
+        return { id: i + 1, name: sec.name || String.fromCharCode(65 + i), barCount: count, bars: built };
       });
+      if (!state.sections.length) state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }];
+      state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
+
       if (engine.ready) engine.setPreset(state.tone);
       render();
       toast(`Loaded "${state.projectTitle}".`);
@@ -3531,8 +4378,32 @@ render();
 const arm = () => { ensureAudio(); document.removeEventListener('pointerdown', arm); };
 document.addEventListener('pointerdown', arm, { once: true });
 
+// Register the service worker that makes the app installable and offline-
+// capable. Guarded on the manifest link because the single-file build strips
+// it, and on http(s) because workers are unavailable on file:// origins —
+// without both checks those two ways of running the app log a fetch error.
+if (
+  'serviceWorker' in navigator &&
+  document.querySelector('link[rel="manifest"]') &&
+  location.protocol.startsWith('http')
+) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* Offline support is an enhancement; the app runs fine without it. */
+    });
+  });
+}
+
 // Expose for debugging in the console.
-window.CircleSong = { state, engine, sequencer, MODES };
+window.CircleSong = {
+  state,
+  engine,
+  sequencer,
+  MODES,
+  /** Bars of the loop currently active — state.sections holds them all. */
+  get bars() { return bars(); },
+  activeSection,
+};
 
 })();
 </script>

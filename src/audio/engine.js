@@ -107,6 +107,74 @@ export class AudioEngine {
     this.masterVolume = 0.8;
     /** User tweaks layered on top of the preset's string parameters. */
     this.overrides = {};
+    /**
+     * When each string is expected to have gone quiet. The model has exactly
+     * six voices, so single notes have to be spread across them deliberately —
+     * otherwise a run keeps landing on the same string and each note chokes the
+     * one before it.
+     */
+    this._stringFree = new Float64Array(6);
+  }
+
+  /**
+   * Choose the string to play a note on.
+   *
+   * `layer: true` means the note should ring alongside whatever is already
+   * sounding (jamming a scale), so a string that has gone quiet is strongly
+   * preferred and the longest-ringing one is stolen only as a last resort.
+   * `layer: false` just wants the most comfortable fret.
+   */
+  allocateString(midi, tuning, { layer = false, maxFret = 15, at = null } = {}) {
+    // Judge availability at the moment the note will sound, not at call time —
+    // a scheduled run allocates all its notes up front.
+    const now = at ?? this.currentTime;
+    let best = -1;
+    let bestScore = -Infinity;
+
+    for (let s = 0; s < 6; s++) {
+      const fret = midi - tuning[s];
+      if (fret < 0 || fret > maxFret) continue;
+
+      // Frets around the middle of the neck are the most playable, and open
+      // strings are always fine.
+      let score = -Math.abs(fret - 5) * 0.5;
+      if (fret === 0) score += 2;
+
+      if (layer) {
+        const quiet = this._stringFree[s] <= now;
+        // A free string outweighs any fret-comfort consideration.
+        score += quiet ? 100 : -(this._stringFree[s] - now) * 4;
+      }
+
+      if (score > bestScore) { bestScore = score; best = s; }
+    }
+    return best;
+  }
+
+  /**
+   * Play a single note, choosing the string for you. Returns the string used,
+   * or -1 when the note is out of range in this tuning.
+   */
+  pluckNote({ midi, tuning, when, velocity = 0.85, layer = false }) {
+    if (!this.ready) return -1;
+    const t = when ?? this.currentTime + 0.02;
+    const string = this.allocateString(midi, tuning, { layer, at: t });
+    if (string < 0) return -1;
+    this.pluck({ string, midi, when: t, velocity });
+    // Assume it is audible for most of its decay; good enough for allocation.
+    this._stringFree[string] = t + this.stringParams.decay * 0.55;
+    return string;
+  }
+
+  /** A single strum of a voicing — one stroke, not a bar of a rhythm pattern. */
+  strumOnce({ midi, when, velocity = 0.85, direction = 'D', spread = 0.028 }) {
+    if (!this.ready) return;
+    const t = when ?? this.currentTime + 0.02;
+    this.strum({ midi, when: t, direction, velocity, spread });
+    const decay = this.stringParams.decay * 0.55;
+    for (let s = 0; s < 6; s++) {
+      if (midi[s] !== null && midi[s] !== undefined) this._stringFree[s] = t + decay;
+    }
   }
 
   /** Merged string parameters: preset defaults with user overrides applied. */

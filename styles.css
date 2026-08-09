@@ -35,6 +35,11 @@
 
 * { box-sizing: border-box; }
 
+/* Taps should feel like buttons, not like text: kill the selection flash and
+   the 300 ms delay, and stop double-tap zoom on controls. */
+button, .slot, .wheel, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button, .slot { user-select: none; -webkit-user-select: none; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -46,6 +51,13 @@ body {
 a { color: var(--a); }
 
 .stage { display: flex; justify-content: center; width: 100%; min-height: 100vh; background: var(--bg); }
+/* Mobile toolbars change the viewport height as they hide and show; dvh tracks
+   the space actually visible, where vh stays at the largest size and leaves the
+   tab bar sitting below the fold. */
+@supports (height: 100dvh) {
+  .stage { min-height: 100dvh; }
+  .phone { min-height: 100dvh; }
+}
 
 .phone {
   position: relative;
@@ -406,3 +418,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- loops / sections ---------- */
+.section-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.chip-row.tight-row { margin-bottom: 0; padding-bottom: 0; flex: 1; }
+#sectionTabs .chip { flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 10px; }
+#sectionTabs .chip .tag { font: 400 9px var(--mono); opacity: 0.65; }
+/* A queued loop has been asked for but is waiting for the bar line. */
+.chip.queued { border-color: var(--b); border-style: dashed; color: var(--b); }
+.chip.queued.active { background: transparent; color: var(--b); }
+.chip[disabled] { opacity: 0.35; cursor: not-allowed; }
+.chip[disabled]:hover { border-color: var(--border); }

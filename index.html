@@ -6,10 +6,19 @@
 <meta name="theme-color" content="#0d0d0d">
 <title>CircleSong</title>
 <meta name="description" content="CircleSong — an interactive, theory-guided guitar DAW and progression sequencer built on the Circle of Fifths.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Fonts are served from the repo, not a CDN: the app must work offline once
+     installed, and a font CDN is exactly the request that fails on a phone with
+     no signal. Regenerate with `npm run fonts`. -->
+<link rel="stylesheet" href="./assets/fonts.css">
 <link rel="stylesheet" href="./styles.css">
+
+<!-- Installable on Android/iOS: adds a launcher icon and runs without browser chrome. -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./assets/logo.svg">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CircleSong">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
 <div class="stage">
@@ -63,6 +72,9 @@
           <span class="led"></span><span>Metro</span>
         </button>
         <button id="loopBtn" class="chip toggle" aria-pressed="true">Loop</button>
+        <button id="drumsQuickBtn" class="chip toggle" aria-pressed="false" title="Backing drums">
+          <span class="led"></span><span>Drums</span>
+        </button>
       </div>
     </header>
 
@@ -129,6 +141,34 @@
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="stack" id="rhythmList"></div>
+
+      <h2 class="mt">/04 DRUMS</h2>
+      <div class="row between">
+        <div>
+          <span class="setting-name">Backing drums</span>
+          <span class="setting-note">Locked to the transport, bar for bar</span>
+        </div>
+        <button id="drumsBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
+      <div class="row mt-s">
+        <span class="micro-label">KIT</span>
+        <select id="drumKitSelect" class="select grow" aria-label="Drum kit"></select>
+      </div>
+      <div class="stack mt-s" id="drumStyleList"></div>
+      <div class="sliders mt-s">
+        <div class="slider-row">
+          <label for="drumVolume">DRUM VOL</label>
+          <input id="drumVolume" type="range" min="0" max="1" step="0.01" value="0.7" class="grow">
+          <output id="drumVolumeOut">70%</output>
+        </div>
+      </div>
+      <div class="row between mt-s">
+        <div>
+          <span class="setting-name">Fill before the loop turns</span>
+          <span class="setting-note">A short fill on the last bar</span>
+        </div>
+        <button id="drumFillBtn" class="chip toggle solid" aria-pressed="true">On</button>
+      </div>
     </section>
 
     <!-- /04 COMPOSE -->
@@ -172,7 +212,15 @@
         <h2>/05 TIMELINE</h2>
         <div class="row gap-xs" id="barSizeRow"></div>
       </div>
-      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar.</p>
+      <div class="section-bar">
+        <div class="chip-row tight-row" id="sectionTabs"></div>
+        <div class="row gap-xs">
+          <button id="addSectionBtn" class="chip small" title="Add an empty loop">+ Loop</button>
+          <button id="dupSectionBtn" class="chip small" title="Duplicate this loop">Duplicate</button>
+          <button id="delSectionBtn" class="chip small" title="Delete this loop">Delete</button>
+        </div>
+      </div>
+      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar. While playing, switching loops waits for the bar line.</p>
       <div class="grid-4" id="timelineGrid"></div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>

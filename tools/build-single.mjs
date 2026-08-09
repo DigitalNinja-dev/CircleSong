@@ -15,7 +15,7 @@
  *    falling back to a data URL where a Content-Security-Policy forbids blobs.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,12 +33,43 @@ const MODULES = [
   'src/theory.js',
   'src/fretboard.js',
   'src/patterns.js',
+  'src/drum-patterns.js',
   'src/content.js',
   'src/audio/impulse.js',
+  'src/audio/drums.js',
   'src/audio/engine.js',
   'src/sequencer.js',
   'src/app.js',
 ];
+
+// Adding a module to src/ and forgetting to list it here produces a bundle that
+// throws only at runtime, and forgetting it in sw.js breaks the app offline
+// only. Both lists are checked against the directory so the drift is a build
+// error instead of a bug report.
+{
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (entry.name.endsWith('.js')) found.push(rel);
+    }
+  };
+  walk('src');
+
+  // The worklet is embedded as a string, not concatenated into the bundle.
+  const expected = found.filter((f) => f !== 'src/audio/guitar-processor.js');
+  const missing = expected.filter((f) => !MODULES.includes(f));
+  if (missing.length) {
+    throw new Error(`build: these modules exist but are not in MODULES: ${missing.join(', ')}`);
+  }
+
+  const sw = read('sw.js');
+  const uncached = found.filter((f) => !sw.includes(`./${f}`));
+  if (uncached.length) {
+    throw new Error(`build: these modules are not precached in sw.js: ${uncached.join(', ')}`);
+  }
+}
 
 const stripModuleSyntax = (src) =>
   src
@@ -109,8 +140,8 @@ const body = html
 // Webfonts are inlined as data URIs rather than linked: the page must render
 // its real typography with no network, and font CDNs are blocked outright in
 // sandboxed hosts. Regenerate with tools/fetch-fonts.mjs.
-const fonts = exists('tools/fonts.css') ? read('tools/fonts.css') : '';
-if (!fonts) console.warn('warning: tools/fonts.css missing — falling back to system faces');
+const fonts = exists('assets/fonts.css') ? read('assets/fonts.css') : '';
+if (!fonts) console.warn('warning: assets/fonts.css missing — falling back to system faces');
 
 const css = read('styles.css');
 const head = `<title>CircleSong</title>

@@ -29,6 +29,8 @@ import {
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
+import { DrumKit, DRUM_KITS } from './audio/drums.js';
+import { DRUM_STYLES, DRUM_STYLE_BY_ID, stylesForMeter } from './drum-patterns.js';
 import {
   FUNCTION_NAMES,
   FUNCTION_BLURB,
@@ -96,8 +98,20 @@ const state = {
   /** How many beats of the rhythm pattern an audition plays. */
   previewBeats: 4,
 
-  barCount: 8,
-  bars: makeBars(8),
+  /**
+   * Sections are the song's loops — a verse, a chorus, a turnaround. Only one
+   * plays at a time; switching while the transport runs waits for the bar line.
+   */
+  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }],
+  activeSection: 0,
+  /** Section queued to take over at the next bar line, or null. */
+  queuedSection: null,
+
+  drumsOn: false,
+  drumStyle: 'rockDrive',
+  drumKit: 'rock',
+  drumVolume: 0.7,
+  drumFills: true,
 
   activeTab: 'circle',
   moodId: null,
@@ -127,9 +141,22 @@ function makeBars(n, existing = []) {
   return Array.from({ length: n }, (_, i) => existing[i] || { slots: [null] });
 }
 
+/** The section currently being edited and played. */
+function activeSection() {
+  return state.sections[state.activeSection] || state.sections[0];
+}
+const bars = () => activeSection().bars;
+const barCount = () => activeSection().barCount;
+
+function setBars(nextBars, count) {
+  const sec = activeSection();
+  sec.bars = nextBars;
+  sec.barCount = count ?? nextBars.length;
+}
+
 const engine = new AudioEngine();
 const sequencer = new Sequencer(engine, () => ({
-  bars: state.bars,
+  bars: bars(),
   bpm: state.bpm,
   timeSig: state.timeSig,
   loop: state.loop,
@@ -137,6 +164,9 @@ const sequencer = new Sequencer(engine, () => ({
   rhythm: state.rhythm,
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
+  drumsOn: state.drumsOn,
+  drumStyle: state.drumStyle,
+  drumFills: state.drumFills,
 }));
 
 sequencer.onPlayhead = (idx) => {
@@ -161,6 +191,16 @@ async function ensureAudio() {
     await engine.init();
     engine.setPreset(state.tone);
     engine.setMasterVolume(state.volume);
+
+    // Drums join the chain at the master bus: after the guitar's body and
+    // cabinet colouring, before the limiter, so a loud groove cannot clip the
+    // output and both instruments share one master fader.
+    if (!engine.drums) {
+      engine.drums = new DrumKit(engine.ctx, engine.master);
+      sequencer.drums = engine.drums;
+    }
+    engine.drums.setKit(state.drumKit);
+    engine.drums.setVolume(state.drumVolume);
     audioError = null;
     renderTransport();
     return true;
@@ -257,17 +297,16 @@ async function playModeScale(idx) {
   if (!(await ensureAudio())) return;
   const steps = modeStepsAbsolute(MODE_IDS[idx]).concat([12]);
   const t0 = auditionStart();
-  const strings = tuning();
   steps.forEach((off, i) => {
-    const target = 60 + state.rootPc + off;
-    // Play each degree on whichever string can reach it most naturally.
-    let best = 0;
-    let bestFret = 99;
-    for (let s = 0; s < 6; s++) {
-      const fret = target - strings[s];
-      if (fret >= 0 && fret <= 14 && fret < bestFret) { best = s; bestFret = fret; }
-    }
-    engine.pluck({ string: best, midi: target, when: t0 + i * 0.26, velocity: 0.8 });
+    // Spread the run across strings so the notes ring into each other the way
+    // a played scale does, instead of each one choking the last.
+    engine.pluckNote({
+      midi: 60 + state.rootPc + off,
+      tuning: tuning(),
+      when: t0 + i * 0.26,
+      velocity: 0.8,
+      layer: true,
+    });
   });
 }
 
@@ -298,7 +337,7 @@ async function togglePlay() {
     if (!(await ensureAudio())) return;
     // An empty timeline still plays: the metronome runs, which is what you
     // want when working out a tempo or a feel before committing chords.
-    if (!state.bars.some((b) => b.slots.some(Boolean)) && !state.metronome) {
+    if (!bars().some((b) => b.slots.some(Boolean)) && !state.metronome) {
       toast('Timeline is empty — add chords, or switch the metronome on.');
     }
     sequencer.start();
@@ -327,14 +366,14 @@ function slotFromDegree(degree) {
 
 function assignSlot(barIdx, slotIdx, degree) {
   const d = degree != null ? degree : state.activeDegree;
-  const bar = state.bars[barIdx];
+  const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots[slotIdx] = slotFromDegree(d);
   renderTimeline();
 }
 
 function clearSlot(barIdx, slotIdx) {
-  const bar = state.bars[barIdx];
+  const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots[slotIdx] = null;
   if (bar.slots.length === 2 && !bar.slots[0] && !bar.slots[1]) bar.slots = [null];
@@ -342,7 +381,7 @@ function clearSlot(barIdx, slotIdx) {
 }
 
 function addHalfBar(barIdx) {
-  const bar = state.bars[barIdx];
+  const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots = [bar.slots[0] || null, slotFromDegree(state.activeDegree)];
   renderTimeline();
@@ -352,11 +391,10 @@ function applyDegrees(degrees, seventh) {
   const prevSeventh = state.seventh;
   state.seventh = !!seventh;
   const size = nearestBarSize(degrees.length);
-  const bars = makeBars(size);
-  degrees.forEach((d, i) => { bars[i] = { slots: [slotFromDegree(d)] }; });
+  const nextBars = makeBars(size);
+  degrees.forEach((d, i) => { nextBars[i] = { slots: [slotFromDegree(d)] }; });
   state.seventh = prevSeventh || !!seventh;
-  state.barCount = size;
-  state.bars = bars;
+  setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
   toast(`Loaded ${degrees.length} chords into ${size} bars.`);
@@ -364,7 +402,7 @@ function applyDegrees(degrees, seventh) {
 
 /** Re-derive every stored shape — used after a key, tuning, or mode change. */
 function reresolveAll() {
-  for (const bar of state.bars) {
+  for (const bar of bars()) {
     bar.slots = bar.slots.map((slot) => (slot ? slotFromDegree(slot.degree) : null));
   }
 }
@@ -523,17 +561,18 @@ function renderCircle() {
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
     const b = el('button', i === 0 ? 'tonic' : '', noteName(pc, preferFlats()));
     b.title = `Scale degree ${i + 1}`;
+    // Scale degrees are for jamming: they layer over whatever is sounding
+    // instead of cutting it, and each one is placed on a free string so a run
+    // rings like a real player moving across the neck.
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
-      const strings = tuning();
-      const target = 60 + pc + (pc < state.rootPc ? 12 : 0);
-      let s = 0;
-      let bestFret = 99;
-      for (let k = 0; k < 6; k++) {
-        const f = target - strings[k];
-        if (f >= 0 && f <= 14 && f < bestFret) { s = k; bestFret = f; }
-      }
-      engine.pluck({ string: s, midi: target, when: auditionStart(), velocity: 0.85 });
+      engine.pluckNote({
+        midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
+        tuning: tuning(),
+        when: engine.currentTime + 0.02,
+        velocity: 0.85,
+        layer: true,
+      });
     };
     strip.appendChild(b);
   });
@@ -584,27 +623,27 @@ function renderExplore() {
   card.hidden = false;
 }
 
-/** Sound the current explore selection as a chord or as a single note. */
+/**
+ * Sound the current explore selection.
+ *
+ * Exploring the wheel is a question — "what does this one sound like?" — so it
+ * answers with a single strum and stops. Running the whole rhythm pattern here
+ * meant one tap kept strumming for a full bar, which read as a note that would
+ * not stop.
+ */
 async function playExplore() {
   const target = exploreTarget();
   if (!target || !(await ensureAudio())) return;
+  const when = auditionStart();
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) { await playChordNow(target.chord, v); return; }
+    if (v) { engine.strumOnce({ midi: v.midi, when, velocity: 0.9 }); return; }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
-  const strings = tuning();
-  const midi = 60 + target.note;
-  let string = 0;
-  let bestFret = 99;
-  for (let k = 0; k < 6; k++) {
-    const fret = midi - strings[k];
-    if (fret >= 0 && fret <= 14 && fret < bestFret) { string = k; bestFret = fret; }
-  }
-  engine.pluck({ string, midi, when: auditionStart(), velocity: 0.85 });
+  engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
 }
 
 function renderTone() {
@@ -696,6 +735,56 @@ function renderTone() {
     b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
     list.appendChild(b);
   }
+
+  renderDrums();
+}
+
+function renderDrums() {
+  for (const id of ['drumsBtn', 'drumsQuickBtn']) {
+    const b = $(id);
+    b.setAttribute('aria-pressed', String(state.drumsOn));
+    if (id === 'drumsBtn') b.textContent = state.drumsOn ? 'On' : 'Off';
+  }
+
+  const fills = $('drumFillBtn');
+  fills.setAttribute('aria-pressed', String(state.drumFills));
+  fills.textContent = state.drumFills ? 'On' : 'Off';
+
+  const kitSel = $('drumKitSelect');
+  if (!kitSel.options.length) {
+    for (const [id, kit] of Object.entries(DRUM_KITS)) {
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = kit.label;
+      kitSel.appendChild(o);
+    }
+  }
+  kitSel.value = state.drumKit;
+
+  // Only offer grooves that fit the current metre — a 6/8 clave in 4/4 is not
+  // a useful option, it is a bug waiting to be reported.
+  const list = $('drumStyleList');
+  list.replaceChildren();
+  for (const style of stylesForMeter(state.timeSig)) {
+    const b = el('button', `list-btn${state.drumStyle === style.id ? ' active' : ''}`);
+    b.append(el('span', '', style.label), el('span', 'tag', style.meters.join(' ')));
+    b.onclick = () => {
+      state.drumStyle = style.id;
+      // Each groove names the kit it was written for; follow it unless the
+      // user has since chosen one deliberately.
+      state.drumKit = style.kit;
+      if (engine.drums) engine.drums.setKit(state.drumKit);
+      if (!state.drumsOn) toggleDrums(true);
+      renderDrums();
+    };
+    list.appendChild(b);
+  }
+}
+
+async function toggleDrums(on = !state.drumsOn) {
+  state.drumsOn = on;
+  if (on && !(await ensureAudio())) { state.drumsOn = false; }
+  renderDrums();
 }
 
 function renderCompose() {
@@ -820,14 +909,53 @@ function renderDiagram(chord) {
   $('shapeLabel').textContent = `${voicingToString(v)}  ·  ${state.voicingIndex % list.length + 1}/${list.length}`;
 }
 
+/**
+ * Switch the loop being played and edited. While the transport runs the change
+ * is deferred to the next bar line so it lands musically; the chip shows a
+ * queued state until it does.
+ */
+function selectSection(index) {
+  if (index === state.activeSection && state.queuedSection === null) return;
+  const apply = () => {
+    state.activeSection = index;
+    state.queuedSection = null;
+    renderTimeline();
+  };
+  if (sequencer.atNextBar(apply)) {
+    state.queuedSection = index;
+    renderTimeline();
+  }
+}
+
+function renderSectionTabs() {
+  const tabs = $('sectionTabs');
+  tabs.replaceChildren();
+  state.sections.forEach((sec, i) => {
+    const active = i === state.activeSection;
+    const queued = state.queuedSection === i;
+    const filled = sec.bars.filter((b) => b.slots.some(Boolean)).length;
+    const b = el('button', `chip small${active ? ' active' : ''}${queued ? ' queued' : ''}`);
+    b.append(el('span', '', sec.name));
+    b.append(el('span', 'tag', `${filled}/${sec.barCount}`));
+    b.title = queued ? 'Starts at the next bar' : `Loop ${sec.name}`;
+    b.onclick = () => selectSection(i);
+    b.ondblclick = () => {
+      const name = prompt('Loop name', sec.name);
+      if (name) { sec.name = name.slice(0, 12); renderTimeline(); }
+    };
+    tabs.appendChild(b);
+  });
+  $('delSectionBtn').disabled = state.sections.length < 2;
+}
+
 function renderTimeline() {
+  renderSectionTabs();
   const row = $('barSizeRow');
   row.replaceChildren();
   for (const size of BAR_SIZES) {
-    const b = el('button', `chip small${state.barCount === size ? ' active' : ''}`, String(size));
+    const b = el('button', `chip small${barCount() === size ? ' active' : ''}`, String(size));
     b.onclick = () => {
-      state.barCount = size;
-      state.bars = makeBars(size, state.bars);
+      setBars(makeBars(size, bars()), size);
       renderTimeline();
     };
     row.appendChild(b);
@@ -835,7 +963,7 @@ function renderTimeline() {
 
   const grid = $('timelineGrid');
   grid.replaceChildren();
-  state.bars.forEach((bar, idx) => {
+  bars().forEach((bar, idx) => {
     const cell = el('div', `bar-cell${idx === state.playheadIndex ? ' playhead' : ''}`);
     const inner = el('div', 'bar-row');
     const n = bar.slots.length;
@@ -1144,8 +1272,62 @@ function wire() {
     if (mood) applyDegrees(mood.degrees, mood.seventh);
   };
 
+  // --- loops / sections ---
+  const nextName = () => {
+    const used = new Set(state.sections.map((s) => s.name));
+    for (let i = 0; i < 26; i++) {
+      const name = String.fromCharCode(65 + i);
+      if (!used.has(name)) return name;
+    }
+    return `L${state.sections.length + 1}`;
+  };
+
+  $('addSectionBtn').onclick = () => {
+    const count = barCount();
+    state.sections.push({ id: Date.now(), name: nextName(), barCount: count, bars: makeBars(count) });
+    selectSection(state.sections.length - 1);
+    renderTimeline();
+  };
+
+  $('dupSectionBtn').onclick = () => {
+    const sec = activeSection();
+    state.sections.splice(state.activeSection + 1, 0, {
+      id: Date.now(),
+      name: nextName(),
+      barCount: sec.barCount,
+      // Slots are re-derived rather than shared, so editing the copy cannot
+      // reach back into the original.
+      bars: sec.bars.map((b) => ({ slots: b.slots.map((s) => (s ? { ...s } : null)) })),
+    });
+    selectSection(state.activeSection + 1);
+    renderTimeline();
+  };
+
+  $('delSectionBtn').onclick = () => {
+    if (state.sections.length < 2) return;
+    state.sections.splice(state.activeSection, 1);
+    state.activeSection = Math.max(0, Math.min(state.activeSection, state.sections.length - 1));
+    state.queuedSection = null;
+    renderTimeline();
+  };
+
+  // --- drums ---
+  $('drumsBtn').onclick = () => toggleDrums();
+  $('drumsQuickBtn').onclick = () => toggleDrums();
+  $('drumFillBtn').onclick = () => { state.drumFills = !state.drumFills; renderDrums(); };
+  $('drumKitSelect').onchange = (e) => {
+    state.drumKit = e.target.value;
+    if (engine.drums) engine.drums.setKit(state.drumKit);
+  };
+  const drumVol = $('drumVolume');
+  drumVol.oninput = () => {
+    state.drumVolume = Number(drumVol.value);
+    $('drumVolumeOut').textContent = `${Math.round(state.drumVolume * 100)}%`;
+    if (engine.drums) engine.drums.setVolume(state.drumVolume);
+  };
+
   $('clearTimelineBtn').onclick = () => {
-    state.bars = makeBars(state.barCount);
+    setBars(makeBars(barCount()), barCount());
     renderTimeline();
   };
   $('exportBtn').onclick = exportSong;
@@ -1177,7 +1359,7 @@ function wire() {
 
 function exportSong() {
   const data = {
-    format: 'circlesong.v1',
+    format: 'circlesong.v2',
     title: state.projectTitle,
     bpm: state.bpm,
     timeSig: state.timeSig,
@@ -1186,8 +1368,13 @@ function exportSong() {
     tone: state.tone,
     rhythm: state.rhythm,
     tuning: state.tuningId,
-    barCount: state.barCount,
-    bars: state.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills },
+    activeSection: state.activeSection,
+    sections: state.sections.map((sec) => ({
+      name: sec.name,
+      barCount: sec.barCount,
+      bars: sec.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+    })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1205,7 +1392,9 @@ function importSong(e) {
   reader.onload = () => {
     try {
       const data = JSON.parse(String(reader.result));
-      if (data.format !== 'circlesong.v1') throw new Error('Unrecognised file format');
+      if (!String(data.format || '').startsWith('circlesong.v')) {
+        throw new Error('Unrecognised file format');
+      }
       state.projectTitle = data.title || 'Untitled Song';
       state.bpm = Number(data.bpm) || 96;
       state.timeSig = TIME_SIGS.includes(data.timeSig) ? data.timeSig : '4/4';
@@ -1214,24 +1403,47 @@ function importSong(e) {
       state.tone = PRESETS[data.tone] ? data.tone : 'acoustic';
       state.rhythm = data.rhythm || 'straight8';
       state.tuningId = TUNINGS[data.tuning] ? data.tuning : 'standard';
-      state.barCount = Number(data.barCount) || 8;
-      state.bars = makeBars(state.barCount);
-      (data.bars || []).forEach((slots, i) => {
-        if (!state.bars[i]) return;
-        state.bars[i] = {
-          slots: slots.map((s) => {
-            if (!s) return null;
-            const prev = state.seventh;
-            state.seventh = !!s.seventh;
-            const prevMode = state.voicingMode;
-            state.voicingMode = VOICING_MODES[s.voicingMode] ? s.voicingMode : 'root';
-            const slot = slotFromDegree(s.degree);
-            state.seventh = prev;
-            state.voicingMode = prevMode;
-            return slot;
-          }),
-        };
+
+      if (data.drums) {
+        state.drumsOn = !!data.drums.on;
+        if (DRUM_STYLE_BY_ID[data.drums.style]) state.drumStyle = data.drums.style;
+        if (DRUM_KITS[data.drums.kit]) state.drumKit = data.drums.kit;
+        if (Number.isFinite(data.drums.volume)) state.drumVolume = data.drums.volume;
+        state.drumFills = data.drums.fills !== false;
+      }
+
+      // v1 held a single loop; v2 holds named sections. Reading a v1 file just
+      // means treating its one loop as the first section.
+      const incoming = data.sections || [
+        { name: 'A', barCount: data.barCount, bars: data.bars },
+      ];
+
+      state.sections = incoming.map((sec, i) => {
+        const count = Number(sec.barCount) || 8;
+        const built = makeBars(count);
+        (sec.bars || []).forEach((slots, b) => {
+          if (!built[b] || !Array.isArray(slots)) return;
+          built[b] = {
+            slots: slots.map((slot) => {
+              if (!slot) return null;
+              // slotFromDegree reads the live seventh/voicing settings, so they
+              // are borrowed for the rebuild and put straight back.
+              const prevSeventh = state.seventh;
+              const prevMode = state.voicingMode;
+              state.seventh = !!slot.seventh;
+              state.voicingMode = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              const rebuilt = slotFromDegree(slot.degree);
+              state.seventh = prevSeventh;
+              state.voicingMode = prevMode;
+              return rebuilt;
+            }),
+          };
+        });
+        return { id: i + 1, name: sec.name || String.fromCharCode(65 + i), barCount: count, bars: built };
       });
+      if (!state.sections.length) state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }];
+      state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
+
       if (engine.ready) engine.setPreset(state.tone);
       render();
       toast(`Loaded "${state.projectTitle}".`);
@@ -1253,5 +1465,29 @@ render();
 const arm = () => { ensureAudio(); document.removeEventListener('pointerdown', arm); };
 document.addEventListener('pointerdown', arm, { once: true });
 
+// Register the service worker that makes the app installable and offline-
+// capable. Guarded on the manifest link because the single-file build strips
+// it, and on http(s) because workers are unavailable on file:// origins —
+// without both checks those two ways of running the app log a fetch error.
+if (
+  'serviceWorker' in navigator &&
+  document.querySelector('link[rel="manifest"]') &&
+  location.protocol.startsWith('http')
+) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* Offline support is an enhancement; the app runs fine without it. */
+    });
+  });
+}
+
 // Expose for debugging in the console.
-window.CircleSong = { state, engine, sequencer, MODES };
+window.CircleSong = {
+  state,
+  engine,
+  sequencer,
+  MODES,
+  /** Bars of the loop currently active — state.sections holds them all. */
+  get bars() { return bars(); },
+  activeSection,
+};
