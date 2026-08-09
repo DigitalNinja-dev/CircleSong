@@ -8,6 +8,7 @@
 
 import { getPattern, swingTime } from './patterns.js';
 import { resolveVoicing, voicingNotes } from './fretboard.js';
+import { DRUM_STYLE_BY_ID, patternHits } from './drum-patterns.js';
 
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.15;
@@ -39,6 +40,25 @@ export class Sequencer {
     this.onPlayhead = null;
     this._raf = null;
     this._lastReported = -1;
+    /** Drum voices; assigned by the app once the context exists. */
+    this.drums = null;
+    /** Work deferred to the next bar line, so edits land musically. */
+    this._pending = null;
+    this._barsPlayed = 0;
+  }
+
+  /**
+   * Run `fn` at the next bar line rather than immediately, and restart the loop
+   * from its first bar. Switching sections mid-bar is what makes a change sound
+   * like a mistake; waiting for the bar is what makes it sound intentional.
+   *
+   * When the transport is stopped there is no bar line to wait for, so the
+   * change applies at once.
+   */
+  atNextBar(fn) {
+    if (!this.playing) { fn(); return false; }
+    this._pending = fn;
+    return true;
   }
 
   start() {
@@ -81,6 +101,20 @@ export class Sequencer {
     let guard = 0;
 
     while (this.nextBarTime < horizon && guard++ < 32) {
+      // Apply a queued change exactly on the bar line, then silence the old
+      // material at that same instant. The replacement is scheduled after this
+      // point, so the cut takes the outgoing loop and leaves the incoming one.
+      if (this._pending) {
+        const apply = this._pending;
+        this._pending = null;
+        apply();
+        this.engine.cut(this.nextBarTime, { level: 1, time: 0.02 });
+        this.barIndex = 0;
+        this.scheduled.length = 0;
+        this._lastReported = -1;
+        return this._tick();
+      }
+
       const idx = this.barIndex;
       const dur = barDuration(st.timeSig, st.bpm);
       this._scheduleBar(bars[idx], this.nextBarTime, dur, st);
@@ -108,6 +142,8 @@ export class Sequencer {
   }
 
   _scheduleBar(bar, startTime, dur, st) {
+    this._scheduleDrums(startTime, dur, st);
+
     if (st.metronome) {
       const { beats, unit } = parseTimeSig(st.timeSig);
       const beatDur = dur / beats;
@@ -128,6 +164,27 @@ export class Sequencer {
       this.scheduleChord(slot, startTime + i * slotDur, slotDur, st);
     });
     void slots;
+  }
+
+  /**
+   * Lay the drum pattern over one bar. Hits carry a fraction of the bar, so the
+   * same grid works in any time signature — the bar's duration does the rest,
+   * and the drums stay locked to the guitar because both are scheduled against
+   * the same audio clock from the same bar start.
+   */
+  _scheduleDrums(startTime, dur, st) {
+    if (!this.drums || !st.drumsOn || !st.drumStyle) return;
+    const style = DRUM_STYLE_BY_ID[st.drumStyle];
+    if (!style) return;
+
+    // A fill on the last bar of the loop signals the turnaround.
+    const bars = st.bars.length;
+    const isLastBar = bars > 1 && this.barIndex === bars - 1;
+    const fill = !!st.drumFills && isLastBar;
+
+    for (const hit of patternHits(style, { fill })) {
+      this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
+    }
   }
 
   /**

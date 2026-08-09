@@ -9,7 +9,7 @@
  * the old files.
  */
 
-const CACHE = 'circlesong-v1';
+const CACHE = 'circlesong-v2';
 
 const SHELL = [
   './',
@@ -22,11 +22,13 @@ const SHELL = [
   './src/theory.js',
   './src/fretboard.js',
   './src/patterns.js',
+  './src/drum-patterns.js',
   './src/content.js',
   './src/sequencer.js',
   './src/audio/engine.js',
   './src/audio/guitar-processor.js',
   './src/audio/impulse.js',
+  './src/audio/drums.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',

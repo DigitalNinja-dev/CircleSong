@@ -98,6 +98,14 @@ adds Play Console signing and review; nothing about the app itself changes.
   with custom time signatures (4/4, 3/4, 6/8, 3/8, 12/8) and BPM control.
   Bars can be split in half for two chords per bar. Drag chords in from the
   Compose tab.
+- **Multiple loops per song** — build a verse, a chorus and a turnaround as
+  separate loops and switch between them while playing. A switch waits for the
+  bar line, so the change lands on the beat instead of cutting mid-phrase.
+- **Backing drums** — twelve grooves across rock, funk, reggae, bossa,
+  Afro-Cuban 6/8, blues shuffle, waltz, Motown, cajon, lo-fi and metal, over six
+  kits. Scheduled against the same audio clock as the guitar, so they stay
+  locked bar for bar in any time signature, with an optional fill before the
+  loop turns around.
 - **Dynamic Fretboard & Inversion Switcher** — exact fingerings with chord-tone
   colouring, and instant auditioning of root position, 1st/2nd inversion,
   Drop-2 and Drop-3 voicings. Cycle alternative shapes for any chord.
@@ -166,12 +174,14 @@ src/
   theory.js              pitch classes, modes, diatonic harmony, Circle of Fifths
   fretboard.js           tunings, voicing search, inversions, Drop-2/Drop-3
   patterns.js            strum and fingerpicking patterns
+  drum-patterns.js       drum grooves as step grids, by genre and metre
   sequencer.js           lookahead transport, metronome, playhead
   content.js             harmonic-function copy, mode lessons, templates
   audio/
     engine.js            AudioContext, presets, signal chain, strum performance
     guitar-processor.js  AudioWorklet — the six string models
     impulse.js           synthesised body, cabinet, and room impulse responses
+    drums.js             synthesised drum kit voices
 tools/
   build-single.mjs       bundles everything into dist/circlesong.html
   fetch-fonts.mjs        regenerates assets/fonts.css (inlined webfont subsets)
