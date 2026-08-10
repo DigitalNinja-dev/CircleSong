@@ -132,6 +132,61 @@ export function archtopBodyIR(ctx) {
   );
 }
 
+/**
+ * Grand piano soundboard.
+ *
+ * A soundboard is a large, lightly damped plate, so it differs from a guitar
+ * body in two ways that matter: the modes run much lower and much denser, and
+ * they ring far longer. That long, dense tail is the "bloom" heard after a
+ * piano chord is struck, and it is most of what separates a modelled piano
+ * string from a piano.
+ */
+export function pianoBoardIR(ctx) {
+  return modalIR(
+    ctx,
+    [
+      [58, 0.9, 0.5],
+      [92, 1.0, 0.45],
+      [131, 0.8, 0.4],
+      [175, 0.62, 0.36],
+      [233, 0.5, 0.32],
+      [311, 0.42, 0.28],
+      [415, 0.34, 0.24],
+      [554, 0.26, 0.2],
+      [740, 0.2, 0.17],
+      [988, 0.15, 0.14],
+      [1320, 0.11, 0.11],
+      [1760, 0.08, 0.09],
+      [2350, 0.055, 0.07],
+      [3140, 0.038, 0.055],
+      [4190, 0.024, 0.045],
+    ],
+    { length: 0.75, tail: 0.5, seed: 5150, tailDecay: 9 }
+  );
+}
+
+/**
+ * Rhodes-style tine bar and pickup.
+ *
+ * An electric piano has almost no acoustic body — the tine is sensed
+ * electromagnetically, like a guitar pickup. The tone bar adds one strong low
+ * resonance and very little else, which is why the sound is so clean and why
+ * the bell-like attack survives all the way to the output.
+ */
+export function tineBarIR(ctx) {
+  return modalIR(
+    ctx,
+    [
+      [86, 1.0, 0.22],
+      [172, 0.4, 0.16],
+      [340, 0.18, 0.1],
+      [620, 0.08, 0.07],
+      [1180, 0.04, 0.05],
+    ],
+    { length: 0.22, tail: 0.1, seed: 6180, tailDecay: 40 }
+  );
+}
+
 /** 1x12 guitar cabinet: the classic ~80 Hz–5 kHz window with a presence peak. */
 export function cabinetIR(ctx) {
   return modalIR(

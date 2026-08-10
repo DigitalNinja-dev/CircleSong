@@ -34,6 +34,7 @@ const MODULES = [
   'src/fretboard.js',
   'src/patterns.js',
   'src/drum-patterns.js',
+  'src/harmony.js',
   'src/content.js',
   'src/audio/impulse.js',
   'src/audio/drums.js',

@@ -92,10 +92,18 @@
         <span class="micro-label">TAP PLAYS</span>
         <div class="row gap-xs grow" id="exploreModeBtns"></div>
       </div>
+      <div class="row between mb-s">
+        <div>
+          <span class="setting-name">Show secondary dominants</span>
+          <span class="setting-note">The chords that pull into each degree</span>
+        </div>
+        <button id="secDomBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
       <div class="wheel" id="wheel">
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
         <div class="wheel-spokes"></div>
+        <svg class="wheel-arcs" id="wheelArcs" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <div class="wheel-labels" id="wheelLabels"></div>
         <div class="wheel-hub">
           <span id="hubKey">C</span>
@@ -107,6 +115,11 @@
         <span>Fifths (dominant) ►</span>
       </div>
       <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant. Lock the key, then tap any wedge to hear it and see how it relates.</p>
+      <div id="secDomPanel" hidden>
+        <span class="micro-label">SECONDARY DOMINANTS</span>
+        <div id="secDomRow" class="row wrap gap-xs mt-s"></div>
+        <p id="secDomHint" class="body-copy tight"></p>
+      </div>
       <div id="exploreCard" class="explore-card" hidden>
         <span id="exploreName"></span>
         <p id="exploreText"></p>
@@ -210,9 +223,25 @@
         </div>
         <p id="activeFunctionBlurb" class="body-copy tight"></p>
 
-        <div class="row wrap gap-s">
-          <div id="inversionRow" class="row wrap gap-s"></div>
-          <button id="seventhBtn" class="chip small">+7th</button>
+        <div class="builder">
+          <div class="builder-row">
+            <span class="micro-label">SIZE</span>
+            <div id="chordSizeRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">COLOUR</span>
+            <div id="chordColourRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">ALTER</span>
+            <div id="chordAlterRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">SHAPE</span>
+            <div id="inversionRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <p id="chordBuilderHint" class="body-copy tight"></p>
+          <p id="chordScaleHint" class="scale-hint"></p>
         </div>
 
         <div class="diagram-row">
@@ -244,8 +273,47 @@
           <button id="delSectionBtn" class="chip small" title="Delete this loop">Delete</button>
         </div>
       </div>
-      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar. While playing, switching loops waits for the bar line.</p>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">THIS LOOP IS A</span>
+        <select id="sectionRoleSelect" class="select grow" aria-label="Section role"></select>
+      </div>
+      <p id="sectionRoleHint" class="hint block"></p>
       <div class="grid-4" id="timelineGrid"></div>
+
+      <!-- Chord picker: opens on the bar being edited. -->
+      <div id="pickerCard" class="card picker" hidden>
+        <div class="row between">
+          <span class="micro-label" id="pickerTitle">BAR 1</span>
+          <button id="pickerCloseBtn" class="chip small">Done</button>
+        </div>
+        <span class="micro-label mt-s">SUGGESTED NEXT</span>
+        <div id="pickerSuggestions" class="suggest-list"></div>
+        <span class="micro-label mt-s">EVERY CHORD IN THE KEY</span>
+        <div id="pickerScale" class="row wrap gap-xs"></div>
+        <div id="pickerEdit" hidden>
+          <span class="micro-label mt-s">THIS CHORD</span>
+          <div class="row wrap gap-xs" id="pickerSizeRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
+          <p id="pickerHint" class="body-copy tight"></p>
+          <button id="pickerClearBtn" class="chip small">Remove chord</button>
+        </div>
+      </div>
+
+      <div id="analysisCard" class="card analysis" hidden>
+        <span class="micro-label">HOW THIS LOOP READS</span>
+        <p id="analysisSummary" class="mono-strong"></p>
+        <p id="analysisCadence" class="body-copy tight"></p>
+        <ul id="analysisNotes" class="note-list"></ul>
+      </div>
+
+      <div class="row between mt">
+        <div>
+          <span class="setting-name">Smooth voicings</span>
+          <span class="setting-note">Pick shapes that connect, so the hand barely moves</span>
+        </div>
+        <button id="smoothBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
         <button id="exportBtn" class="chip small">Export JSON</button>

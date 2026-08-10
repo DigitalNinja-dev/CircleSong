@@ -16,6 +16,10 @@ import {
   keySignaturePrefersFlats,
   midiToName,
   modeStepsAbsolute,
+  chordForSpec,
+  describeSpec,
+  CHORD_COLOURS,
+  CHORD_ALTERATIONS,
 } from './theory.js';
 import {
   TUNINGS,
@@ -25,12 +29,23 @@ import {
   voicingPosition,
   voicingToString,
   VOICING_MODES,
+  smoothProgression,
+  progressionCost,
+  voiceLeadCost,
 } from './fretboard.js';
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
+import {
+  SECTION_ROLES,
+  suggestNext,
+  analyseProgression,
+  secondaryDominants,
+  scaleForChord,
+  idiomaticColours,
+} from './harmony.js';
 import {
   FUNCTION_NAMES,
   FUNCTION_BLURB,
@@ -56,10 +71,11 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-const TONE_ORDER = ['acoustic', 'nylon', 'electric', 'crunch', 'jazz', 'reggae'];
+const TONE_ORDER = ['acoustic', 'nylon', 'electric', 'crunch', 'jazz', 'reggae', 'piano', 'rhodes'];
 const TONE_COLOR = {
   acoustic: 'var(--d)', nylon: 'var(--b)', electric: 'var(--a)',
   crunch: 'var(--c)', jazz: 'var(--c)', reggae: 'var(--b)',
+  piano: 'var(--a)', rhodes: 'var(--d)',
 };
 
 const TABS = [
@@ -88,8 +104,17 @@ const state = {
   modeIdx: 0,
   activeDegree: 0,
   voicingMode: 'root',
-  seventh: false,
   voicingIndex: 0,
+
+  /**
+   * How chords are built, applied to whichever degree is chosen. Stored as a
+   * recipe rather than a finished chord so a progression survives a key change:
+   * `Dm9 – E7♭9 – Am9` in A minor becomes `Gm9 – A7♭9 – Dm9` in D minor without
+   * anything being re-entered.
+   */
+  chordSize: 3,        // notes in the stack: 3 triad, 4 seventh, 5 ninth, 6 eleventh, 7 thirteenth
+  chordColour: null,   // null = whatever the key gives; otherwise a CHORD_COLOURS id
+  chordAlterations: [],
 
   tone: 'acoustic',
   rhythm: 'straight8',
@@ -104,8 +129,10 @@ const state = {
    * Sections are the song's loops — a verse, a chorus, a turnaround. Only one
    * plays at a time; switching while the transport runs waits for the bar line.
    */
-  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }],
+  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }],
   activeSection: 0,
+  /** {barIdx, slotIdx} of the bar the chord picker is open on, or null. */
+  picker: null,
   /** Section queued to take over at the next bar line, or null. */
   queuedSection: null,
 
@@ -127,6 +154,8 @@ const state = {
   templateId: null,
   templateFamily: 'All',
   showAbout: false,
+  /** Draw the secondary-dominant arrows on the wheel. */
+  showSecDom: false,
 
   /**
    * Key lock turns the wheel from a key picker into an explorer: taps stop
@@ -238,12 +267,53 @@ const modeId = () => MODE_IDS[state.modeIdx];
 const tuning = () => TUNINGS[state.tuningId].midi;
 const preferFlats = () => keySignaturePrefersFlats(state.rootPc, modeId());
 
-function currentChords() {
-  return diatonicChords(state.rootPc, modeId(), state.seventh);
+/** The spec the builder controls are currently set to. */
+function currentSpec(degree = state.activeDegree) {
+  return {
+    degree: degree % 7,
+    size: state.chordSize,
+    colour: state.chordColour,
+    alterations: state.chordAlterations.slice(),
+  };
 }
 
-function chordForDegree(degree, seventh = state.seventh) {
-  return diatonicChords(state.rootPc, modeId(), seventh)[degree % 7];
+/** The seven degrees of the key, each built to the current recipe. */
+function currentChords() {
+  return Array.from({ length: 7 }, (_, d) => chordForSpec(state.rootPc, modeId(), currentSpec(d)));
+}
+
+/**
+ * Chord for a degree. Accepts either a bare degree (built to the live settings)
+ * or a stored spec, which is what timeline slots and templates carry.
+ */
+function chordForDegree(degree, spec = null) {
+  if (spec && typeof spec === 'object') {
+    return chordForSpec(state.rootPc, modeId(), { ...spec, degree: (spec.degree ?? degree) % 7 });
+  }
+  return chordForSpec(state.rootPc, modeId(), currentSpec(degree));
+}
+
+/**
+ * Normalise the shorthand used by templates and moods into a spec. A number is
+ * a plain degree; an object may name any part of the recipe.
+ */
+function toSpec(entry, fallbackSize) {
+  if (entry && typeof entry === 'object') {
+    return {
+      degree: (entry.degree ?? 0) % 7,
+      size: entry.size ?? fallbackSize,
+      colour: entry.colour ?? null,
+      alterations: entry.alterations ? entry.alterations.slice() : [],
+    };
+  }
+  return { degree: entry % 7, size: fallbackSize, colour: null, alterations: [] };
+}
+
+/** Templates predate the size selector, so `seventh: true` still means "4 notes". */
+function sizeFromLegacy(value, fallback = 3) {
+  if (typeof value === 'number') return Math.max(3, Math.min(7, value));
+  if (typeof value === 'boolean') return value ? 4 : 3;
+  return fallback;
 }
 
 function voicingList(chord, mode = state.voicingMode) {
@@ -359,17 +429,23 @@ async function togglePlay() {
 
 // ------------------------------------------------------------ timeline edits
 
-function slotFromDegree(degree) {
-  const chord = chordForDegree(degree);
-  const list = voicingList(chord);
+/**
+ * Build a timeline slot. The spec travels with the slot, so the chord can be
+ * rebuilt from scratch after a key, mode or tuning change — and so a 9th chord
+ * stays a 9th chord when the rest of the timeline is plain triads.
+ */
+function slotFromDegree(degree, spec = null, voicingMode = state.voicingMode) {
+  const full = spec ? { ...toSpec(spec, state.chordSize), degree: degree % 7 } : currentSpec(degree);
+  const chord = chordForDegree(degree, full);
+  const list = voicingList(chord, voicingMode);
   const voicing = list.length ? list[state.voicingIndex % list.length] : null;
   return {
-    degree,
+    degree: degree % 7,
+    spec: full,
     chord,
     voicing,
-    voicingMode: state.voicingMode,
-    seventh: state.seventh,
-    label: chordLabel(chord, VOICING_MODES[state.voicingMode].inversion, preferFlats()),
+    voicingMode,
+    label: chordLabel(chord, VOICING_MODES[voicingMode].inversion, preferFlats()),
     roman: chord.numeral,
   };
 }
@@ -401,23 +477,46 @@ function applyDegrees(degrees, seventh, mode = null) {
   // A suggestion carries the mode it belongs in. Applying it without switching
   // would silently produce different chords from the ones it is named for.
   if (mode && MODE_IDS.includes(mode)) state.modeIdx = MODE_IDS.indexOf(mode);
-  const prevSeventh = state.seventh;
-  state.seventh = !!seventh;
+  const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
   const nextBars = makeBars(size);
-  degrees.forEach((d, i) => { nextBars[i] = { slots: [slotFromDegree(d)] }; });
-  state.seventh = prevSeventh || !!seventh;
+  degrees.forEach((entry, i) => {
+    const spec = toSpec(entry, defaultSize);
+    nextBars[i] = { slots: [slotFromDegree(spec.degree, spec)] };
+  });
+  // Leave the builder set to the progression's own recipe, so the next chord
+  // added by hand matches what was just loaded instead of reverting to triads.
+  state.chordSize = defaultSize;
+  state.chordColour = null;
+  state.chordAlterations = [];
   setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
   toast(`Loaded ${degrees.length} chords into ${size} bars.`);
 }
 
-/** Re-derive every stored shape — used after a key, tuning, or mode change. */
+/**
+ * Re-derive every stored shape — used after a key, tuning, or mode change.
+ * Each slot rebuilds from its own spec, so a progression keeps the chord
+ * qualities it was written with instead of collapsing to the live settings.
+ */
 function reresolveAll() {
-  for (const bar of bars()) {
-    bar.slots = bar.slots.map((slot) => (slot ? slotFromDegree(slot.degree) : null));
+  for (const sec of state.sections) {
+    for (const bar of sec.bars) {
+      bar.slots = bar.slots.map((slot) =>
+        slot ? slotFromDegree(slot.degree, slot.spec, slot.voicingMode) : null
+      );
+    }
   }
+  // Smoothing is a property of the section, not a one-off edit, so a key, mode
+  // or tuning change re-derives it rather than dropping back to root shapes.
+  const active = state.activeSection;
+  state.sections.forEach((sec, i) => {
+    if (!sec.smooth) return;
+    state.activeSection = i;
+    applySmoothing();
+  });
+  state.activeSection = active;
 }
 
 // ------------------------------------------------------------------ rendering
@@ -571,6 +670,7 @@ function renderCircle() {
     modeBtns.appendChild(b);
   }
 
+  renderSecondaryDominants(posAt);
   renderExplore();
 
   const strip = $('scaleStrip');
@@ -593,6 +693,102 @@ function renderCircle() {
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Draw each secondary dominant as an arrow into the chord it resolves to.
+ *
+ * This is the one thing the circle of fifths is uniquely good at showing. A
+ * dominant resolves down a fifth, and down a fifth is one step counter-clockwise
+ * on this wheel — so every one of these arrows is the same short hop, and seeing
+ * six of them at once is what makes the pattern obvious rather than a rule to
+ * memorise. The chord list underneath is the part you can play.
+ */
+function renderSecondaryDominants(posAt) {
+  const svg = $('wheelArcs');
+  const panel = $('secDomPanel');
+  const btn = $('secDomBtn');
+  btn.setAttribute('aria-pressed', String(state.showSecDom));
+  btn.textContent = state.showSecDom ? 'On' : 'Off';
+
+  svg.replaceChildren();
+  panel.hidden = !state.showSecDom;
+  if (!state.showSecDom) return;
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const doms = secondaryDominants(state.rootPc, modeId());
+  // Where each chord root sits on the wheel: CIRCLE lists pitch classes in
+  // fifths order, which is exactly the wedge order.
+  const wedgeOf = (pc) => CIRCLE.indexOf(pc);
+
+  for (const d of doms) {
+    const from = wedgeOf(d.chord.root);
+    const to = wedgeOf(d.targetChord.root);
+    if (from < 0 || to < 0) continue;
+    const isMinorTarget = d.targetChord.intervals[1] === 3;
+    // Minor chords live on the inner ring, majors on the outer.
+    const r1 = 95;
+    const r2 = isMinorTarget ? 84 : 95;
+    const a = posAt(r1, from);
+    const b = posAt(r2, to);
+    // Bow the line toward the hub so arrows never cross the labels.
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const cx = 140 + (mx - 140) * 0.62;
+    const cy = 140 + (my - 140) * 0.62;
+
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', d.isOwnDominant ? 'var(--a)' : 'var(--c)');
+    path.setAttribute('stroke-width', d.isOwnDominant ? '2.2' : '1.4');
+    path.setAttribute('opacity', d.isOwnDominant ? '0.95' : '0.6');
+    path.setAttribute('marker-end', 'url(#secdom-arrow)');
+    svg.appendChild(path);
+  }
+
+  // One shared arrowhead.
+  const defs = document.createElementNS(NS, 'defs');
+  const marker = document.createElementNS(NS, 'marker');
+  marker.setAttribute('id', 'secdom-arrow');
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '5');
+  marker.setAttribute('markerHeight', '5');
+  marker.setAttribute('orient', 'auto-start-reverse');
+  const head = document.createElementNS(NS, 'path');
+  head.setAttribute('d', 'M 0 1 L 9 5 L 0 9 z');
+  head.setAttribute('fill', 'var(--c)');
+  marker.appendChild(head);
+  defs.appendChild(marker);
+  svg.insertBefore(defs, svg.firstChild);
+
+  const row = $('secDomRow');
+  row.replaceChildren();
+  for (const d of doms) {
+    const b = el('button', `chip small${d.isOwnDominant ? ' active' : ''}`, d.label);
+    b.title = d.why;
+    b.onclick = async () => {
+      $('secDomHint').textContent = d.why;
+      // Hearing it resolve is the explanation — play the dominant, then the
+      // chord it lands on.
+      if (!(await ensureAudio())) return;
+      const dur = Math.max((60 / state.bpm) * 2, 0.85);
+      const t0 = auditionStart();
+      [d.chord, d.targetChord].forEach((c, i) => {
+        const v = resolveVoicing(c, 'root', { tuning: tuning() });
+        if (!v) return;
+        sequencer.scheduleChord({ chord: c, voicing: v }, t0 + i * dur, dur, {
+          rhythm: state.rhythm,
+          tuning: tuning(),
+          velocity: 1,
+        });
+      });
+    };
+    row.appendChild(b);
+  }
+  $('secDomHint').textContent = 'Tap one to hear it resolve. Each arrow points at the chord that chord pulls into.';
 }
 
 /**
@@ -944,12 +1140,85 @@ function renderCompose() {
     invRow.appendChild(b);
   }
 
-  const seventhBtn = $('seventhBtn');
-  seventhBtn.classList.toggle('active', state.seventh);
-  seventhBtn.style.background = state.seventh ? 'var(--d)' : '';
-  seventhBtn.style.borderColor = state.seventh ? 'var(--d)' : '';
-
+  renderChordBuilder();
   renderDiagram(chord);
+}
+
+/** Note counts the size row offers, labelled the way a chart would name them. */
+const CHORD_SIZE_LABELS = [
+  [3, '△', 'Triad — root, third, fifth'],
+  [4, '7', 'Seventh chord'],
+  [5, '9', 'Ninth'],
+  [6, '11', 'Eleventh'],
+  [7, '13', 'Thirteenth — the full stack'],
+];
+
+/**
+ * The chord builder: size, colour, alterations.
+ *
+ * These three rows are what turn a fixed table of seven chords into a way of
+ * writing `Dm9 – E7♭9 – Am9`. Options that would not make sense on the current
+ * chord are disabled rather than hidden, so the shape of what is available
+ * stays learnable.
+ */
+function renderChordBuilder() {
+  const sizeRow = $('chordSizeRow');
+  sizeRow.replaceChildren();
+  for (const [size, label, title] of CHORD_SIZE_LABELS) {
+    const b = el('button', `chip small${state.chordSize === size ? ' active' : ''}`, label);
+    b.title = title;
+    b.onclick = () => {
+      state.chordSize = size;
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    sizeRow.appendChild(b);
+  }
+
+  const colourRow = $('chordColourRow');
+  colourRow.replaceChildren();
+  for (const c of CHORD_COLOURS) {
+    const on = state.chordColour === c.id;
+    const b = el('button', `chip small${on ? ' active' : ''}`, c.label);
+    b.title = c.hint;
+    if (on) { b.style.background = 'var(--b)'; b.style.borderColor = 'var(--b)'; }
+    b.onclick = () => {
+      state.chordColour = on ? null : c.id;
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    colourRow.appendChild(b);
+  }
+
+  // Alterations only mean something on a chord that has a seventh to alter.
+  const canAlter = state.chordSize >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(state.chordColour);
+  const alterRow = $('chordAlterRow');
+  alterRow.replaceChildren();
+  for (const a of CHORD_ALTERATIONS) {
+    const on = state.chordAlterations.includes(a.id);
+    const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
+    b.disabled = !canAlter;
+    b.title = canAlter ? `Add a ${a.label}` : 'Alterations need a seventh — pick 7 or larger first.';
+    if (on) { b.style.background = 'var(--c)'; b.style.borderColor = 'var(--c)'; }
+    b.onclick = () => {
+      state.chordAlterations = on
+        ? state.chordAlterations.filter((x) => x !== a.id)
+        : [...state.chordAlterations, a.id];
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    alterRow.appendChild(b);
+  }
+  if (!canAlter && state.chordAlterations.length) state.chordAlterations = [];
+
+  const spec = currentSpec();
+  $('chordBuilderHint').textContent = describeSpec(state.rootPc, modeId(), spec);
+  const sc = scaleForChord(spec, state.rootPc, modeId());
+  const avoid = sc.avoidPc === null ? '' : ` Careful with ${noteName(sc.avoidPc, preferFlats())}.`;
+  $('chordScaleHint').textContent = `Solo with ${sc.name}. ${sc.why}${avoid}`;
 }
 
 function renderDiagram(chord) {
@@ -1090,8 +1359,6 @@ function renderTimeline() {
         el('span', 'main', slot ? slot.label : '+'),
         el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : `Bar ${idx + 1}`)
       );
-      s.onclick = () => assignSlot(idx, slotIdx);
-      s.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); assignSlot(idx, slotIdx); } };
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('dragover'); };
       s.ondragleave = () => s.classList.remove('dragover');
       s.ondrop = (e) => {
@@ -1100,11 +1367,28 @@ function renderTimeline() {
         const deg = Number(e.dataTransfer.getData('text/plain'));
         if (!Number.isNaN(deg)) assignSlot(idx, slotIdx, deg);
       };
+      s.onclick = () => openPicker(idx, slotIdx);
+      s.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(idx, slotIdx); } };
+      if (state.picker && state.picker.barIdx === idx && state.picker.slotIdx === slotIdx) {
+        s.classList.add('editing');
+      }
       if (slot) {
         const x = el('button', 'clear', '✕');
         x.title = 'Clear';
         x.onclick = (e) => { e.stopPropagation(); clearSlot(idx, slotIdx); };
         s.appendChild(x);
+        // How far the hand travels to reach this chord from the one before it.
+        // Showing the number is what makes "Smooth voicings" legible rather
+        // than magic — the figures visibly drop when it is switched on.
+        const prev = previousSlot(idx, slotIdx);
+        if (prev && prev.voicing && slot.voicing) {
+          const move = Math.max(0, Math.round(voiceLeadCost(prev.voicing, slot.voicing)));
+          const tag = el('span', `move${move > 9 ? ' far' : ''}`, `↔${move}`);
+          tag.title = move > 9
+            ? 'A big jump from the previous chord — try Smooth voicings.'
+            : 'Fret movement from the previous chord.';
+          s.appendChild(tag);
+        }
       }
       inner.appendChild(s);
     });
@@ -1119,6 +1403,239 @@ function renderTimeline() {
     cell.appendChild(inner);
     grid.appendChild(cell);
   });
+
+  renderSectionRole();
+  renderPicker();
+  renderAnalysis();
+
+  const smooth = $('smoothBtn');
+  smooth.setAttribute('aria-pressed', String(!!section().smooth));
+  smooth.textContent = section().smooth ? 'On' : 'Off';
+}
+
+/** The section being edited. */
+function section() {
+  return state.sections[state.activeSection];
+}
+
+/** The part of a song that usually follows the one given. */
+function nextRole(role) {
+  const order = ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'outro'];
+  const i = order.indexOf(role || 'verse');
+  return order[Math.min(order.length - 1, i + 1)];
+}
+
+/** Every filled slot of the active section, in playing order. */
+function filledSlots() {
+  const out = [];
+  bars().forEach((bar, barIdx) => {
+    bar.slots.forEach((slot, slotIdx) => {
+      if (slot) out.push({ slot, barIdx, slotIdx });
+    });
+  });
+  return out;
+}
+
+/** The chord immediately before a given position, for voice-leading readouts. */
+function previousSlot(barIdx, slotIdx) {
+  const list = filledSlots();
+  const i = list.findIndex((e) => e.barIdx === barIdx && e.slotIdx === slotIdx);
+  return i > 0 ? list[i - 1].slot : null;
+}
+
+function renderSectionRole() {
+  const sel = $('sectionRoleSelect');
+  if (!sel.options.length) {
+    for (const [id, r] of Object.entries(SECTION_ROLES)) {
+      sel.appendChild(el('option', '', r.label)).value = id;
+    }
+  }
+  const role = section().role || 'verse';
+  sel.value = role;
+  $('sectionRoleHint').textContent = SECTION_ROLES[role].blurb;
+}
+
+/**
+ * Re-pick every shape in the section so the progression connects.
+ *
+ * Stored as a flag on the section rather than as frozen shapes, so a key or
+ * tuning change re-runs it: the progression stays smooth instead of smooth
+ * once.
+ */
+function applySmoothing() {
+  const sec = section();
+  const list = filledSlots();
+  if (!sec.smooth || list.length < 2) return;
+  const voicings = smoothProgression(list.map((e) => e.slot.chord), { tuning: tuning() });
+  list.forEach((e, i) => {
+    if (voicings[i]) {
+      e.slot.voicing = voicings[i];
+      e.slot.label = chordLabel(e.slot.chord, 0, preferFlats());
+    }
+  });
+}
+
+function renderAnalysis() {
+  const list = filledSlots();
+  const card = $('analysisCard');
+  if (list.length < 2) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const a = analyseProgression(
+    list.map((e) => e.slot.spec),
+    state.rootPc,
+    modeId(),
+    section().role || 'verse'
+  );
+  $('analysisSummary').textContent = `${a.summary}   ·   ${list.map((e) => e.slot.chord.symbol).join(' ')}`;
+  $('analysisCadence').textContent = a.cadence ? `${a.cadence.label} — ${a.cadence.note}` : '';
+
+  const notes = $('analysisNotes');
+  notes.replaceChildren();
+  for (const n of a.notes) notes.appendChild(el('li', n.level, n.text));
+
+  const cost = progressionCost(list.map((e) => e.slot.voicing).filter(Boolean));
+  notes.appendChild(el('li', 'idea', `Total fret movement across the loop: ${cost}.`));
+}
+
+function openPicker(barIdx, slotIdx) {
+  state.picker = { barIdx, slotIdx };
+  renderTimeline();
+  $('pickerCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closePicker() {
+  state.picker = null;
+  renderTimeline();
+}
+
+/**
+ * The chord picker.
+ *
+ * Three layers, in the order a writer needs them: what the app thinks should
+ * come next and why, then every chord the key contains, then the controls to
+ * take whichever chord was chosen and turn it into the exact voicing wanted.
+ */
+function renderPicker() {
+  const card = $('pickerCard');
+  if (!state.picker) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const { barIdx, slotIdx } = state.picker;
+  const bar = bars()[barIdx];
+  if (!bar || !bar.slots.length) { card.hidden = true; state.picker = null; return; }
+  const slot = bar.slots[slotIdx];
+  const role = section().role || 'verse';
+  $('pickerTitle').textContent =
+    bar.slots.length === 2 ? `BAR ${barIdx + 1} · ${slotIdx === 0 ? 'FIRST' : 'SECOND'} HALF` : `BAR ${barIdx + 1}`;
+
+  // Everything written before this position is the context for the suggestion.
+  const list = filledSlots();
+  const before = list.filter((e) => e.barIdx < barIdx || (e.barIdx === barIdx && e.slotIdx < slotIdx));
+  const suggestions = suggestNext({
+    tonicPc: state.rootPc,
+    modeId: modeId(),
+    written: before.map((e) => e.slot.spec),
+    role,
+    position: before.length,
+    total: Math.max(list.length + 1, barCount()),
+  }).slice(0, 5);
+
+  const sug = $('pickerSuggestions');
+  sug.replaceChildren();
+  for (const s of suggestions) {
+    const row = el('button', 'suggest');
+    row.append(
+      el('span', 'suggest-chord', s.chord.symbol),
+      el('span', 'suggest-numeral', s.chord.numeral),
+      el('span', `suggest-tag tag-${s.tag.toLowerCase()}`, s.tag),
+      el('span', 'suggest-why', s.reason)
+    );
+    row.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, s.spec);
+      previewSlot(barIdx, slotIdx);
+    };
+    sug.appendChild(row);
+  }
+
+  // Every chord in the key, at the size the builder is set to.
+  const scaleRow = $('pickerScale');
+  scaleRow.replaceChildren();
+  currentChords().forEach((c, d) => {
+    const on = slot && slot.spec.degree === d;
+    const b = el('button', `chip small${on ? ' active' : ''}`);
+    b.append(el('span', '', c.symbol), el('span', 'tag', c.numeral));
+    b.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, { ...currentSpec(d) });
+      previewSlot(barIdx, slotIdx);
+    };
+    scaleRow.appendChild(b);
+  });
+
+  // Per-chord editing, once there is a chord to edit.
+  const edit = $('pickerEdit');
+  edit.hidden = !slot;
+  if (!slot) return;
+  const spec = slot.spec;
+
+  const sizeRow = $('pickerSizeRow');
+  sizeRow.replaceChildren();
+  for (const [size, label, title] of CHORD_SIZE_LABELS) {
+    const b = el('button', `chip small${spec.size === size ? ' active' : ''}`, label);
+    b.title = title;
+    b.onclick = () => { setSlotSpec(barIdx, slotIdx, { ...spec, size }); previewSlot(barIdx, slotIdx); };
+    sizeRow.appendChild(b);
+  }
+
+  // Colours the key actually suggests for this degree come first and are
+  // marked, so the list teaches which ones belong rather than just listing all.
+  const idiomatic = new Set(idiomaticColours(spec.degree, modeId()).map((c) => c.colour));
+  const colourRow = $('pickerColourRow');
+  colourRow.replaceChildren();
+  for (const c of CHORD_COLOURS) {
+    const on = (spec.colour ?? null) === c.id;
+    const b = el('button', `chip small${on ? ' active' : ''}${idiomatic.has(c.id) ? ' idiomatic' : ''}`, c.label);
+    b.title = idiomatic.has(c.id) ? `${c.hint} — idiomatic on this degree.` : c.hint;
+    b.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, { ...spec, colour: on ? null : c.id });
+      previewSlot(barIdx, slotIdx);
+    };
+    colourRow.appendChild(b);
+  }
+
+  const canAlter = spec.size >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(spec.colour);
+  const alterRow = $('pickerAlterRow');
+  alterRow.replaceChildren();
+  for (const a of CHORD_ALTERATIONS) {
+    const on = (spec.alterations || []).includes(a.id);
+    const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
+    b.disabled = !canAlter;
+    b.onclick = () => {
+      const alterations = on
+        ? spec.alterations.filter((x) => x !== a.id)
+        : [...(spec.alterations || []), a.id];
+      setSlotSpec(barIdx, slotIdx, { ...spec, alterations });
+      previewSlot(barIdx, slotIdx);
+    };
+    alterRow.appendChild(b);
+  }
+
+  const sc = scaleForChord(spec, state.rootPc, modeId());
+  $('pickerHint').textContent = `${describeSpec(state.rootPc, modeId(), spec)} Solo with ${sc.name}.`;
+}
+
+function setSlotSpec(barIdx, slotIdx, spec) {
+  const bar = bars()[barIdx];
+  if (!bar) return;
+  bar.slots[slotIdx] = slotFromDegree(spec.degree, spec);
+  applySmoothing();
+  renderTimeline();
+}
+
+async function previewSlot(barIdx, slotIdx) {
+  const slot = bars()[barIdx] && bars()[barIdx].slots[slotIdx];
+  if (!slot || !slot.voicing || sequencer.playing) return;
+  await playChordNow(slot.chord, slot.voicing);
 }
 
 function renderLearn() {
@@ -1215,21 +1732,25 @@ function startQuiz() {
 }
 
 /**
- * The roman-numeral summary of a progression, derived from the chords it will
- * actually produce. Computing it rather than storing it means the label can
- * never drift from the sound — which is the whole point of showing it.
+ * The chords a suggestion will actually produce in the current key. Building
+ * them rather than storing labels means what is shown can never drift from what
+ * is heard — which is the whole point of showing it. Entries may be bare
+ * degrees or full specs, so a template can call for an altered dominant.
  */
-function numeralsFor(degrees, seventh, mode) {
+function chordsForSuggestion(degrees, seventh, mode) {
   const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
-  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
-  return degrees.map((d) => chords[d % 7].numeral).join('–');
+  const size = sizeFromLegacy(seventh, 3);
+  return degrees.map((entry) => chordForSpec(state.rootPc, modeName, toSpec(entry, size)));
+}
+
+/** The roman-numeral summary of a progression. */
+function numeralsFor(degrees, seventh, mode) {
+  return chordsForSuggestion(degrees, seventh, mode).map((c) => c.numeral).join('–');
 }
 
 /** The chord names a progression produces in the current key. */
 function chordNamesFor(degrees, seventh, mode) {
-  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
-  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
-  return degrees.map((d) => chords[d % 7].symbol).join(' ');
+  return chordsForSuggestion(degrees, seventh, mode).map((c) => c.symbol).join(' ');
 }
 
 function renderAssist() {
@@ -1331,14 +1852,16 @@ async function previewProgression(t) {
   if (!(await ensureAudio())) return;
   if (sequencer.playing) { toast('Stop playback to preview a progression.'); return; }
 
-  const modeName = t.mode && MODE_IDS.includes(t.mode) ? t.mode : modeId();
-  const chords = diatonicChords(state.rootPc, modeName, !!t.seventh);
+  const chords = chordsForSuggestion(t.degrees, t.seventh, t.mode).slice(0, 8);
   const dur = barDuration(state.timeSig, state.bpm);
   const t0 = auditionStart();
 
-  t.degrees.slice(0, 8).forEach((d, i) => {
-    const chord = chords[d % 7];
-    const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+  // Preview the progression the way it should be played — connected shapes, not
+  // a root-position grip per chord, which is what makes an audition sound like
+  // an exercise instead of music.
+  const voicings = smoothProgression(chords, { tuning: tuning() });
+  chords.forEach((chord, i) => {
+    const v = voicings[i] || resolveVoicing(chord, 'root', { tuning: tuning() });
     if (!v) return;
     sequencer.scheduleChord({ chord, voicing: v }, t0 + i * dur, dur, {
       rhythm: state.rhythm,
@@ -1447,16 +1970,37 @@ function wire() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showAbout) closeAbout(); });
 
   $('previewBtn').onclick = () => previewDegree(state.activeDegree);
-  $('seventhBtn').onclick = () => {
-    state.seventh = !state.seventh;
-    state.voicingIndex = 0;
-    renderCompose();
-    previewDegree(state.activeDegree);
-  };
   $('nextVoicingBtn').onclick = () => {
     state.voicingIndex += 1;
     renderCompose();
     previewDegree(state.activeDegree);
+  };
+
+  $('secDomBtn').onclick = () => {
+    state.showSecDom = !state.showSecDom;
+    renderCircle();
+  };
+
+  // --- timeline: role, picker, voice leading ---
+  $('sectionRoleSelect').onchange = (e) => {
+    section().role = e.target.value;
+    renderTimeline();
+  };
+  $('smoothBtn').onclick = () => {
+    const sec = section();
+    sec.smooth = !sec.smooth;
+    // Turning it off should put the shapes back, not leave the smoothed ones
+    // in place with the switch reading "off".
+    if (sec.smooth) applySmoothing();
+    else reresolveAll();
+    renderTimeline();
+  };
+  $('pickerCloseBtn').onclick = closePicker;
+  $('pickerClearBtn').onclick = () => {
+    if (!state.picker) return;
+    const { barIdx, slotIdx } = state.picker;
+    clearSlot(barIdx, slotIdx);
+    closePicker();
   };
 
   $('playScaleBtn').onclick = () => playModeScale(state.learnModeIdx);
@@ -1481,7 +2025,16 @@ function wire() {
 
   $('addSectionBtn').onclick = () => {
     const count = barCount();
-    state.sections.push({ id: Date.now(), name: nextName(), barCount: count, bars: makeBars(count) });
+    // A new loop is usually the next part of the song, so it defaults to the
+    // role that follows the current one rather than always to "verse".
+    state.sections.push({
+      id: Date.now(),
+      name: nextName(),
+      barCount: count,
+      bars: makeBars(count),
+      role: nextRole(section().role),
+      smooth: !!section().smooth,
+    });
     selectSection(state.sections.length - 1);
     renderTimeline();
   };
@@ -1492,6 +2045,8 @@ function wire() {
       id: Date.now(),
       name: nextName(),
       barCount: sec.barCount,
+      role: sec.role || 'verse',
+      smooth: !!sec.smooth,
       // Slots are re-derived rather than shared, so editing the copy cannot
       // reach back into the original.
       bars: sec.bars.map((b) => ({ slots: b.slots.map((s) => (s ? { ...s } : null)) })),
@@ -1592,7 +2147,7 @@ function wire() {
 
 function exportSong() {
   const data = {
-    format: 'circlesong.v2',
+    format: 'circlesong.v3',
     title: state.projectTitle,
     bpm: state.bpm,
     timeSig: state.timeSig,
@@ -1606,7 +2161,11 @@ function exportSong() {
     sections: state.sections.map((sec) => ({
       name: sec.name,
       barCount: sec.barCount,
-      bars: sec.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+      role: sec.role || 'verse',
+      smooth: !!sec.smooth,
+      bars: sec.bars.map((b) =>
+        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, voicingMode: s.voicingMode } : null))
+      ),
     })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1662,20 +2221,22 @@ function importSong(e) {
           built[b] = {
             slots: slots.map((slot) => {
               if (!slot) return null;
-              // slotFromDegree reads the live seventh/voicing settings, so they
-              // are borrowed for the rebuild and put straight back.
-              const prevSeventh = state.seventh;
-              const prevMode = state.voicingMode;
-              state.seventh = !!slot.seventh;
-              state.voicingMode = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
-              const rebuilt = slotFromDegree(slot.degree);
-              state.seventh = prevSeventh;
-              state.voicingMode = prevMode;
-              return rebuilt;
+              // Files written before the chord builder carry a `seventh` flag
+              // instead of a spec; both describe the same thing.
+              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
+              const vm = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              return slotFromDegree(slot.degree, spec, vm);
             }),
           };
         });
-        return { id: i + 1, name: sec.name || String.fromCharCode(65 + i), barCount: count, bars: built };
+        return {
+          id: i + 1,
+          name: sec.name || String.fromCharCode(65 + i),
+          barCount: count,
+          role: SECTION_ROLES[sec.role] ? sec.role : 'verse',
+          smooth: !!sec.smooth,
+          bars: built,
+        };
       });
       if (!state.sections.length) state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }];
       state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
@@ -1725,7 +2286,14 @@ window.CircleSong = {
   engine,
   sequencer,
   MODES,
+  PRESETS,
   /** Bars of the loop currently active — state.sections holds them all. */
   get bars() { return bars(); },
   activeSection,
+  render,
+  /** Re-derive every stored shape — what a key, mode or tuning change runs. */
+  reresolveAll,
+  // Exposed so tests can measure voice leading rather than eyeball it.
+  progressionCost,
+  voiceLeadCost,
 };

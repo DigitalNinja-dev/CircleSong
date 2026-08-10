@@ -14,6 +14,8 @@ import {
   steelBodyIR,
   nylonBodyIR,
   archtopBodyIR,
+  pianoBoardIR,
+  tineBarIR,
   cabinetIR,
   roomIR,
   driveCurve,
@@ -93,6 +95,40 @@ export const PRESETS = {
     reverb: 0.22,
     gain: 0.58,
     coupling: 0.003,
+  },
+
+  // Struck strings rather than plucked ones. `hammer` swaps the exciter for a
+  // felt contact pulse and `stiffness` stretches the partials off the harmonic
+  // series — together those two are what a piano is, physically.
+  piano: {
+    label: 'Grand Piano',
+    string: {
+      decay: 9.0, brightness: 0.5, pickPos: 0.125, hardness: 0.45,
+      pickupMix: 0, hammer: 1, stiffness: 0.55,
+    },
+    body: 'piano',
+    bodyMix: 0.7,
+    drive: 0,
+    tone: { low: 1.5, mid: -1, midFreq: 600, high: 1.5 },
+    reverb: 0.24,
+    gain: 0.42,
+    coupling: 0.02, // undamped neighbours ring in sympathy, as on a real piano
+    isKeyboard: true,
+  },
+  rhodes: {
+    label: 'Electric Piano',
+    string: {
+      decay: 6.0, brightness: 0.34, pickPos: 0.28, hardness: 0.3,
+      pickupMix: 0.3, pickupPos: 0.22, hammer: 0.8, stiffness: 0.85,
+    },
+    body: 'tine',
+    bodyMix: 0.55,
+    drive: 0.06,
+    tone: { low: 2, mid: -2.5, midFreq: 900, high: 2 },
+    reverb: 0.2,
+    gain: 0.2,
+    coupling: 0.004,
+    isKeyboard: true,
   },
 };
 
@@ -237,6 +273,8 @@ export class AudioEngine {
       steel: steelBodyIR(this.ctx),
       nylon: nylonBodyIR(this.ctx),
       archtop: archtopBodyIR(this.ctx),
+      piano: pianoBoardIR(this.ctx),
+      tine: tineBarIR(this.ctx),
       cabinet: cabinetIR(this.ctx),
     };
     this.room.buffer = roomIR(this.ctx);
@@ -432,8 +470,15 @@ export class AudioEngine {
       hardness: hardness ?? s.hardness,
       pickupMix: s.pickupMix ?? 0,
       pickupPos: s.pickupPos ?? 0.12,
+      hammer: s.hammer ?? 0,
+      stiffness: s.stiffness ?? 0,
       muteAmount,
     });
+  }
+
+  /** True when the current preset is struck rather than plucked. */
+  get isKeyboard() {
+    return !!this.preset.isKeyboard;
   }
 
   /** Damp a ringing string — note release or a fret-hand mute. */
@@ -466,6 +511,17 @@ export class AudioEngine {
     for (let s = 0; s < 6; s++) if (midi[s] !== null && midi[s] !== undefined) played.push(s);
     if (!played.length) return;
 
+    // Ten fingers land together; a pick crosses the strings one at a time. A
+    // keyboard preset played with a 22 ms strum sounds like a harp, so the
+    // spread collapses to the few milliseconds of a human hand and upstrokes
+    // stop dropping the bass — there is no such thing as an upstroke on a
+    // piano.
+    const keys = this.isKeyboard;
+    if (keys) {
+      spread = Math.min(spread, 0.006);
+      direction = 'D';
+    }
+
     let order = played;
     if (direction === 'U') {
       order = played.slice().reverse();
@@ -485,7 +541,7 @@ export class AudioEngine {
         midi: midi[s],
         when: when + i * gap + jitter,
         velocity: Math.min(1, v),
-        muteAmount,
+        muteAmount: keys ? 0 : muteAmount, // no palm muting a piano
         pickPos: basePickPos * (direction === 'U' ? 1.15 : 1) + s * 0.004,
       });
     });

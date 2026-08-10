@@ -247,6 +247,61 @@ export const TEMPLATES = [
     blurb: 'Sits on the tonic before moving — leaves space for the vocal.' },
   { id: 'celticVamp', family: 'Folk & Country', label: 'Celtic Vamp', mode: 'mixolydian', degrees: [0, 6, 0, 3], seventh: false,
     blurb: 'The ♭VII again, this time in a jig. Works beautifully in DADGAD.' },
+
+  // --- Jazz & neo-soul ---
+  //
+  // These are the progressions that need the chord builder: every entry is a
+  // spec, so the template asks for a specific quality on a specific degree
+  // rather than "all sevenths" applied uniformly. That is what lets a minor
+  // ii-V-i carry a half-diminished ii and an altered V while the i stays a m9.
+  { id: 'minorDom9', family: 'Jazz & Neo-Soul', label: 'Minor ii–V–i with a ♭9', mode: 'aeolian',
+    degrees: [
+      { degree: 3, size: 5 },
+      { degree: 4, size: 5, colour: 'dom', alterations: ['b9'] },
+      { degree: 0, size: 5 },
+      { degree: 0, size: 5 },
+    ],
+    blurb: 'Dm9 – E7♭9 – Am9 in A minor. The v has to be borrowed as a dominant to pull home, and the ♭9 is the note that makes it ache.' },
+  { id: 'minorTwoFive', family: 'Jazz & Neo-Soul', label: 'Half-Diminished ii–V–i', mode: 'aeolian',
+    degrees: [
+      { degree: 1, size: 4, colour: 'm7b5' },
+      { degree: 4, size: 5, colour: 'dom', alterations: ['b9'] },
+      { degree: 0, size: 5 },
+      { degree: 0, size: 5 },
+    ],
+    blurb: 'The textbook minor cadence: iiø7 sets up the dominant, the dominant lands on a m9.' },
+  { id: 'sixNineTurn', family: 'Jazz & Neo-Soul', label: '6/9 Turnaround', mode: 'ionian',
+    degrees: [
+      { degree: 0, size: 5, colour: '6' },
+      { degree: 5, size: 4 },
+      { degree: 1, size: 5 },
+      { degree: 4, size: 7, colour: 'dom' },
+    ],
+    blurb: 'A 6/9 tonic never quite sits down, so the loop keeps turning. The 13th on the V is the full jazz dominant.' },
+  { id: 'susResolve', family: 'Jazz & Neo-Soul', label: 'Sus4 Release', mode: 'mixolydian',
+    degrees: [
+      { degree: 0, size: 4, colour: 'sus4' },
+      { degree: 0, size: 5, colour: 'dom' },
+      { degree: 6, size: 4 },
+      { degree: 0, size: 4 },
+    ],
+    blurb: 'Hold the 4th, then let it fall to the 3rd. The oldest tension-and-release there is.' },
+  { id: 'secondaryCycle', family: 'Jazz & Neo-Soul', label: 'Secondary Dominant Cycle', mode: 'ionian',
+    degrees: [
+      { degree: 0, size: 4 },
+      { degree: 2, size: 4, colour: 'dom' },
+      { degree: 1, size: 4 },
+      { degree: 4, size: 5, colour: 'dom' },
+    ],
+    blurb: 'Every chord is the dominant of the next. Each borrowed 7th pulls a fifth down into the chord after it.' },
+  { id: 'neoSoulLoop', family: 'Jazz & Neo-Soul', label: 'Neo-Soul Loop', mode: 'dorian',
+    degrees: [
+      { degree: 0, size: 5 },
+      { degree: 3, size: 5, colour: 'dom' },
+      { degree: 5, size: 5 },
+      { degree: 4, size: 4, colour: 'sus4' },
+    ],
+    blurb: 'Dorian with ninths on everything. The major IV is what makes Dorian sound like Dorian rather than minor.' },
 ];
 
 export const TEMPLATE_FAMILIES = [...new Set(TEMPLATES.map((t) => t.family))];

@@ -504,6 +504,100 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .template-meta { font: 400 9px var(--mono); color: var(--dimmer); letter-spacing: 0.05em; text-transform: uppercase; }
 .variant-numerals { display: block; margin-top: 4px; font: 600 11px var(--mono); color: var(--c); }
 
+/* ---------------------------------------------------------- chord builder */
+/* Size, colour and alterations. The fixed label column keeps the three rows
+   reading as one control rather than three unrelated chip strips. */
+.builder { margin-top: 10px; }
+.builder-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.builder-row .micro-label { min-width: 52px; padding-top: 7px; }
+.chip.idiomatic { border-color: oklch(0.65 0.11 150 / 0.55); }
+.chip.idiomatic::after {
+  content: '•';
+  margin-left: 4px;
+  color: var(--b);
+  font-size: 13px;
+  line-height: 0;
+}
+.chip.idiomatic.active::after { color: var(--ink); }
+.scale-hint {
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--c);
+  background: oklch(0.2 0.013 250);
+  font: 400 11px/1.5 var(--sans);
+  color: oklch(0.72 0.008 250);
+}
+
+/* ------------------------------------------------- timeline chord picker */
+.picker { border-color: var(--a); }
+.suggest-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.suggest {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: oklch(0.19 0.012 250);
+  color: oklch(0.9 0.006 250);
+  text-align: left;
+  cursor: pointer;
+}
+.suggest:hover { border-color: var(--a); background: oklch(0.23 0.02 220); }
+.suggest-chord { font: 600 13px var(--display); }
+.suggest-numeral { font: 500 11px var(--mono); color: var(--a); }
+.suggest-tag {
+  font: 500 9px var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: oklch(0.3 0.02 250);
+  color: oklch(0.85 0.006 250);
+}
+.tag-tonic { background: oklch(0.45 0.13 150 / 0.5); }
+.tag-subdominant { background: oklch(0.45 0.13 250 / 0.5); }
+.tag-dominant { background: oklch(0.5 0.15 40 / 0.5); }
+.tag-borrowed { background: oklch(0.5 0.16 330 / 0.5); }
+.suggest-why {
+  grid-column: 1 / -1;
+  font: 400 10px/1.45 var(--sans);
+  color: oklch(0.66 0.008 250);
+}
+@media (min-width: 520px) {
+  .suggest-why { grid-column: auto; }
+}
+
+/* Fret movement badge on a filled slot: the number Smooth voicings reduces. */
+.slot .move {
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  font: 500 8px var(--mono);
+  color: oklch(0.6 0.09 150);
+}
+.slot .move.far { color: oklch(0.68 0.16 40); }
+.slot.editing { border-color: var(--a); box-shadow: 0 0 0 1px var(--a) inset; }
+
+/* ------------------------------------------------------ loop analysis */
+.analysis { border-left: 2px solid var(--c); }
+.analysis .mono-strong { margin: 6px 0 0; font: 600 12px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+.note-list { margin: 8px 0 0; padding-left: 16px; }
+.note-list li { font: 400 11px/1.55 var(--sans); color: oklch(0.7 0.008 250); margin-bottom: 3px; }
+.note-list li.hint { color: oklch(0.75 0.1 75); }
+.note-list li.idea { color: oklch(0.68 0.008 250); }
+
+/* ------------------------------------- secondary dominants on the wheel */
+.wheel-arcs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#secDomPanel { margin-top: 12px; }
+
 </style>
 </head>
 <body>
@@ -578,10 +672,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <span class="micro-label">TAP PLAYS</span>
         <div class="row gap-xs grow" id="exploreModeBtns"></div>
       </div>
+      <div class="row between mb-s">
+        <div>
+          <span class="setting-name">Show secondary dominants</span>
+          <span class="setting-note">The chords that pull into each degree</span>
+        </div>
+        <button id="secDomBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
       <div class="wheel" id="wheel">
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
         <div class="wheel-spokes"></div>
+        <svg class="wheel-arcs" id="wheelArcs" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <div class="wheel-labels" id="wheelLabels"></div>
         <div class="wheel-hub">
           <span id="hubKey">C</span>
@@ -593,6 +695,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <span>Fifths (dominant) ►</span>
       </div>
       <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant. Lock the key, then tap any wedge to hear it and see how it relates.</p>
+      <div id="secDomPanel" hidden>
+        <span class="micro-label">SECONDARY DOMINANTS</span>
+        <div id="secDomRow" class="row wrap gap-xs mt-s"></div>
+        <p id="secDomHint" class="body-copy tight"></p>
+      </div>
       <div id="exploreCard" class="explore-card" hidden>
         <span id="exploreName"></span>
         <p id="exploreText"></p>
@@ -696,9 +803,25 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         </div>
         <p id="activeFunctionBlurb" class="body-copy tight"></p>
 
-        <div class="row wrap gap-s">
-          <div id="inversionRow" class="row wrap gap-s"></div>
-          <button id="seventhBtn" class="chip small">+7th</button>
+        <div class="builder">
+          <div class="builder-row">
+            <span class="micro-label">SIZE</span>
+            <div id="chordSizeRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">COLOUR</span>
+            <div id="chordColourRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">ALTER</span>
+            <div id="chordAlterRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">SHAPE</span>
+            <div id="inversionRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <p id="chordBuilderHint" class="body-copy tight"></p>
+          <p id="chordScaleHint" class="scale-hint"></p>
         </div>
 
         <div class="diagram-row">
@@ -730,8 +853,47 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <button id="delSectionBtn" class="chip small" title="Delete this loop">Delete</button>
         </div>
       </div>
-      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar. While playing, switching loops waits for the bar line.</p>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">THIS LOOP IS A</span>
+        <select id="sectionRoleSelect" class="select grow" aria-label="Section role"></select>
+      </div>
+      <p id="sectionRoleHint" class="hint block"></p>
       <div class="grid-4" id="timelineGrid"></div>
+
+      <!-- Chord picker: opens on the bar being edited. -->
+      <div id="pickerCard" class="card picker" hidden>
+        <div class="row between">
+          <span class="micro-label" id="pickerTitle">BAR 1</span>
+          <button id="pickerCloseBtn" class="chip small">Done</button>
+        </div>
+        <span class="micro-label mt-s">SUGGESTED NEXT</span>
+        <div id="pickerSuggestions" class="suggest-list"></div>
+        <span class="micro-label mt-s">EVERY CHORD IN THE KEY</span>
+        <div id="pickerScale" class="row wrap gap-xs"></div>
+        <div id="pickerEdit" hidden>
+          <span class="micro-label mt-s">THIS CHORD</span>
+          <div class="row wrap gap-xs" id="pickerSizeRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
+          <p id="pickerHint" class="body-copy tight"></p>
+          <button id="pickerClearBtn" class="chip small">Remove chord</button>
+        </div>
+      </div>
+
+      <div id="analysisCard" class="card analysis" hidden>
+        <span class="micro-label">HOW THIS LOOP READS</span>
+        <p id="analysisSummary" class="mono-strong"></p>
+        <p id="analysisCadence" class="body-copy tight"></p>
+        <ul id="analysisNotes" class="note-list"></ul>
+      </div>
+
+      <div class="row between mt">
+        <div>
+          <span class="setting-name">Smooth voicings</span>
+          <span class="setting-note">Pick shapes that connect, so the hand barely moves</span>
+        </div>
+        <button id="smoothBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
         <button id="exportBtn" class="chip small">Export JSON</button>
@@ -806,7 +968,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 (() => {
 'use strict';
 
-const WORKLET_SRC = "/**\n * CircleSong string synthesis worklet.\n *\n * Six independent digital waveguide (extended Karplus-Strong) string models,\n * coupled through a shared bridge. Running in an AudioWorklet is what makes\n * this possible at all: the string loop needs single-sample feedback, which no\n * arrangement of native WebAudio nodes can express.\n *\n * Per string:\n *   excitation -> [ delay line -> fractional-delay allpass -> loop filter\n *                   -> loop gain -> (+ bridge coupling) ] -> pickup comb -> out\n *\n * The excitation is a noise burst shaped by pick hardness (one-pole lowpass)\n * and pick position (feed-forward comb), which is what gives the attack its\n * character. Loop gain is derived from a target T60 so decay time is specified\n * in seconds rather than by an opaque coefficient, and the loop filter makes\n * high partials die faster than low ones — the single most audible property of\n * a real plucked string.\n */\n\nconst MAX_DELAY = 4096; // ~11.7 Hz at 48 kHz, far below any guitar string\nconst MASK = MAX_DELAY - 1;\n\nclass StringModel {\n  constructor(sampleRate, index) {\n    this.sr = sampleRate;\n    this.index = index;\n    this.buf = new Float32Array(MAX_DELAY);\n    this.w = 0;\n\n    this.delay = 100;\n    this.intDelay = 99;\n    this.apCoef = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    this.lpState = 0;\n    this.lpCoef = 0.5;\n    this.loopGain = 0.995;\n\n    this.freq = 110;\n    this.amp = 0;\n    this.active = false;\n\n    // Pickup comb (electric): fraction of the string length from the bridge.\n    this.pickupPos = 0.12;\n    this.pickupMix = 0;\n\n    // Body/bridge DC blocker so coupling can't build up a rail offset.\n    this.dcX1 = 0;\n    this.dcY1 = 0;\n\n    // Mute envelope: multiplies loop gain, used for palm mutes and note-offs.\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    this.rng = 0x9e3779b9 ^ (index * 0x85ebca6b);\n  }\n\n  noise() {\n    // xorshift32 — deterministic per string, no allocation.\n    let x = this.rng;\n    x ^= x << 13;\n    x ^= x >>> 17;\n    x ^= x << 5;\n    this.rng = x >>> 0;\n    return (this.rng / 0x7fffffff) - 1;\n  }\n\n  /**\n   * Excite the string.\n   * @param {object} p\n   *  freq, velocity, decay (T60 seconds), brightness 0..1, pickPos 0..0.5,\n   *  hardness 0..1, pickupPos, pickupMix, muteAmount 0..1\n   */\n  pluck(p) {\n    const freq = Math.max(20, Math.min(this.sr / 4, p.freq));\n    this.freq = freq;\n    const total = this.sr / freq;\n\n    // Split into an integer delay plus a first-order allpass handling the\n    // fractional part. Keep the fractional part near 1.0 where the allpass is\n    // best behaved (a delay of ~0 makes the filter ring).\n    let intDelay = Math.floor(total) - 1;\n    let frac = total - intDelay;\n    if (intDelay < 2) {\n      intDelay = 2;\n      frac = Math.max(0.1, total - intDelay);\n    }\n    this.delay = total;\n    this.intDelay = intDelay;\n    this.apCoef = (1 - frac) / (1 + frac);\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    const vel = Math.max(0.02, Math.min(1, p.velocity ?? 0.8));\n    const mute = Math.max(0, Math.min(1, p.muteAmount ?? 0));\n\n    // Loop filter. The cutoff tracks the fundamental rather than sitting at a\n    // fixed frequency: a real string's losses scale with partial number, so\n    // what stays constant across the neck is roughly *how many harmonics*\n    // survive, not which kilohertz. A fixed cutoff is the single biggest\n    // reason naive Karplus-Strong sounds like a sitar on the low strings and\n    // like a rubber band on the high ones. The absolute ceiling then keeps the\n    // top strings from screaming, which is also what real ones do.\n    const brightness = Math.max(0.02, Math.min(0.999, (p.brightness ?? 0.5) * (0.75 + 0.35 * vel)));\n    const harmonics = 8 + brightness * 46;\n    const ceiling = 6500 * (1 - 0.65 * mute);\n    const cutoff = Math.max(\n      120,\n      Math.min(freq * harmonics * (1 - 0.5 * mute), ceiling, this.sr * 0.45)\n    );\n    this.lpCoef = Math.exp((-2 * Math.PI * cutoff) / this.sr);\n\n    // T60 -> per-period loop gain: g^(freq*T60) = 10^-3\n    let t60 = Math.max(0.05, p.decay ?? 3.0);\n    if (mute > 0) t60 *= 1 - 0.93 * mute;\n    // Lower strings sustain longer; higher strings shed energy faster.\n    t60 *= 1 + 0.35 * (1 - Math.min(1, freq / 330));\n    this.loopGain = Math.min(0.99995, Math.pow(10, -3 / (freq * t60)));\n\n    this.pickupPos = p.pickupPos ?? 0.12;\n    this.pickupMix = p.pickupMix ?? 0;\n\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    // --- Build the excitation burst ---\n    const n = Math.max(2, Math.round(total));\n    const hardness = Math.max(0, Math.min(1, p.hardness ?? 0.5));\n    // A soft fingertip is a low-passed impulse; a hard plectrum is closer to\n    // white. Map hardness onto the one-pole smoothing of the noise burst.\n    const smooth = 0.9 - 0.88 * hardness;\n\n    const burst = new Float32Array(n);\n    let s = 0;\n    for (let i = 0; i < n; i++) {\n      const white = this.noise();\n      s = smooth * s + (1 - smooth) * white;\n      // Taper the burst so the pluck has a short, non-clicky rise.\n      const env = i < n * 0.1 ? i / (n * 0.1) : 1;\n      burst[i] = s * env;\n    }\n\n    // Pick position comb: plucking at position β notches every (1/β)-th\n    // harmonic. The coefficient is just under 1 so the notches are deep\n    // without turning the whole burst into a differentiator.\n    const beta = Math.max(0.02, Math.min(0.5, p.pickPos ?? 0.13));\n    const dly = Math.max(1, Math.round(beta * n));\n    const combed = new Float32Array(n);\n    for (let i = 0; i < n; i++) {\n      combed[i] = burst[i] - 0.9 * (i >= dly ? burst[i - dly] : 0);\n    }\n\n    // Spectral tilt. An ideal plucked string's initial displacement puts\n    // amplitude ~ sin(nπβ)/n² into partial n — the comb above supplies the\n    // sin(nπβ) term, this supplies the 1/n². Two cascaded one-poles give the\n    // required -12 dB/oct; a single pole (-6 dB/oct) leaves the note thin and\n    // nasal, with more energy around the 11th harmonic than the fundamental.\n    // The corner is referenced to the pitch and opened up by pick hardness, so\n    // a fingertip is mellow and a plectrum is bright at every pitch.\n    const tiltFc = Math.min(freq * (0.5 + 1.5 * hardness), this.sr * 0.4);\n    const tiltA = 1 - Math.exp((-2 * Math.PI * tiltFc) / this.sr);\n    let t1 = 0;\n    let t2 = 0;\n    for (let i = 0; i < n; i++) {\n      t1 += tiltA * (combed[i] - t1);\n      t2 += tiltA * (t1 - t2);\n      combed[i] = t2;\n    }\n\n    // Normalise so velocity, not the RNG, controls level.\n    let peak = 1e-6;\n    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(combed[i]));\n    const gain = (vel * 0.7) / peak;\n\n    // Replace the delay-line contents. Re-plucking a ringing string damps what\n    // was there rather than summing with it, which is what a real pick does.\n    const keep = 0.25;\n    for (let i = 0; i < MAX_DELAY; i++) this.buf[i] *= keep;\n    for (let i = 0; i < n; i++) {\n      const idx = (this.w - i + MAX_DELAY) & MASK;\n      this.buf[idx] += combed[i] * gain;\n    }\n\n    this.lpState = 0;\n    this.active = true;\n    this.amp = vel;\n  }\n\n  /** Damp a ringing string (note-off, fret-hand mute, or palm mute). */\n  release(level = 0.5, timeSec = 0.12) {\n    this.muteTarget = Math.max(0, 1 - level);\n    this.muteRate = Math.exp(-1 / Math.max(1, timeSec * this.sr));\n  }\n\n  silence() {\n    this.buf.fill(0);\n    this.active = false;\n    this.amp = 0;\n    this.lpState = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n    this.muteGain = 1;\n    this.muteTarget = 1;\n  }\n\n  /** Advance one sample. `coupling` is the shared bridge signal. */\n  tick(coupling) {\n    if (!this.active) return 0;\n\n    const r = (this.w - this.intDelay + MAX_DELAY) & MASK;\n    const x = this.buf[r];\n\n    // First-order allpass for the fractional delay.\n    const a = this.apCoef;\n    const y = a * x + this.apX1 - a * this.apY1;\n    this.apX1 = x;\n    this.apY1 = y;\n\n    // One-pole lowpass in the loop => frequency-dependent decay.\n    this.lpState = (1 - this.lpCoef) * y + this.lpCoef * this.lpState;\n\n    this.muteGain = this.muteTarget + (this.muteGain - this.muteTarget) * this.muteRate;\n    const fed = this.lpState * this.loopGain * this.muteGain + coupling;\n\n    this.buf[this.w] = fed;\n\n    // Output tap. With pickupMix > 0 we take the difference between the bridge\n    // and a point further along the string: the comb notch of a magnetic pickup.\n    let out = y;\n    if (this.pickupMix > 0) {\n      const pd = Math.max(1, Math.round(this.pickupPos * this.delay));\n      const pr = (this.w - pd + MAX_DELAY) & MASK;\n      out = y - this.buf[pr] * this.pickupMix;\n    }\n\n    // A hand landing on the strings silences what is already travelling down\n    // the delay line, not just what recirculates — so damping has to attenuate\n    // the output too, otherwise a \"cut\" still rings for a full period.\n    out *= this.muteGain;\n\n    this.w = (this.w + 1) & MASK;\n\n    // DC blocker.\n    const dc = out - this.dcX1 + 0.9985 * this.dcY1;\n    this.dcX1 = out;\n    this.dcY1 = dc;\n\n    // Cheap activity gate so idle strings cost nothing.\n    this.amp = Math.max(Math.abs(dc), this.amp * 0.9995);\n    if (this.amp < 2e-5) {\n      this.active = false;\n      this.amp = 0;\n    }\n    return dc;\n  }\n}\n\nclass GuitarProcessor extends AudioWorkletProcessor {\n  constructor() {\n    super();\n    this.strings = Array.from({ length: 6 }, (_, i) => new StringModel(sampleRate, i));\n    this.queue = [];\n    this.coupling = 0.006;\n    this.bridgeState = 0;\n    /** Previous-sample output per string, so a string never drives itself. */\n    this.last = new Float32Array(6);\n    // Slight stereo spread: low strings left, high strings right.\n    this.pan = [-0.35, -0.22, -0.08, 0.08, 0.22, 0.35];\n    this.master = 0.9;\n    this.running = true;\n\n    this.port.onmessage = (e) => this.onMessage(e.data);\n  }\n\n  onMessage(msg) {\n    switch (msg.type) {\n      case 'pluck':\n      case 'release':\n        this.queue.push(msg);\n        // Keep the queue ordered by scheduled frame.\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n\n      // Retrigger: silence everything from `frame` onward. Pending events at or\n      // after that point are dropped rather than allowed to fire, which is what\n      // stops a rapid series of clicks from piling chords on top of each other.\n      // Notes scheduled *after* this message arrives still play, so the caller\n      // cuts first and schedules the replacement second.\n      case 'cut':\n        this.queue = this.queue.filter((e) => e.frame < msg.frame);\n        this.queue.push({\n          type: 'cutAll',\n          frame: msg.frame,\n          level: msg.level ?? 1,\n          time: msg.time ?? 0.03,\n        });\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n      case 'config':\n        if (msg.coupling !== undefined) this.coupling = msg.coupling;\n        if (msg.master !== undefined) this.master = msg.master;\n        break;\n      case 'allNotesOff':\n        this.queue.length = 0;\n        this.strings.forEach((s) => s.silence());\n        break;\n      case 'stop':\n        this.running = false;\n        break;\n    }\n  }\n\n  applyEvent(ev) {\n    if (ev.type === 'cutAll') {\n      for (const s of this.strings) s.release(ev.level, ev.time);\n      return;\n    }\n    const s = this.strings[ev.string & 5];\n    if (ev.type === 'pluck') s.pluck(ev);\n    else s.release(ev.level ?? 0.6, ev.time ?? 0.1);\n  }\n\n  process(_inputs, outputs) {\n    const out = outputs[0];\n    const left = out[0];\n    const right = out.length > 1 ? out[1] : out[0];\n    const n = left.length;\n    const base = currentFrame;\n\n    for (let i = 0; i < n; i++) {\n      // Sample-accurate event dispatch.\n      while (this.queue.length && this.queue[0].frame <= base + i) {\n        this.applyEvent(this.queue.shift());\n      }\n\n      let l = 0;\n      let r = 0;\n      let sum = 0;\n      const bridge = this.bridgeState;\n\n      for (let k = 0; k < 6; k++) {\n        const st = this.strings[k];\n        if (!st.active) {\n          this.last[k] = 0;\n          continue;\n        }\n        // Drive each string with the bridge motion caused by the *other*\n        // strings. Leaving its own contribution in place is positive feedback:\n        // it silently raises the loop gain and stretches every note far past\n        // the decay time the preset asked for.\n        const v = st.tick((bridge - this.last[k]) * this.coupling);\n        this.last[k] = v;\n        sum += v;\n        const p = this.pan[k];\n        l += v * (1 - p) * 0.5;\n        r += v * (1 + p) * 0.5;\n      }\n\n      // Bridge admittance: lowpassed sum of all strings.\n      this.bridgeState = this.bridgeState * 0.72 + sum * 0.28;\n\n      left[i] = l * this.master;\n      right[i] = r * this.master;\n    }\n\n    return this.running;\n  }\n}\n\nregisterProcessor('guitar-processor', GuitarProcessor);\n";
+const WORKLET_SRC = "/**\n * CircleSong string synthesis worklet.\n *\n * Six independent digital waveguide (extended Karplus-Strong) string models,\n * coupled through a shared bridge. Running in an AudioWorklet is what makes\n * this possible at all: the string loop needs single-sample feedback, which no\n * arrangement of native WebAudio nodes can express.\n *\n * Per string:\n *   excitation -> [ delay line -> fractional-delay allpass -> loop filter\n *                   -> loop gain -> (+ bridge coupling) ] -> pickup comb -> out\n *\n * The excitation is a noise burst shaped by pick hardness (one-pole lowpass)\n * and pick position (feed-forward comb), which is what gives the attack its\n * character. Loop gain is derived from a target T60 so decay time is specified\n * in seconds rather than by an opaque coefficient, and the loop filter makes\n * high partials die faster than low ones — the single most audible property of\n * a real plucked string.\n */\n\nconst MAX_DELAY = 4096; // ~11.7 Hz at 48 kHz, far below any guitar string\nconst MASK = MAX_DELAY - 1;\nconst DISPERSION_MAX = 8; // allpass sections available for string stiffness\n\nclass StringModel {\n  constructor(sampleRate, index) {\n    this.sr = sampleRate;\n    this.index = index;\n    this.buf = new Float32Array(MAX_DELAY);\n    this.w = 0;\n\n    this.delay = 100;\n    this.intDelay = 99;\n    this.apCoef = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    this.lpState = 0;\n    this.lpCoef = 0.5;\n    this.loopGain = 0.995;\n\n    // Stiffness dispersion. A cascade of first-order allpasses delays low\n    // frequencies more than high ones, so the partials spread upward instead of\n    // sitting at exact integer multiples. That stretch is what a piano is: it\n    // is why a piano and a guitar playing the same note are never confusable,\n    // and why piano tuners stretch the octaves to match it.\n    this.dispCoef = 0;\n    this.dispN = 0;\n    this.dispX = new Float32Array(DISPERSION_MAX);\n    this.dispY = new Float32Array(DISPERSION_MAX);\n\n    this.freq = 110;\n    this.amp = 0;\n    this.active = false;\n\n    // Pickup comb (electric): fraction of the string length from the bridge.\n    this.pickupPos = 0.12;\n    this.pickupMix = 0;\n\n    // Body/bridge DC blocker so coupling can't build up a rail offset.\n    this.dcX1 = 0;\n    this.dcY1 = 0;\n\n    // Mute envelope: multiplies loop gain, used for palm mutes and note-offs.\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    this.rng = 0x9e3779b9 ^ (index * 0x85ebca6b);\n  }\n\n  noise() {\n    // xorshift32 — deterministic per string, no allocation.\n    let x = this.rng;\n    x ^= x << 13;\n    x ^= x >>> 17;\n    x ^= x << 5;\n    this.rng = x >>> 0;\n    return (this.rng / 0x7fffffff) - 1;\n  }\n\n  /**\n   * Phase delay, in samples, of one first-order allpass at a given frequency.\n   * H(z) = (a + z^-1) / (1 + a z^-1)\n   */\n  phaseDelay(a, freq) {\n    const w = (2 * Math.PI * freq) / this.sr;\n    if (w < 1e-9) return (1 - a) / (1 + a);\n    const cw = Math.cos(w);\n    const sw = Math.sin(w);\n    let ph = Math.atan2(-sw, a + cw) - Math.atan2(-a * sw, 1 + a * cw);\n    if (ph > 0) ph -= 2 * Math.PI;\n    return -ph / w;\n  }\n\n  /**\n   * Phase delay, in samples, of the one-pole loop filter at a given frequency.\n   * H(z) = (1-c) / (1 - c z^-1)\n   *\n   * This is not a refinement. The loop filter sits inside the feedback path, so\n   * its delay is part of the string's length whether or not anyone accounts for\n   * it — and it is roughly a constant number of samples, which means it is a\n   * negligible fraction of a long bass string and a large fraction of a short\n   * treble one. Ignoring it makes the instrument play progressively flat as it\n   * goes up: about 5 cents at C3 and over 20 by G5, which is enough to make\n   * chords sound sour rather than merely imperfect.\n   */\n  filterPhaseDelay(c, freq) {\n    const w = (2 * Math.PI * freq) / this.sr;\n    if (w < 1e-9) return c / (1 - c);\n    return Math.atan2(c * Math.sin(w), 1 - c * Math.cos(w)) / w;\n  }\n\n  /**\n   * Excite the string.\n   * @param {object} p\n   *  freq, velocity, decay (T60 seconds), brightness 0..1, pickPos 0..0.5,\n   *  hardness 0..1, pickupPos, pickupMix, muteAmount 0..1\n   */\n  pluck(p) {\n    const freq = Math.max(20, Math.min(this.sr / 4, p.freq));\n    this.freq = freq;\n    const total = this.sr / freq;\n\n    const vel = Math.max(0.02, Math.min(1, p.velocity ?? 0.8));\n    const mute = Math.max(0, Math.min(1, p.muteAmount ?? 0));\n\n    // The loop filter is set before the delay line because it is *part* of the\n    // delay line: its phase delay has to be subtracted from the loop length or\n    // the string plays flat. See filterPhaseDelay.\n    //\n    // The cutoff tracks the fundamental rather than sitting at a fixed\n    // frequency: a real string's losses scale with partial number, so what\n    // stays constant across the neck is roughly *how many harmonics* survive,\n    // not which kilohertz. A fixed cutoff is the single biggest reason naive\n    // Karplus-Strong sounds like a sitar on the low strings and like a rubber\n    // band on the high ones. The absolute ceiling then keeps the top strings\n    // from screaming, which is also what real ones do.\n    const brightness = Math.max(0.02, Math.min(0.999, (p.brightness ?? 0.5) * (0.75 + 0.35 * vel)));\n    const harmonics = 8 + brightness * 46;\n    const ceiling = 6500 * (1 - 0.65 * mute);\n    const cutoff = Math.max(\n      120,\n      Math.min(freq * harmonics * (1 - 0.5 * mute), ceiling, this.sr * 0.45)\n    );\n    this.lpCoef = Math.exp((-2 * Math.PI * cutoff) / this.sr);\n    const filterDelay = this.filterPhaseDelay(this.lpCoef, freq);\n\n    // Stiffness: how many allpass sections, and how strong. Each section is\n    // itself a delay at low frequencies, so its contribution has to come out of\n    // the delay line or the note plays flat — the dispersion has to stretch the\n    // partials without moving the fundamental.\n    const stiffness = Math.max(0, Math.min(1, p.stiffness ?? 0));\n    let dispDelay = 0;\n    if (stiffness > 0.001) {\n      // The coefficient must be NEGATIVE. This allpass has phase delay\n      // (1-a)/(1+a) at DC and (1+a)/(1-a) at Nyquist, so a *positive*\n      // coefficient delays the high partials — which flattens them, the\n      // opposite of what a stiff string does. A negative one lets the highs\n      // through sooner, shortening their effective loop and pushing them\n      // sharp: the stretched partials of a real piano.\n      //\n      // It also has to be near -1. The audible partials of a bass note sit in\n      // the bottom few percent of the spectrum, and a gentle coefficient does\n      // nearly all of its bending far above them — at a = -0.2 the stretch is\n      // B ~ 2e-6, roughly a thousandth of a real piano's. Around -0.75 the\n      // phase curve is steep enough down where the partials actually are.\n      const bass = 1 - Math.min(1, freq / 300);\n      const scaled = stiffness * (0.72 + 0.55 * bass);\n      this.dispCoef = -Math.min(0.86, 0.58 + 0.3 * scaled);\n\n      // Each section now costs several samples of delay, so a short (high)\n      // string cannot afford the whole chain — there would be no delay line\n      // left to hold the note. Shortening the chain up there is also what the\n      // physics says: treble strings are proportionally far less stiff.\n      const perSection = this.phaseDelay(this.dispCoef, freq);\n      this.dispN = Math.max(1, Math.min(DISPERSION_MAX, Math.floor((total * 0.4) / perSection)));\n      dispDelay = this.dispN * perSection;\n    } else {\n      this.dispN = 0;\n      this.dispCoef = 0;\n    }\n    this.dispX.fill(0);\n    this.dispY.fill(0);\n    // Every filter inside the loop lengthens it, so every one of them comes off\n    // the delay line. Measured at the fundamental, not at DC: with a dispersion\n    // coefficient this close to -1 the two differ by many samples.\n    const target = Math.max(4, total - dispDelay - filterDelay);\n\n    // Split into an integer delay plus a first-order allpass handling the\n    // fractional part. Keep the fractional part near 1.0 where the allpass is\n    // best behaved (a delay of ~0 makes the filter ring).\n    let intDelay = Math.floor(target) - 1;\n    let frac = target - intDelay;\n    if (intDelay < 2) {\n      intDelay = 2;\n      frac = Math.max(0.1, target - intDelay);\n    }\n    this.delay = total;\n    this.intDelay = intDelay;\n    this.apCoef = (1 - frac) / (1 + frac);\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    // T60 -> per-period loop gain: g^(freq*T60) = 10^-3\n    let t60 = Math.max(0.05, p.decay ?? 3.0);\n    if (mute > 0) t60 *= 1 - 0.93 * mute;\n    // Lower strings sustain longer; higher strings shed energy faster.\n    t60 *= 1 + 0.35 * (1 - Math.min(1, freq / 330));\n    this.loopGain = Math.min(0.99995, Math.pow(10, -3 / (freq * t60)));\n\n    this.pickupPos = p.pickupPos ?? 0.12;\n    this.pickupMix = p.pickupMix ?? 0;\n\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    // --- Build the excitation burst ---\n    const n = Math.max(2, Math.round(total));\n    const hardness = Math.max(0, Math.min(1, p.hardness ?? 0.5));\n    // A soft fingertip is a low-passed impulse; a hard plectrum is closer to\n    // white. Map hardness onto the one-pole smoothing of the noise burst.\n    const smooth = 0.9 - 0.88 * hardness;\n\n    const burst = new Float32Array(n);\n    const hammer = Math.max(0, Math.min(1, p.hammer ?? 0));\n    if (hammer > 0) {\n      // A felt hammer is not a pick. It stays in contact with the string for a\n      // millisecond or two and leaves a smooth pulse rather than a broadband\n      // scrape, and it compresses when struck harder — so a loud note is\n      // brighter because the contact is *shorter*, not because anything was\n      // equalised. That coupling is most of what makes a piano respond like\n      // one. A little noise rides along for the felt itself.\n      const contactMs = (3.2 - 1.9 * vel) * (1 + 0.5 * (1 - Math.min(1, freq / 440)));\n      const width = Math.max(2, Math.min(n, Math.round((contactMs / 1000) * this.sr)));\n      let ns = 0;\n      for (let i = 0; i < n; i++) {\n        // Raised cosine contact pulse.\n        const pulse = i < width ? 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / width) : 0;\n        const white = this.noise();\n        ns = smooth * ns + (1 - smooth) * white;\n        const env = i < width ? 1 - i / width : 0;\n        burst[i] = pulse * (1 - 0.18 * hammer) + ns * env * 0.18 * hammer;\n      }\n    } else {\n      let s = 0;\n      for (let i = 0; i < n; i++) {\n        const white = this.noise();\n        s = smooth * s + (1 - smooth) * white;\n        // Taper the burst so the pluck has a short, non-clicky rise.\n        const env = i < n * 0.1 ? i / (n * 0.1) : 1;\n        burst[i] = s * env;\n      }\n    }\n\n    // Pick position comb: plucking at position β notches every (1/β)-th\n    // harmonic. The coefficient is just under 1 so the notches are deep\n    // without turning the whole burst into a differentiator.\n    const beta = Math.max(0.02, Math.min(0.5, p.pickPos ?? 0.13));\n    const dly = Math.max(1, Math.round(beta * n));\n    const combed = new Float32Array(n);\n    for (let i = 0; i < n; i++) {\n      combed[i] = burst[i] - 0.9 * (i >= dly ? burst[i - dly] : 0);\n    }\n\n    // Spectral tilt. An ideal plucked string's initial displacement puts\n    // amplitude ~ sin(nπβ)/n² into partial n — the comb above supplies the\n    // sin(nπβ) term, this supplies the 1/n². Two cascaded one-poles give the\n    // required -12 dB/oct; a single pole (-6 dB/oct) leaves the note thin and\n    // nasal, with more energy around the 11th harmonic than the fundamental.\n    // The corner is referenced to the pitch and opened up by pick hardness, so\n    // a fingertip is mellow and a plectrum is bright at every pitch.\n    // A hammer pulse is already smooth and band-limited by its contact time, so\n    // it needs far less of this than a pick does — running the full tilt over\n    // it buries the note.\n    const tiltFc = Math.min(freq * (0.5 + 1.5 * hardness) * (1 + 6 * hammer), this.sr * 0.4);\n    const tiltA = 1 - Math.exp((-2 * Math.PI * tiltFc) / this.sr);\n    let t1 = 0;\n    let t2 = 0;\n    for (let i = 0; i < n; i++) {\n      t1 += tiltA * (combed[i] - t1);\n      t2 += tiltA * (t1 - t2);\n      combed[i] = t2;\n    }\n\n    // Normalise so velocity, not the RNG, controls level.\n    let peak = 1e-6;\n    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(combed[i]));\n    const gain = (vel * 0.7) / peak;\n\n    // Replace the delay-line contents. Re-plucking a ringing string damps what\n    // was there rather than summing with it, which is what a real pick does.\n    const keep = 0.25;\n    for (let i = 0; i < MAX_DELAY; i++) this.buf[i] *= keep;\n    for (let i = 0; i < n; i++) {\n      const idx = (this.w - i + MAX_DELAY) & MASK;\n      this.buf[idx] += combed[i] * gain;\n    }\n\n    this.lpState = 0;\n    this.active = true;\n    this.amp = vel;\n  }\n\n  /** Damp a ringing string (note-off, fret-hand mute, or palm mute). */\n  release(level = 0.5, timeSec = 0.12) {\n    this.muteTarget = Math.max(0, 1 - level);\n    this.muteRate = Math.exp(-1 / Math.max(1, timeSec * this.sr));\n  }\n\n  silence() {\n    this.buf.fill(0);\n    this.active = false;\n    this.amp = 0;\n    this.lpState = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n    this.dispX.fill(0);\n    this.dispY.fill(0);\n    this.muteGain = 1;\n    this.muteTarget = 1;\n  }\n\n  /** Advance one sample. `coupling` is the shared bridge signal. */\n  tick(coupling) {\n    if (!this.active) return 0;\n\n    const r = (this.w - this.intDelay + MAX_DELAY) & MASK;\n    const x = this.buf[r];\n\n    // First-order allpass for the fractional delay.\n    const a = this.apCoef;\n    let y = a * x + this.apX1 - a * this.apY1;\n    this.apX1 = x;\n    this.apY1 = y;\n\n    // Stiffness dispersion: identical allpass sections in cascade. Phase only —\n    // no energy is added or removed, the partials are just moved off the\n    // harmonic series.\n    if (this.dispN > 0) {\n      const d = this.dispCoef;\n      for (let k = 0; k < this.dispN; k++) {\n        const inp = y;\n        y = d * inp + this.dispX[k] - d * this.dispY[k];\n        this.dispX[k] = inp;\n        this.dispY[k] = y;\n      }\n    }\n\n    // One-pole lowpass in the loop => frequency-dependent decay.\n    this.lpState = (1 - this.lpCoef) * y + this.lpCoef * this.lpState;\n\n    this.muteGain = this.muteTarget + (this.muteGain - this.muteTarget) * this.muteRate;\n    const fed = this.lpState * this.loopGain * this.muteGain + coupling;\n\n    this.buf[this.w] = fed;\n\n    // Output tap. With pickupMix > 0 we take the difference between the bridge\n    // and a point further along the string: the comb notch of a magnetic pickup.\n    let out = y;\n    if (this.pickupMix > 0) {\n      const pd = Math.max(1, Math.round(this.pickupPos * this.delay));\n      const pr = (this.w - pd + MAX_DELAY) & MASK;\n      out = y - this.buf[pr] * this.pickupMix;\n    }\n\n    // A hand landing on the strings silences what is already travelling down\n    // the delay line, not just what recirculates — so damping has to attenuate\n    // the output too, otherwise a \"cut\" still rings for a full period.\n    out *= this.muteGain;\n\n    this.w = (this.w + 1) & MASK;\n\n    // DC blocker.\n    const dc = out - this.dcX1 + 0.9985 * this.dcY1;\n    this.dcX1 = out;\n    this.dcY1 = dc;\n\n    // Cheap activity gate so idle strings cost nothing.\n    this.amp = Math.max(Math.abs(dc), this.amp * 0.9995);\n    if (this.amp < 2e-5) {\n      this.active = false;\n      this.amp = 0;\n    }\n    return dc;\n  }\n}\n\nclass GuitarProcessor extends AudioWorkletProcessor {\n  constructor() {\n    super();\n    this.strings = Array.from({ length: 6 }, (_, i) => new StringModel(sampleRate, i));\n    this.queue = [];\n    this.coupling = 0.006;\n    this.bridgeState = 0;\n    /** Previous-sample output per string, so a string never drives itself. */\n    this.last = new Float32Array(6);\n    // Slight stereo spread: low strings left, high strings right.\n    this.pan = [-0.35, -0.22, -0.08, 0.08, 0.22, 0.35];\n    this.master = 0.9;\n    this.running = true;\n\n    this.port.onmessage = (e) => this.onMessage(e.data);\n  }\n\n  onMessage(msg) {\n    switch (msg.type) {\n      case 'pluck':\n      case 'release':\n        this.queue.push(msg);\n        // Keep the queue ordered by scheduled frame.\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n\n      // Retrigger: silence everything from `frame` onward. Pending events at or\n      // after that point are dropped rather than allowed to fire, which is what\n      // stops a rapid series of clicks from piling chords on top of each other.\n      // Notes scheduled *after* this message arrives still play, so the caller\n      // cuts first and schedules the replacement second.\n      case 'cut':\n        this.queue = this.queue.filter((e) => e.frame < msg.frame);\n        this.queue.push({\n          type: 'cutAll',\n          frame: msg.frame,\n          level: msg.level ?? 1,\n          time: msg.time ?? 0.03,\n        });\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n      case 'config':\n        if (msg.coupling !== undefined) this.coupling = msg.coupling;\n        if (msg.master !== undefined) this.master = msg.master;\n        break;\n      case 'allNotesOff':\n        this.queue.length = 0;\n        this.strings.forEach((s) => s.silence());\n        break;\n      case 'stop':\n        this.running = false;\n        break;\n    }\n  }\n\n  applyEvent(ev) {\n    if (ev.type === 'cutAll') {\n      for (const s of this.strings) s.release(ev.level, ev.time);\n      return;\n    }\n    const s = this.strings[ev.string & 5];\n    if (ev.type === 'pluck') s.pluck(ev);\n    else s.release(ev.level ?? 0.6, ev.time ?? 0.1);\n  }\n\n  process(_inputs, outputs) {\n    const out = outputs[0];\n    const left = out[0];\n    const right = out.length > 1 ? out[1] : out[0];\n    const n = left.length;\n    const base = currentFrame;\n\n    for (let i = 0; i < n; i++) {\n      // Sample-accurate event dispatch.\n      while (this.queue.length && this.queue[0].frame <= base + i) {\n        this.applyEvent(this.queue.shift());\n      }\n\n      let l = 0;\n      let r = 0;\n      let sum = 0;\n      const bridge = this.bridgeState;\n\n      for (let k = 0; k < 6; k++) {\n        const st = this.strings[k];\n        if (!st.active) {\n          this.last[k] = 0;\n          continue;\n        }\n        // Drive each string with the bridge motion caused by the *other*\n        // strings. Leaving its own contribution in place is positive feedback:\n        // it silently raises the loop gain and stretches every note far past\n        // the decay time the preset asked for.\n        const v = st.tick((bridge - this.last[k]) * this.coupling);\n        this.last[k] = v;\n        sum += v;\n        const p = this.pan[k];\n        l += v * (1 - p) * 0.5;\n        r += v * (1 + p) * 0.5;\n      }\n\n      // Bridge admittance: lowpassed sum of all strings.\n      this.bridgeState = this.bridgeState * 0.72 + sum * 0.28;\n\n      left[i] = l * this.master;\n      right[i] = r * this.master;\n    }\n\n    return this.running;\n  }\n}\n\nregisterProcessor('guitar-processor', GuitarProcessor);\n";
 
 /**
  * Load the string-model processor. A blob URL is the normal path; some
@@ -922,34 +1084,123 @@ function scalePitchClasses(tonicPc, modeId) {
   return mode.steps.map((s) => (tonicPc + s) % 12);
 }
 
+/** Chord sizes the app offers, as note counts. */
+const CHORD_SIZES = [
+  { size: 3, label: 'Triad', short: '△' },
+  { size: 4, label: '7th', short: '7' },
+  { size: 5, label: '9th', short: '9' },
+  { size: 6, label: '11th', short: '11' },
+  { size: 7, label: '13th', short: '13' },
+];
+
+/**
+ * Name a stack of thirds.
+ *
+ * Extensions are named by the highest one that is *unaltered*, with anything
+ * altered appended — so a dominant with a flattened ninth is 7♭9 rather than a
+ * plain 9, and a minor eleventh with a raised eleventh is m9♯11. Modes throw up
+ * these chords constantly (Phrygian's tonic carries a ♭9, Lydian's a ♯11), and
+ * naming them as if they were natural would be wrong in a way that matters to
+ * anyone reading the chord.
+ */
+function stackSymbol(intervals) {
+  const iv = intervals.map((i) => ((i % 12) + 12) % 12);
+  const third = iv[1];
+  const fifth = iv[2];
+  const seventh = iv.length > 3 ? iv[3] : null;
+  const count = intervals.length;
+
+  const isMinor = third === 3;
+  const isSus = third === 2 || third === 5;
+  const dim5 = fifth === 6;
+  const aug5 = fifth === 8;
+
+  if (count === 3) {
+    if (isSus) return third === 2 ? 'sus2' : 'sus4';
+    if (isMinor && dim5) return '°';
+    if (!isMinor && aug5) return '+';
+    return isMinor ? 'm' : '';
+  }
+
+  // Base seventh-chord name.
+  let base;
+  if (isMinor && dim5 && seventh === 9) return '°7';
+  if (isMinor && dim5) base = 'm7♭5';
+  else if (isMinor) base = seventh === 11 ? 'mMaj7' : 'm7';
+  else if (aug5) base = seventh === 11 ? 'maj7♯5' : '7♯5';
+  else base = seventh === 11 ? 'maj7' : '7';
+
+  if (count === 4) return base;
+
+  // Extensions: 9th, 11th, 13th, with their unaltered values.
+  const NATURAL = { 9: 2, 11: 5, 13: 9 };
+  const present = [];
+  if (count >= 5) present.push([9, iv[4]]);
+  if (count >= 6) present.push([11, iv[5]]);
+  if (count >= 7) present.push([13, iv[6]]);
+
+  // Climb while the extensions stay natural; the last natural one names the chord.
+  let highestNatural = 7;
+  const alterations = [];
+  for (const [degree, value] of present) {
+    if (value === NATURAL[degree]) {
+      if (highestNatural === degree - 2 || highestNatural === 7) highestNatural = degree;
+    } else {
+      const diff = value - NATURAL[degree];
+      alterations.push(`${diff < 0 ? '♭' : '♯'}${degree}`);
+    }
+  }
+
+  const stem = base.replace(/7/, String(highestNatural === 7 ? 7 : highestNatural));
+  return stem + alterations.join('');
+}
+
+/**
+ * Which tones must sound for the chord to be itself.
+ *
+ * Six strings cannot hold a seven-note chord, and a guitarist would not try:
+ * the fifth goes first, then the extensions below the top one. What survives is
+ * the root, the third that makes it major or minor, the seventh that gives it
+ * its family, and the extension it is named for. An altered fifth stays,
+ * because that is what the name is about.
+ */
+function essentialIntervals(intervals) {
+  const count = intervals.length;
+  if (count <= 3) return intervals.slice();
+
+  const iv = intervals.map((i) => ((i % 12) + 12) % 12);
+  const keep = new Set([intervals[0], intervals[1], intervals[3]]);
+  if (iv[2] === 6 || iv[2] === 8) keep.add(intervals[2]);
+  if (count >= 5) keep.add(intervals[count - 1]);
+  return [...keep];
+}
+
 /**
  * Diatonic chords for a key/mode.
  * @param {number} tonicPc
  * @param {string} modeId
- * @param {boolean} sevenths stack 7ths instead of triads
+ * @param {boolean|number} size  note count (3-7), or a boolean for triad/7th
  */
-function diatonicChords(tonicPc, modeId, sevenths = false) {
+function diatonicChords(tonicPc, modeId, size = 3) {
+  const noteCount = typeof size === 'boolean' ? (size ? 4 : 3) : Math.max(3, Math.min(7, size));
   const mode = MODES[modeId] || MODES.ionian;
   const steps = mode.steps;
   const flats = keySignaturePrefersFlats(tonicPc, modeId);
   const out = [];
 
   for (let d = 0; d < 7; d++) {
-    const degreeOffsets = sevenths ? [0, 2, 4, 6] : [0, 2, 4];
+    // Stacked thirds: every other scale degree, wrapping into higher octaves.
+    const degreeOffsets = Array.from({ length: noteCount }, (_, k) => k * 2);
     const rootAbs = steps[d];
     const intervals = degreeOffsets.map((o) => {
       const idx = (d + o) % 7;
       const octaves = Math.floor((d + o) / 7);
       return steps[idx] + 12 * octaves - rootAbs;
     });
-    const quality = qualityFromIntervals(intervals) || {
-      id: 'maj',
-      symbol: '',
-      intervals,
-      name: 'chord',
-    };
     const rootPc = (tonicPc + rootAbs) % 12;
-    const isMinorish = ['min', 'min7', 'dim', 'dim7', 'm7b5', 'min6', 'minMaj7'].includes(quality.id);
+    const symbol = stackSymbol(intervals);
+    const iv = intervals.map((i) => ((i % 12) + 12) % 12);
+    const isMinorish = iv[1] === 3;
 
     // Modal degrees are numbered against the major scale, so a degree the mode
     // lowers or raises carries the accidental: Mixolydian's seventh is ♭VII,
@@ -959,16 +1210,47 @@ function diatonicChords(tonicPc, modeId, sevenths = false) {
     const accidental = alteration < 0 ? '♭' : alteration > 0 ? '♯' : '';
 
     let numeral = accidental + (isMinorish ? ROMAN[d].toLowerCase() : ROMAN[d]);
-    if (quality.id === 'dim' || quality.id === 'dim7') numeral += '°';
-    if (quality.id === 'm7b5') numeral += 'ø';
-    if (quality.id === 'aug') numeral += '+';
-    if (sevenths && ['maj7'].includes(quality.id)) numeral += 'maj7';
-    else if (sevenths && quality.id === 'dom7') numeral += '7';
-    else if (sevenths && ['min7', 'minMaj7'].includes(quality.id)) numeral += '7';
+    if (iv[2] === 6) numeral += noteCount >= 4 ? 'ø' : '°';
+    else if (iv[2] === 8) numeral += '+';
+    if (noteCount >= 4) {
+      // The numeral carries the same extension figure as the chord symbol, so
+      // the two always agree about what is being played.
+      const figure = symbol.match(/(13|11|9|7)/);
+      if (figure) numeral += figure[1];
+      if (iv[2] === 6 && iv[3] === 9) numeral = `${accidental}${ROMAN[d].toLowerCase()}°7`;
+    }
 
-    out.push(makeChord(rootPc, quality.id, { degree: d, numeral, preferFlats: flats }));
+    out.push(
+      chordFromIntervals(rootPc, intervals, { degree: d, numeral, preferFlats: flats, symbol })
+    );
   }
   return out;
+}
+
+/**
+ * Build a chord descriptor from an explicit interval stack. Used for anything
+ * beyond the fixed quality table — every extended chord is generated, not
+ * enumerated.
+ */
+function chordFromIntervals(rootPc, intervals, extra = {}) {
+  const root = ((rootPc % 12) + 12) % 12;
+  const preferFlats = extra.preferFlats ?? keyPrefersFlats(root);
+  const symbol = extra.symbol ?? stackSymbol(intervals);
+  const essential = essentialIntervals(intervals);
+  return {
+    root,
+    qualityId: extra.qualityId ?? null,
+    intervals: intervals.slice(),
+    pitchClasses: intervals.map((i) => (root + i) % 12),
+    /** Tones that must sound; the rest may be dropped to make a shape playable. */
+    essentialPitchClasses: essential.map((i) => (root + i) % 12),
+    symbol: noteName(root, preferFlats) + symbol,
+    rootName: noteName(root, preferFlats),
+    qualityName: extra.qualityName ?? symbol,
+    degree: extra.degree ?? null,
+    numeral: extra.numeral ?? null,
+    inversion: extra.inversion ?? 0,
+  };
 }
 
 /** Build a chord descriptor. */
@@ -981,6 +1263,7 @@ function makeChord(rootPc, qualityId, extra = {}) {
     qualityId: quality.id,
     intervals: quality.intervals.slice(),
     pitchClasses: quality.intervals.map((i) => (root + i) % 12),
+    essentialPitchClasses: essentialIntervals(quality.intervals).map((i) => (root + i) % 12),
     symbol: noteName(root, preferFlats) + quality.symbol,
     rootName: noteName(root, preferFlats),
     qualityName: quality.name,
@@ -989,6 +1272,229 @@ function makeChord(rootPc, qualityId, extra = {}) {
     /** 0 = root position, 1 = first inversion, ... */
     inversion: extra.inversion ?? 0,
   };
+}
+
+/**
+ * Chord colours that can be applied to any scale degree.
+ *
+ * `dom` is the important one: a dominant seventh built on a degree that is not
+ * dominant in the key. That is how a minor ii–V–i works — the V of A minor is
+ * Em7 diatonically, and it takes an E7 to actually pull back to Am. Every
+ * borrowed chord a guitarist reaches for is on this list.
+ */
+const CHORD_COLOURS = [
+  { id: null, label: 'Diatonic', hint: 'The chord the key gives you.' },
+  { id: 'dom', label: 'Dom 7', hint: 'A dominant on this degree — the secondary-dominant pull.' },
+  { id: 'sus4', label: 'sus4', hint: 'Third replaced by the fourth. Suspended, wants to resolve.' },
+  { id: 'sus2', label: 'sus2', hint: 'Third replaced by the second. Open and unresolved.' },
+  { id: '6', label: '6th', hint: 'Sixth instead of a seventh. Warm, settled, vintage.' },
+  { id: 'add9', label: 'add9', hint: 'Ninth added over a triad, with no seventh.' },
+  { id: 'dim7', label: '°7', hint: 'Fully diminished — a passing chord that leads anywhere.' },
+  { id: 'm7b5', label: 'ø7', hint: 'Half-diminished. The ii of a minor ii–V–i.' },
+  { id: 'aug', label: '+', hint: 'Raised fifth, pushing upward.' },
+];
+
+/** Alterations available on a dominant chord. */
+const CHORD_ALTERATIONS = [
+  { id: 'b9', label: '♭9', degree: 9, value: 13 },
+  { id: '#9', label: '♯9', degree: 9, value: 15 },
+  { id: '#11', label: '♯11', degree: 11, value: 18 },
+  { id: 'b13', label: '♭13', degree: 13, value: 20 },
+];
+
+const ALT_BY_ID = Object.fromEntries(CHORD_ALTERATIONS.map((a) => [a.id, a]));
+
+/** Semitones above the root for each unaltered extension. */
+const NATURAL_EXT = { 9: 14, 11: 17, 13: 21 };
+
+/**
+ * Build the chord for a slot's specification.
+ *
+ * A spec is stored rather than a finished chord, so a progression stays
+ * transposable: change the key and every chord follows, keeping its size,
+ * colour and alterations.
+ *
+ * @param {number} tonicPc
+ * @param {string} modeId
+ * @param {{degree:number, size?:number, colour?:string|null, alterations?:string[]}} spec
+ */
+function chordForSpec(tonicPc, modeId, spec = {}) {
+  const degree = (spec.degree ?? 0) % 7;
+  const size = Math.max(3, Math.min(7, spec.size ?? 3));
+  const colour = spec.colour ?? null;
+  const alterations = spec.alterations ?? [];
+
+  const diatonic = diatonicChords(tonicPc, modeId, size)[degree];
+  if (!colour && !alterations.length) return diatonic;
+
+  const rootPc = diatonic.root;
+  const minorThird = diatonic.intervals[1] === 3;
+  const flats = keySignaturePrefersFlats(tonicPc, modeId);
+
+  // Which extension degrees this chord should carry, by size.
+  const wantedDegrees = [];
+  if (size >= 5) wantedDegrees.push(9);
+  if (size >= 6) wantedDegrees.push(11);
+  if (size >= 7) wantedDegrees.push(13);
+  // An alteration implies its degree is present, whatever the size says.
+  for (const id of alterations) {
+    const alt = ALT_BY_ID[id];
+    if (alt && !wantedDegrees.includes(alt.degree)) wantedDegrees.push(alt.degree);
+  }
+  wantedDegrees.sort((a, b) => a - b);
+
+  const extensionFor = (deg) => {
+    const chosen = alterations.map((id) => ALT_BY_ID[id]).find((a) => a && a.degree === deg);
+    return chosen ? chosen.value : NATURAL_EXT[deg];
+  };
+
+  let core;
+  switch (colour) {
+    case 'dom': core = [0, 4, 7, 10]; break;
+    case 'sus4': core = size >= 4 ? [0, 5, 7, 10] : [0, 5, 7]; break;
+    case 'sus2': core = size >= 4 ? [0, 2, 7, 10] : [0, 2, 7]; break;
+    case '6': core = [0, minorThird ? 3 : 4, 7, 9]; break;
+    case 'add9': core = [0, minorThird ? 3 : 4, 7, 14]; break;
+    case 'dim7': core = [0, 3, 6, 9]; break;
+    case 'm7b5': core = [0, 3, 6, 10]; break;
+    case 'aug': core = size >= 4 ? [0, 4, 8, 10] : [0, 4, 8]; break;
+    default: core = diatonic.intervals.slice(0, Math.min(4, diatonic.intervals.length));
+  }
+
+  // 6th, add9 and °7 chords are complete as written — stacking further thirds
+  // on them produces something that is no longer the chord that was asked for.
+  // The one exception is the 6/9, which is a chord guitarists actually want.
+  const stackable = !['6', 'add9', 'dim7'].includes(colour);
+  const intervals = core.slice();
+  if (stackable) for (const deg of wantedDegrees) intervals.push(extensionFor(deg));
+  else if (colour === '6' && size >= 5) intervals.push(14);
+
+  const symbol = symbolForColour(colour, minorThird, size, alterations, intervals);
+  return chordFromIntervals(rootPc, intervals, {
+    degree,
+    numeral: numeralForSpec(diatonic, colour, symbol),
+    preferFlats: flats,
+    symbol,
+  });
+}
+
+/**
+ * The number a chord is named by: the highest extension it carries *naturally*.
+ *
+ * A chord is never named after an altered tone — the alteration is spelled out
+ * instead, and the name falls back to the highest natural degree beneath it.
+ * That is why E–G♯–B–D–F is E7♭9 and not E9♭9, while E–G♯–B–D–F♯–A♯ is E9♯11:
+ * the ♯11 is altered, so the natural 9 underneath names the chord.
+ */
+function extensionNumber(intervals) {
+  if (intervals.length < 4) return 0;
+  const iv = new Set(intervals);
+  let number = 7;
+  for (const deg of [9, 11, 13]) {
+    const natural = NATURAL_EXT[deg];
+    // Present in any form — natural, flattened or sharpened.
+    if (!(iv.has(natural) || iv.has(natural - 1) || iv.has(natural + 1))) break;
+    if (iv.has(natural)) number = deg;
+  }
+  return number;
+}
+
+function symbolForColour(colour, minorThird, size, alterations, intervals) {
+  const altText = alterations
+    .map((id) => ALT_BY_ID[id])
+    .filter(Boolean)
+    .sort((a, b) => a.degree - b.degree)
+    .map((a) => a.label)
+    .join('');
+
+  const n = extensionNumber(intervals);
+  const number = n ? String(n) : '';
+  const seventh = intervals.length >= 4;
+
+  switch (colour) {
+    case 'dom': return number + altText;
+    case 'sus4': return (seventh ? number : '') + 'sus4' + altText;
+    case 'sus2': return (seventh ? number : '') + 'sus2' + altText;
+    case '6': return (minorThird ? 'm' : '') + (intervals.length >= 5 ? '6/9' : '6');
+    case 'add9': return (minorThird ? 'm' : '') + 'add9';
+    case 'dim7': return '°7';
+    case 'm7b5': return 'm' + (number || '7') + '♭5' + altText;
+    case 'aug': return seventh ? number + '♯5' + altText : '+';
+    default: return stackSymbol(intervals);
+  }
+}
+
+function numeralForSpec(diatonic, colour, symbol) {
+  const base = diatonic.numeral.replace(/(13|11|9|7|ø|°|\+)+$/, '');
+  if (colour === 'dom') return `${base.toUpperCase()}${symbol}`;
+  if (!colour) return diatonic.numeral;
+  return `${base}${symbol}`;
+}
+
+const SIZE_NOTE = {
+  3: 'Plain triad — the chord at its most direct.',
+  4: 'Seventh added: the chord gains a direction to move in.',
+  5: 'Ninth on top — warmth and colour without changing the function.',
+  6: 'Eleventh — open and suspended over the third.',
+  7: 'Thirteenth — the full stack, the sound of a jazz voicing.',
+};
+
+const DEGREE_ROLE = [
+  'home', 'a step away from home', 'the tonic\'s shadow', 'the lift',
+  'the pull back home', 'the relative minor', 'the approach chord',
+];
+
+/**
+ * Say, in a sentence a guitarist can act on, what a chord spec is doing in the
+ * key. The interesting case is a chord the key does not contain: a dominant on
+ * a degree that is not the dominant is heard as the V of wherever it points, and
+ * naming that target is what turns a borrowed chord from a guess into a choice.
+ */
+function describeSpec(tonicPc, modeId, spec = {}) {
+  const degree = (spec.degree ?? 0) % 7;
+  const size = Math.max(3, Math.min(7, spec.size ?? 3));
+  const colour = spec.colour ?? null;
+  const alterations = spec.alterations ?? [];
+  const mode = MODES[modeId] || MODES.ionian;
+  const flats = keySignaturePrefersFlats(tonicPc, modeId);
+  const parts = [];
+
+  if (colour === 'dom' && degree !== 4) {
+    // A dominant resolves down a fifth. Name where this one lands, and whether
+    // that landing place is in the key.
+    const rootPc = (tonicPc + mode.steps[degree]) % 12;
+    const targetPc = (rootPc + 5) % 12;
+    const targetDegree = mode.steps.findIndex((s) => (tonicPc + s) % 12 === targetPc);
+    const targetName = noteName(targetPc, flats);
+    parts.push(
+      targetDegree >= 0
+        ? `Secondary dominant — the V7 of ${targetName}, so it pulls to the ${ROMAN[targetDegree]} chord.`
+        : `Borrowed dominant pulling to ${targetName}, which sits outside this key.`
+    );
+  } else if (colour === 'dom') {
+    parts.push('The key\'s own dominant, made a true V7 — the strongest pull to the tonic.');
+  } else if (colour === 'sus4' || colour === 'sus2') {
+    parts.push('No third, so it is neither major nor minor — it wants the chord after it.');
+  } else if (colour === 'dim7') {
+    parts.push('Symmetrical: it can resolve up a semitone into almost anything.');
+  } else if (colour === 'm7b5') {
+    parts.push('Half-diminished — the ii of a minor ii–V–i, heading for the dominant.');
+  } else if (colour === '6') {
+    parts.push('A sixth instead of a seventh: settled rather than in motion.');
+  } else if (colour === 'add9') {
+    parts.push('A ninth over a plain triad — colour with no seventh to resolve.');
+  } else if (colour === 'aug') {
+    parts.push('The raised fifth leans upward into the next chord\'s root or third.');
+  } else {
+    parts.push(`Diatonic — ${DEGREE_ROLE[degree]} in this key.`);
+    if (size > 3) parts.push(SIZE_NOTE[size]);
+  }
+
+  if (alterations.length) {
+    const labels = alterations.map((id) => ALT_BY_ID[id]?.label).filter(Boolean).join(' and ');
+    parts.push(`The ${labels} tightens the tension — resolve it by step into the next chord.`);
+  }
+  return parts.join(' ');
 }
 
 /** Pitch class that should sound in the bass for a given inversion. */
@@ -1079,21 +1585,24 @@ function findVoicings(chord, opts = {}) {
   const preferredFret = opts.preferredFret ?? 0;
   const wantBass = bassPitchClass(chord, inversion);
   const chordPcs = chord.pitchClasses;
+  // Extended chords carry more tones than a guitar has strings, so the search
+  // requires only the ones that define the chord and treats the rest as bonus.
+  const requiredPcs = chord.essentialPitchClasses || chordPcs;
 
   const sets =
     style === 'auto'
-      ? [...allContiguousSets(chordPcs.length), ...STRING_SETS.drop3]
+      ? [...allContiguousSets(requiredPcs.length), ...STRING_SETS.drop3]
       : STRING_SETS[style] || STRING_SETS.drop2;
 
   const results = [];
   for (const set of sets) {
-    collectForSet(set, chordPcs, wantBass, tuning, maxSpan, results, style);
+    collectForSet(set, chordPcs, requiredPcs, wantBass, tuning, maxSpan, results, style);
   }
 
   // Score, sort, and de-duplicate identical fret patterns.
   const seen = new Set();
   const scored = results
-    .map((v) => ({ ...v, score: scoreVoicing(v, preferredFret, chordPcs.length) }))
+    .map((v) => ({ ...v, score: scoreVoicing(v, preferredFret, requiredPcs.length, chordPcs) }))
     .sort((a, b) => b.score - a.score)
     .filter((v) => {
       const key = v.frets.join('.');
@@ -1116,7 +1625,7 @@ function allContiguousSets(chordSize) {
   return out;
 }
 
-function collectForSet(set, chordPcs, wantBass, tuning, maxSpan, results, style) {
+function collectForSet(set, chordPcs, requiredPcs, wantBass, tuning, maxSpan, results, style) {
   const exact = style === 'drop2' || style === 'drop3' || style === 'triad';
   const candidates = set.map((s) => {
     const list = [];
@@ -1128,12 +1637,17 @@ function collectForSet(set, chordPcs, wantBass, tuning, maxSpan, results, style)
   });
 
   const frets = new Array(set.length).fill(null);
+  // Cap per string set, not across the whole search. A global cap is spent by
+  // the first few sets, so the fuller shapes later in the list are never
+  // generated and the best answer is simply never considered.
+  let found = 0;
 
   const walk = (i, minFretted, maxFretted, used) => {
-    if (results.length > 400) return;
+    if (found > 150) return;
     if (i === set.length) {
-      // Every chord tone must be present.
-      if (used.size !== chordPcs.length) return;
+      // Every tone the chord is named for must be present; droppable ones need
+      // not be, which is what makes a 9th or 13th playable on six strings.
+      for (const pc of requiredPcs) if (!used.has(pc)) return;
       const full = new Array(6).fill(null);
       const midi = new Array(6).fill(null);
       set.forEach((s, k) => {
@@ -1141,6 +1655,7 @@ function collectForSet(set, chordPcs, wantBass, tuning, maxSpan, results, style)
         midi[s] = tuning[s] + frets[k];
       });
       const span = maxFretted === -1 ? 0 : maxFretted - minFretted;
+      found++;
       results.push({
         frets: full,
         midi,
@@ -1174,20 +1689,52 @@ function collectForSet(set, chordPcs, wantBass, tuning, maxSpan, results, style)
   walk(0, Infinity, -1, new Set());
 }
 
-function scoreVoicing(v, preferredFret, chordSize) {
+/**
+ * Rank a shape by how a guitarist would judge it.
+ *
+ * The weights matter as much as the terms. Rewarding string count too heavily
+ * makes the search prefer a six-string barre high up the neck over the open
+ * chord everyone actually plays — it once answered "C major" with x35050. So
+ * position and playability outrank fullness, and the one genuinely unplayable
+ * combination, an open string ringing under a shape held high on the neck, is
+ * penalised rather than rewarded for its zero fret span.
+ */
+function scoreVoicing(v, preferredFret, chordSize, allPcs = null) {
   let score = 0;
-  score += v.strings * 6; // fuller chords ring better
+  score += v.strings * 3.5;
+
+  // Prefer shapes that also cover the droppable tones — a 9th chord that keeps
+  // its fifth is a better answer than one that does not, all else equal.
+  if (allPcs && allPcs.length > chordSize) {
+    const present = new Set(v.midi.filter((m) => m !== null).map((m) => m % 12));
+    let covered = 0;
+    for (const pc of allPcs) if (present.has(pc)) covered++;
+    score += covered * 3;
+  }
+
   score -= v.span * 5; // tight shapes are easier
+
   const openCount = v.frets.filter((f) => f === 0).length;
-  score += openCount * 3;
-  score -= Math.abs(v.lowestFret - preferredFret) * 1.2;
+  const fretted = v.frets.filter((f) => f !== null && f > 0);
+  const lowestFretted = fretted.length ? Math.min(...fretted) : 0;
+
+  if (openCount) {
+    // Open strings are free in first position and a stretch anywhere else.
+    if (lowestFretted <= 4) score += openCount * 4;
+    else score -= openCount * 7;
+  }
+
+  // Low positions first, unless the caller asked to sit somewhere else.
+  score -= Math.abs(v.lowestFret - preferredFret) * 2.4;
   if (v.lowestFret > 12) score -= 8;
 
-  // Penalise muddy low-register clusters (intervals < 4 semitones below G3).
+  // Penalise genuinely muddy low intervals — seconds down in the bass register.
+  // The earlier threshold caught minor thirds up to G3, which condemned the
+  // open C chord (E3 to G3) as mud and pushed the search off first position.
   const sounding = v.midi.filter((m) => m !== null);
   for (let i = 1; i < sounding.length; i++) {
     const gap = sounding[i] - sounding[i - 1];
-    if (sounding[i - 1] < 55 && gap > 0 && gap < 4) score -= 6;
+    if (sounding[i - 1] < 52 && gap > 0 && gap < 3) score -= 6;
   }
   if (sounding.length > chordSize) score += 2; // doublings are fine
   return score;
@@ -1227,6 +1774,99 @@ function voicingPosition(voicing) {
 /** MIDI notes actually sounding, low to high. */
 function voicingNotes(voicing) {
   return voicing.midi.filter((m) => m !== null);
+}
+
+/**
+ * What it costs the hand to move from one shape to the next.
+ *
+ * Voice leading is the difference between a progression that is correct and one
+ * that sounds like music. Two shapes that share frets share notes, and shared
+ * notes are what make chords connect rather than merely follow each other. The
+ * terms are what a player actually feels: how far the fingers travel, how much
+ * the hand shifts up the neck, and how many strings switch between ringing and
+ * muted, which is the part that makes a change sound clumsy even when the frets
+ * are close.
+ */
+function voiceLeadCost(a, b) {
+  if (!a || !b) return 0;
+  let cost = 0;
+  let shared = 0;
+  for (let s = 0; s < 6; s++) {
+    const fa = a.frets[s];
+    const fb = b.frets[s];
+    if (fa === null && fb === null) continue;
+    if (fa === null || fb === null) { cost += 2.5; continue; } // a string starts or stops
+    cost += Math.abs(fa - fb);
+    if (fa === fb) shared++;
+  }
+  // Moving the whole hand is more work than moving one finger.
+  cost += Math.abs(voicingPosition(a) - voicingPosition(b)) * 1.5;
+  // Fingers that stay put are the point, so reward them directly.
+  cost -= shared * 1.2;
+  return cost;
+}
+
+/** Total movement across a whole progression — the number "Smooth" reduces. */
+function progressionCost(voicings) {
+  let total = 0;
+  for (let i = 1; i < voicings.length; i++) total += Math.max(0, voiceLeadCost(voicings[i - 1], voicings[i]));
+  return Math.round(total * 10) / 10;
+}
+
+/**
+ * Choose one shape per chord so the whole progression connects.
+ *
+ * Picking each chord's best shape independently is what produces the jumping
+ * around that makes an app-written progression sound like an exercise: every
+ * chord is individually fine and no two of them fit together. Choosing the whole
+ * sequence at once is a shortest-path problem, so it is solved exactly rather
+ * than greedily — a greedy pass commits to an early shape that strands the
+ * chord after it, which is precisely the failure worth avoiding.
+ *
+ * @param {Array<object>} chords
+ * @param {object} opts
+ * @param {number[]} opts.tuning
+ * @param {number} opts.quality  weight on each shape's own playability, 0..1
+ * @returns {Array<object|null>} one voicing per chord
+ */
+function smoothProgression(chords, opts = {}) {
+  const tuning = opts.tuning || TUNINGS.standard.midi;
+  const quality = opts.quality ?? 0.35;
+  if (!chords.length) return [];
+
+  // Candidate shapes per chord, capped so the search stays instant.
+  const candidates = chords.map((c) => {
+    const list = findVoicings(c, { tuning, style: 'auto' }).slice(0, 8);
+    return list.length ? list : [resolveVoicing(c, 'root', { tuning })].filter(Boolean);
+  });
+  if (candidates.some((c) => !c.length)) {
+    return chords.map((c) => resolveVoicing(c, 'root', { tuning }));
+  }
+
+  // Viterbi: best total cost of reaching each candidate, plus a back-pointer.
+  const best = candidates.map((list) => list.map(() => Infinity));
+  const from = candidates.map((list) => list.map(() => -1));
+  candidates[0].forEach((v, j) => { best[0][j] = -quality * v.score; });
+
+  for (let i = 1; i < chords.length; i++) {
+    candidates[i].forEach((v, j) => {
+      const own = -quality * v.score;
+      for (let k = 0; k < candidates[i - 1].length; k++) {
+        const total = best[i - 1][k] + voiceLeadCost(candidates[i - 1][k], v) + own;
+        if (total < best[i][j]) { best[i][j] = total; from[i][j] = k; }
+      }
+    });
+  }
+
+  const lastRow = best[chords.length - 1];
+  let pick = lastRow.indexOf(Math.min(...lastRow));
+  const out = new Array(chords.length);
+  for (let i = chords.length - 1; i >= 0; i--) {
+    out[i] = candidates[i][pick];
+    pick = from[i][pick];
+    if (pick < 0 && i > 0) pick = 0;
+  }
+  return out;
 }
 
 /**
@@ -2215,6 +2855,483 @@ function patternHits(pattern, { fill = false } = {}) {
   return hits.sort((a, b) => a.t - b.t);
 }
 
+/* ===== src/harmony.js ===== */
+// The harmony brain.
+//
+// Everything here is a pure function of (key, mode, what is already written).
+// Nothing touches the DOM, the audio engine, or app state — which is what makes
+// it testable, and what stops the musical reasoning from being scattered across
+// render functions where it cannot be checked.
+//
+// The model is ordinary functional harmony, the same thing taught in a first
+// theory class: chords have a job (tonic, subdominant, dominant), some
+// successions are strong and some are weak, and a section of a song has a shape
+// it is trying to make. Suggestions carry the reason they were made, because a
+// suggestion a guitarist cannot explain teaches nothing.
+
+
+
+/** The three jobs a chord can hold in a key. */
+const FUNCTION = { TONIC: 'T', SUBDOMINANT: 'S', DOMINANT: 'D' };
+
+const FUNCTION_LABEL = { T: 'Tonic', S: 'Subdominant', D: 'Dominant' };
+
+/**
+ * Which job each scale degree does.
+ *
+ * In a major-ish mode: I/iii/vi rest, ii/IV move away, V/vii° pull back. Minor
+ * modes shift the weight — the ♭VII in Aeolian and Dorian is not a dominant at
+ * all, it is a colour that leans toward the ♭III, which is why a minor key needs
+ * a borrowed V7 to actually cadence.
+ */
+const FUNCTION_BY_DEGREE = {
+  major: ['T', 'S', 'T', 'S', 'D', 'T', 'D'],
+  // The ii° of a minor key is a pre-dominant, not a dominant: it is the chord
+  // that sets the V up, which is why a minor ii–V–i starts on it.
+  minor: ['T', 'S', 'T', 'S', 'D', 'S', 'S'],
+};
+
+function isMinorMode(modeId) {
+  const steps = (MODES[modeId] || MODES.ionian).steps;
+  return steps[2] === 3;
+}
+
+function degreeFunction(degree, modeId) {
+  const table = FUNCTION_BY_DEGREE[isMinorMode(modeId) ? 'minor' : 'major'];
+  return table[degree % 7];
+}
+
+function functionLabel(fn) {
+  return FUNCTION_LABEL[fn] || fn;
+}
+
+/**
+ * How strong the motion between two chord roots is.
+ *
+ * Root motion down a fifth is the strongest progression in tonal music — it is
+ * what a cadence is made of. Down a third is smooth because two notes are
+ * shared. Up a step is strong but blunt. Up a fifth is retrogression: legal, but
+ * it sounds like the music is backing up, which is a thing to know rather than a
+ * thing to forbid.
+ */
+function rootMotion(fromDegree, toDegree) {
+  const step = ((toDegree - fromDegree) % 7 + 7) % 7;
+  switch (step) {
+    case 0: return { weight: 0, name: 'same chord' };
+    case 3: return { weight: 10, name: 'down a fifth — the strongest move there is' };
+    case 5: return { weight: 8, name: 'down a third — two notes stay put' };
+    case 1: return { weight: 7, name: 'up a step' };
+    case 6: return { weight: 6, name: 'down a step' };
+    case 2: return { weight: 4, name: 'up a third' };
+    case 4: return { weight: 3, name: 'up a fifth — a step backwards, used deliberately' };
+    default: return { weight: 3, name: 'a move' };
+  }
+}
+
+/**
+ * The shape each part of a song is trying to make.
+ *
+ * `openOn` are the degrees that make a good first chord, `closeOn` the ones that
+ * end the section the way the section wants to end. A pre-chorus that resolves
+ * has thrown away its job; a chorus that does not resolve never lands.
+ */
+const SECTION_ROLES = {
+  intro: {
+    label: 'Intro',
+    blurb: 'Establish the key without spending the big moment.',
+    openOn: [0, 5, 3], closeOn: [4, 0], avoidClose: [],
+    prefersSize: 3, cadence: 'half',
+  },
+  verse: {
+    label: 'Verse',
+    blurb: 'A loop that can carry many different melodies.',
+    openOn: [0, 5], closeOn: [4, 3, 0], avoidClose: [],
+    prefersSize: 3, cadence: 'any',
+  },
+  prechorus: {
+    label: 'Pre-Chorus',
+    blurb: 'Climb, and hand the chorus an unresolved dominant.',
+    openOn: [3, 1, 5], closeOn: [4], avoidClose: [0],
+    prefersSize: 4, cadence: 'half',
+  },
+  chorus: {
+    label: 'Chorus',
+    blurb: 'The strongest, plainest statement of the key.',
+    openOn: [0, 3, 5], closeOn: [0, 4], avoidClose: [],
+    prefersSize: 3, cadence: 'authentic',
+  },
+  bridge: {
+    label: 'Bridge',
+    blurb: 'Leave home so returning means something.',
+    openOn: [5, 3, 1], closeOn: [4], avoidClose: [0],
+    prefersSize: 4, cadence: 'half',
+  },
+  outro: {
+    label: 'Outro',
+    blurb: 'Land, or vamp somewhere restful.',
+    openOn: [0, 3], closeOn: [0], avoidClose: [4],
+    prefersSize: 3, cadence: 'plagal',
+  },
+};
+
+const SECTION_ROLE_IDS = Object.keys(SECTION_ROLES);
+
+/**
+ * Extensions that belong on a degree, in the order a player would reach for
+ * them.
+ *
+ * This is the difference between an app that lets you build any chord and one
+ * that helps you: every degree can technically take every colour, but a ii that
+ * is a m7 or m9 sounds like music and a ii that is an augmented triad sounds
+ * like a mistake. Non-idiomatic options stay available — they are simply not
+ * the ones offered first.
+ */
+function idiomaticColours(degree, modeId) {
+  const fn = degreeFunction(degree, modeId);
+  const minorKey = isMinorMode(modeId);
+  const quality = degreeQuality(degree, modeId);
+  const out = [];
+
+  const add = (size, colour, why) => out.push({ size, colour, why });
+
+  if (quality === 'dim') {
+    add(4, 'm7b5', 'Half-diminished is how this degree is normally voiced — it heads for the dominant.');
+    add(4, 'dim7', 'Fully diminished, as a passing chord between two neighbours.');
+    add(3, null, 'The bare diminished triad, which is harsher and rarely held.');
+    return out;
+  }
+
+  if (fn === 'D') {
+    add(4, 'dom', 'A true dominant 7th — the pull home.');
+    add(5, 'dom', 'Add the 9th for warmth without losing the pull.');
+    add(7, 'dom', 'A 13th: the full dominant sound.');
+    add(4, 'sus4', 'Suspend the third, then release it into the 3rd.');
+    add(5, 'dom', 'With a ♭9 this is the classic minor-key dominant.');
+    out[4].alterations = ['b9'];
+    return out;
+  }
+
+  if (fn === 'S') {
+    if (quality === 'min') {
+      add(4, null, 'The m7 — this is the ii of a ii–V, and it wants the dominant.');
+      add(5, null, 'A m9: the same function, more air.');
+      add(4, 'sus4', 'Suspended, which delays the move.');
+    } else {
+      add(4, null, 'A maj7 on the subdominant — soft, and it floats.');
+      add(3, '6', 'A 6th chord, the settled vintage sound.');
+      add(3, 'add9', 'add9 keeps it a triad but opens it up.');
+    }
+    return out;
+  }
+
+  // Tonic
+  if (quality === 'min' || minorKey) {
+    add(3, null, 'The plain minor triad — the most direct statement of home.');
+    add(4, null, 'A m7 tonic: home, but still moving.');
+    add(5, null, 'A m9 tonic, which is where a lot of neo-soul lives.');
+    add(3, '6', 'm6 — brighter than it looks, because of the raised 6th.');
+  } else {
+    add(3, null, 'The plain triad — nothing is clearer than this.');
+    add(4, null, 'maj7 makes the tonic dreamier and less final.');
+    add(5, '6', 'A 6/9 chord: resolved, but not a full stop.');
+    add(3, 'add9', 'add9 — a triad with light on it.');
+  }
+  return out;
+}
+
+/** 'maj' | 'min' | 'dim' | 'aug' for a mode's degree. */
+function degreeQuality(degree, modeId) {
+  const steps = (MODES[modeId] || MODES.ionian).steps;
+  const d = degree % 7;
+  const at = (k) => steps[k % 7] + 12 * Math.floor(k / 7);
+  const third = at(d + 2) - at(d);
+  const fifth = at(d + 4) - at(d);
+  if (fifth === 6) return 'dim';
+  if (fifth === 8) return 'aug';
+  return third === 3 ? 'min' : 'maj';
+}
+
+/**
+ * What could come next.
+ *
+ * Scores combine root-motion strength, functional succession, the section's
+ * shape, and whether the chord has already been used — a progression that
+ * revisits a chord is normal, one that never leaves it is not. The reason
+ * strings are the point: they are what the user reads.
+ *
+ * @param {object} ctx
+ * @param {number} ctx.tonicPc
+ * @param {string} ctx.modeId
+ * @param {Array<object>} ctx.written   specs already placed, in order
+ * @param {string} ctx.role             a SECTION_ROLES id
+ * @param {number} ctx.position         index of the slot being filled
+ * @param {number} ctx.total            slots in the section
+ * @returns {Array<{spec, chord, score, reason, tag}>}
+ */
+function suggestNext(ctx) {
+  const { tonicPc, modeId, role = 'verse', position = 0, total = 4 } = ctx;
+  const written = (ctx.written || []).filter(Boolean);
+  const shape = SECTION_ROLES[role] || SECTION_ROLES.verse;
+  const prev = written.length ? written[written.length - 1] : null;
+  const isLast = position >= total - 1;
+  const isFirst = position === 0 || !prev;
+  const out = [];
+
+  for (let degree = 0; degree < 7; degree++) {
+    const fn = degreeFunction(degree, modeId);
+    let score = 0;
+    const reasons = [];
+
+    if (isFirst) {
+      const rank = shape.openOn.indexOf(degree);
+      if (rank >= 0) {
+        score += 12 - rank * 3;
+        reasons.push(`opens a ${shape.label.toLowerCase()} well`);
+      }
+      if (degree === 0) { score += 6; reasons.push('the tonic, which states the key outright'); }
+    } else {
+      const motion = rootMotion(prev.degree, degree);
+      score += motion.weight;
+      if (motion.weight >= 8) reasons.push(motion.name);
+
+      // Functional succession: away from home, then back.
+      const prevFn = degreeFunction(prev.degree, modeId);
+      if (prevFn === 'D' && fn === 'T') { score += 8; reasons.push('resolves the dominant'); }
+      else if (prevFn === 'S' && fn === 'D') { score += 7; reasons.push('subdominant into dominant — the standard approach'); }
+      else if (prevFn === 'T' && fn === 'D') { score += 8; reasons.push('home straight to the dominant, which is how half a songbook works'); }
+      else if (prevFn === 'T' && fn === 'S') { score += 5; reasons.push('steps away from home'); }
+      else if (prevFn === 'D' && fn === 'S') { score -= 4; reasons.push('pulls back from the dominant, which loosens the tension'); }
+      if (degree === prev.degree) score -= 14;
+    }
+
+    if (isLast) {
+      const rank = shape.closeOn.indexOf(degree);
+      if (rank >= 0) { score += 10 - rank * 3; reasons.push(`ends a ${shape.label.toLowerCase()} the way it should`); }
+      if (shape.avoidClose.includes(degree)) {
+        score -= 10;
+        reasons.push(`resolving here would spend the tension the ${shape.label.toLowerCase()} is building`);
+      }
+    }
+
+    // A chord already in the section is familiar rather than new.
+    const uses = written.filter((s) => s.degree === degree).length;
+    score -= uses * 2;
+
+    const colours = idiomaticColours(degree, modeId);
+    const pick = colours[0] || { size: shape.prefersSize, colour: null, why: '' };
+    const size = isLast || shape.prefersSize > 3 ? pick.size : shape.prefersSize;
+    const spec = {
+      degree,
+      size: Math.max(size, shape.prefersSize === 4 ? 4 : 3),
+      colour: pick.colour,
+      alterations: pick.alterations ? pick.alterations.slice() : [],
+    };
+
+    out.push({
+      spec,
+      chord: chordForSpec(tonicPc, modeId, spec),
+      score,
+      tag: functionLabel(fn),
+      reason: reasons.length ? capitalise(reasons.join('; ')) : `${functionLabel(fn)} chord in this key.`,
+    });
+  }
+
+  // Secondary dominants: the V7 of any diatonic chord that is not diminished.
+  // These are what let a plain diatonic loop turn a corner, so they are offered
+  // alongside the diatonic options rather than hidden behind a separate menu.
+  if (!isLast) {
+    for (const target of secondaryDominants(tonicPc, modeId)) {
+      if (prev && prev.degree === target.fromDegree) continue;
+      out.push({
+        spec: target.spec,
+        chord: target.chord,
+        score: target.isOwnDominant ? 11 : prev && rootMotion(prev.degree, target.fromDegree).weight >= 6 ? 9 : 6,
+        tag: 'Borrowed',
+        reason: target.why,
+      });
+    }
+  }
+
+  // In a minor key the "diatonic dominant" and the borrowed V7 are the same
+  // chord arrived at two ways, so collapse them — and keep the explanation that
+  // says why the third had to be raised, which is the one worth reading.
+  const bySymbol = new Map();
+  for (const s of out.sort((a, b) => b.score - a.score)) {
+    const existing = bySymbol.get(s.chord.symbol);
+    if (!existing) { bySymbol.set(s.chord.symbol, s); continue; }
+    if (s.tag === 'Borrowed' && existing.tag !== 'Borrowed') existing.reason = s.reason;
+  }
+  return [...bySymbol.values()];
+}
+
+/**
+ * Every secondary dominant available in a key.
+ *
+ * A secondary dominant sits a fifth above the chord it resolves to, so it is
+ * built on the scale degree two places up the circle from the target. The
+ * diminished degree is skipped: a chord that cannot be a stable target does not
+ * get a dominant of its own.
+ */
+function secondaryDominants(tonicPc, modeId) {
+  const flats = keySignaturePrefersFlats(tonicPc, modeId);
+  const out = [];
+  for (let target = 0; target < 7; target++) {
+    if (degreeQuality(target, modeId) === 'dim') continue;
+    // The dominant of a degree is the degree a fourth below it (4 steps up).
+    const fromDegree = (target + 4) % 7;
+    // V7 of the tonic only counts as borrowed when the key does not already
+    // supply it. In a major key it is just the V7 and belongs in the diatonic
+    // list; in a minor key the diatonic v is minor, and making it major is the
+    // single most useful borrowing there is — it is what lets a minor key
+    // cadence at all, and it is exactly the E7 in A minor.
+    const isOwnDominant = target === 0;
+    if (isOwnDominant && degreeQuality(4, modeId) === 'maj') continue;
+
+    const spec = { degree: fromDegree, size: 4, colour: 'dom', alterations: [] };
+    const chord = chordForSpec(tonicPc, modeId, spec);
+    const targetChord = chordForSpec(tonicPc, modeId, { degree: target, size: 3 });
+    out.push({
+      fromDegree,
+      targetDegree: target,
+      isOwnDominant,
+      spec,
+      chord,
+      targetChord,
+      targetName: noteName(targetChord.root, flats),
+      targetNumeral: targetChord.numeral,
+      label: `${chord.symbol}→${targetChord.symbol}`,
+      why: isOwnDominant
+        ? `The key's own v is minor and cannot pull home. Raising its third makes ${chord.symbol}, which can.`
+        : `The V7 of ${noteName(targetChord.root, flats)} — it borrows a note from outside the key to point at the ${targetChord.numeral} chord.`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Read a progression back and say what it does.
+ *
+ * The cadence check is the useful part: it names how the section ends and
+ * whether that matches the job the section is doing, which is the single most
+ * common thing to get wrong when writing by ear.
+ */
+function analyseProgression(specs, tonicPc, modeId, role = 'verse') {
+  const written = (specs || []).filter(Boolean);
+  const shape = SECTION_ROLES[role] || SECTION_ROLES.verse;
+  const notes = [];
+  if (written.length < 2) {
+    return { cadence: null, notes, summary: 'Add another chord to hear a progression.' };
+  }
+
+  // A chord held over two bars is one chord as far as the cadence is concerned,
+  // so collapse repeats before reading the ending. Otherwise `V7 – i – i` looks
+  // like it has no cadence at all, when in fact it just lands early and rests.
+  const flow = written.filter((s, i) => i === 0 || s.degree !== written[i - 1].degree);
+  if (flow.length < 2) {
+    return { cadence: null, notes, summary: written.map((s) => chordForSpec(tonicPc, modeId, s).numeral).join(' – ') };
+  }
+  const last = flow[flow.length - 1];
+  const prev = flow[flow.length - 2];
+  const lastFn = degreeFunction(last.degree, modeId);
+  const prevFn = degreeFunction(prev.degree, modeId);
+
+  let cadence = null;
+  if (prevFn === 'D' && last.degree === 0) cadence = { id: 'authentic', label: 'Perfect cadence', note: 'Dominant to tonic — the section lands.' };
+  else if (prev.degree === 3 && last.degree === 0) cadence = { id: 'plagal', label: 'Plagal cadence', note: 'IV to I — the "amen" ending, softer than a perfect cadence.' };
+  else if (lastFn === 'D') cadence = { id: 'half', label: 'Half cadence', note: 'Ends on the dominant, unresolved — it hands over to whatever comes next.' };
+  else if (prevFn === 'D' && last.degree === 5) cadence = { id: 'deceptive', label: 'Deceptive cadence', note: 'The dominant resolves to vi instead of I — the ending is dodged on purpose.' };
+
+  if (cadence && shape.cadence !== 'any' && cadence.id !== shape.cadence) {
+    notes.push({
+      level: 'hint',
+      text: `A ${shape.label.toLowerCase()} usually ends with a ${shape.cadence} cadence; this one ends with a ${cadence.label.toLowerCase()}.`,
+    });
+  }
+  if (!cadence) notes.push({ level: 'hint', text: 'No clear cadence — the section stops rather than ends.' });
+
+  // A loop with no dominant anywhere never generates tension.
+  if (!written.some((s) => degreeFunction(s.degree, modeId) === 'D' || s.colour === 'dom')) {
+    notes.push({ level: 'hint', text: 'Nothing here acts as a dominant, so the loop stays flat. Try a V7 before the turn.' });
+  }
+  // Every chord the same size is a texture, not always a problem, but worth saying.
+  const sizes = new Set(written.map((s) => s.size || 3));
+  if (written.length >= 4 && sizes.size === 1 && [...sizes][0] === 3) {
+    notes.push({ level: 'idea', text: 'All plain triads. A 7th or 9th on one chord will give the loop a centre of gravity.' });
+  }
+
+  const summary = written
+    .map((s) => chordForSpec(tonicPc, modeId, s).numeral)
+    .join(' – ');
+  return { cadence, notes, summary };
+}
+
+/**
+ * The scale to improvise with over a chord, and the note to handle carefully.
+ *
+ * This is the melodic half of the brain. A guitarist who knows the chord still
+ * has to know what to play over it, and the answer is not always the key's own
+ * scale: a secondary dominant borrows notes, and an altered dominant asks for a
+ * different scale entirely.
+ */
+function scaleForChord(spec, tonicPc, modeId) {
+  const chord = chordForSpec(tonicPc, modeId, spec);
+  const root = chord.root;
+  const alt = spec.alterations || [];
+  const scale = (name, offsets, avoid = null, why = '') => ({
+    name, why,
+    pitchClasses: offsets.map((o) => (root + o) % 12),
+    avoidPc: avoid === null ? null : (root + avoid) % 12,
+  });
+
+  if (spec.colour === 'dom') {
+    if (alt.includes('b9') || alt.includes('#9')) {
+      return scale('Altered (super-locrian)', [0, 1, 3, 4, 6, 8, 10], null,
+        'Every tension is raised or lowered — this is the scale the ♭9 is asking for.');
+    }
+    if (alt.includes('#11')) {
+      return scale('Lydian dominant', [0, 2, 4, 6, 7, 9, 10], null,
+        'A dominant with a raised 4th, which is exactly the ♯11.');
+    }
+    return scale('Mixolydian', [0, 2, 4, 5, 7, 9, 10], 5,
+      'The dominant scale. The 4th clashes with the chord\'s 3rd — pass through it, do not land on it.');
+  }
+  if (spec.colour === 'dim7') {
+    return scale('Diminished (half–whole)', [0, 1, 3, 4, 6, 7, 9, 10], null,
+      'Symmetrical, like the chord — it works from any of the four notes.');
+  }
+  if (spec.colour === 'm7b5') {
+    return scale('Locrian ♮2', [0, 2, 3, 5, 6, 8, 10], null,
+      'Locrian with the 2nd raised, which keeps the 9th usable.');
+  }
+
+  // Diatonic chords take the mode built on their own root — the key's notes,
+  // rearranged so the chord tones fall on the strong degrees.
+  const steps = (MODES[modeId] || MODES.ionian).steps;
+  const d = spec.degree % 7;
+  const offsets = Array.from({ length: 7 }, (_, k) => {
+    const idx = (d + k) % 7;
+    const oct = Math.floor((d + k) / 7);
+    return steps[idx] + 12 * oct - steps[d];
+  });
+  const quality = degreeQuality(d, modeId);
+  const MODE_OF_DEGREE = ['Ionian', 'Dorian', 'Phrygian', 'Lydian', 'Mixolydian', 'Aeolian', 'Locrian'];
+  const parentIdx = (MODE_IDS_ORDER.indexOf(modeId) + d) % 7;
+  // A perfect 4th over a major third is the one note that fights the chord.
+  const avoid = quality === 'maj' && offsets.includes(5) ? 5 : null;
+  return scale(
+    `${noteName(root, keySignaturePrefersFlats(tonicPc, modeId))} ${MODE_OF_DEGREE[parentIdx]}`,
+    offsets.map((o) => ((o % 12) + 12) % 12),
+    avoid,
+    'The key\'s own notes, starting from this chord\'s root.'
+  );
+}
+
+const MODE_IDS_ORDER = ['ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian'];
+
+function capitalise(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /* ===== src/content.js ===== */
 // Editorial content: harmonic-function copy, mode lessons, and the rule-based
 // songwriting suggestions. Ported from the CircleSong design prototype.
@@ -2465,6 +3582,61 @@ const TEMPLATES = [
     blurb: 'Sits on the tonic before moving — leaves space for the vocal.' },
   { id: 'celticVamp', family: 'Folk & Country', label: 'Celtic Vamp', mode: 'mixolydian', degrees: [0, 6, 0, 3], seventh: false,
     blurb: 'The ♭VII again, this time in a jig. Works beautifully in DADGAD.' },
+
+  // --- Jazz & neo-soul ---
+  //
+  // These are the progressions that need the chord builder: every entry is a
+  // spec, so the template asks for a specific quality on a specific degree
+  // rather than "all sevenths" applied uniformly. That is what lets a minor
+  // ii-V-i carry a half-diminished ii and an altered V while the i stays a m9.
+  { id: 'minorDom9', family: 'Jazz & Neo-Soul', label: 'Minor ii–V–i with a ♭9', mode: 'aeolian',
+    degrees: [
+      { degree: 3, size: 5 },
+      { degree: 4, size: 5, colour: 'dom', alterations: ['b9'] },
+      { degree: 0, size: 5 },
+      { degree: 0, size: 5 },
+    ],
+    blurb: 'Dm9 – E7♭9 – Am9 in A minor. The v has to be borrowed as a dominant to pull home, and the ♭9 is the note that makes it ache.' },
+  { id: 'minorTwoFive', family: 'Jazz & Neo-Soul', label: 'Half-Diminished ii–V–i', mode: 'aeolian',
+    degrees: [
+      { degree: 1, size: 4, colour: 'm7b5' },
+      { degree: 4, size: 5, colour: 'dom', alterations: ['b9'] },
+      { degree: 0, size: 5 },
+      { degree: 0, size: 5 },
+    ],
+    blurb: 'The textbook minor cadence: iiø7 sets up the dominant, the dominant lands on a m9.' },
+  { id: 'sixNineTurn', family: 'Jazz & Neo-Soul', label: '6/9 Turnaround', mode: 'ionian',
+    degrees: [
+      { degree: 0, size: 5, colour: '6' },
+      { degree: 5, size: 4 },
+      { degree: 1, size: 5 },
+      { degree: 4, size: 7, colour: 'dom' },
+    ],
+    blurb: 'A 6/9 tonic never quite sits down, so the loop keeps turning. The 13th on the V is the full jazz dominant.' },
+  { id: 'susResolve', family: 'Jazz & Neo-Soul', label: 'Sus4 Release', mode: 'mixolydian',
+    degrees: [
+      { degree: 0, size: 4, colour: 'sus4' },
+      { degree: 0, size: 5, colour: 'dom' },
+      { degree: 6, size: 4 },
+      { degree: 0, size: 4 },
+    ],
+    blurb: 'Hold the 4th, then let it fall to the 3rd. The oldest tension-and-release there is.' },
+  { id: 'secondaryCycle', family: 'Jazz & Neo-Soul', label: 'Secondary Dominant Cycle', mode: 'ionian',
+    degrees: [
+      { degree: 0, size: 4 },
+      { degree: 2, size: 4, colour: 'dom' },
+      { degree: 1, size: 4 },
+      { degree: 4, size: 5, colour: 'dom' },
+    ],
+    blurb: 'Every chord is the dominant of the next. Each borrowed 7th pulls a fifth down into the chord after it.' },
+  { id: 'neoSoulLoop', family: 'Jazz & Neo-Soul', label: 'Neo-Soul Loop', mode: 'dorian',
+    degrees: [
+      { degree: 0, size: 5 },
+      { degree: 3, size: 5, colour: 'dom' },
+      { degree: 5, size: 5 },
+      { degree: 4, size: 4, colour: 'sus4' },
+    ],
+    blurb: 'Dorian with ninths on everything. The major IV is what makes Dorian sound like Dorian rather than minor.' },
 ];
 
 const TEMPLATE_FAMILIES = [...new Set(TEMPLATES.map((t) => t.family))];
@@ -2620,6 +3792,61 @@ function archtopBodyIR(ctx) {
       [1150, 0.08, 0.03],
     ],
     { length: 0.24, tail: 0.14, seed: 9182, tailDecay: 35 }
+  );
+}
+
+/**
+ * Grand piano soundboard.
+ *
+ * A soundboard is a large, lightly damped plate, so it differs from a guitar
+ * body in two ways that matter: the modes run much lower and much denser, and
+ * they ring far longer. That long, dense tail is the "bloom" heard after a
+ * piano chord is struck, and it is most of what separates a modelled piano
+ * string from a piano.
+ */
+function pianoBoardIR(ctx) {
+  return modalIR(
+    ctx,
+    [
+      [58, 0.9, 0.5],
+      [92, 1.0, 0.45],
+      [131, 0.8, 0.4],
+      [175, 0.62, 0.36],
+      [233, 0.5, 0.32],
+      [311, 0.42, 0.28],
+      [415, 0.34, 0.24],
+      [554, 0.26, 0.2],
+      [740, 0.2, 0.17],
+      [988, 0.15, 0.14],
+      [1320, 0.11, 0.11],
+      [1760, 0.08, 0.09],
+      [2350, 0.055, 0.07],
+      [3140, 0.038, 0.055],
+      [4190, 0.024, 0.045],
+    ],
+    { length: 0.75, tail: 0.5, seed: 5150, tailDecay: 9 }
+  );
+}
+
+/**
+ * Rhodes-style tine bar and pickup.
+ *
+ * An electric piano has almost no acoustic body — the tine is sensed
+ * electromagnetically, like a guitar pickup. The tone bar adds one strong low
+ * resonance and very little else, which is why the sound is so clean and why
+ * the bell-like attack survives all the way to the output.
+ */
+function tineBarIR(ctx) {
+  return modalIR(
+    ctx,
+    [
+      [86, 1.0, 0.22],
+      [172, 0.4, 0.16],
+      [340, 0.18, 0.1],
+      [620, 0.08, 0.07],
+      [1180, 0.04, 0.05],
+    ],
+    { length: 0.22, tail: 0.1, seed: 6180, tailDecay: 40 }
   );
 }
 
@@ -3092,6 +4319,40 @@ const PRESETS = {
     gain: 0.58,
     coupling: 0.003,
   },
+
+  // Struck strings rather than plucked ones. `hammer` swaps the exciter for a
+  // felt contact pulse and `stiffness` stretches the partials off the harmonic
+  // series — together those two are what a piano is, physically.
+  piano: {
+    label: 'Grand Piano',
+    string: {
+      decay: 9.0, brightness: 0.5, pickPos: 0.125, hardness: 0.45,
+      pickupMix: 0, hammer: 1, stiffness: 0.55,
+    },
+    body: 'piano',
+    bodyMix: 0.7,
+    drive: 0,
+    tone: { low: 1.5, mid: -1, midFreq: 600, high: 1.5 },
+    reverb: 0.24,
+    gain: 0.42,
+    coupling: 0.02, // undamped neighbours ring in sympathy, as on a real piano
+    isKeyboard: true,
+  },
+  rhodes: {
+    label: 'Electric Piano',
+    string: {
+      decay: 6.0, brightness: 0.34, pickPos: 0.28, hardness: 0.3,
+      pickupMix: 0.3, pickupPos: 0.22, hammer: 0.8, stiffness: 0.85,
+    },
+    body: 'tine',
+    bodyMix: 0.55,
+    drive: 0.06,
+    tone: { low: 2, mid: -2.5, midFreq: 900, high: 2 },
+    reverb: 0.2,
+    gain: 0.2,
+    coupling: 0.004,
+    isKeyboard: true,
+  },
 };
 
 class AudioEngine {
@@ -3235,6 +4496,8 @@ class AudioEngine {
       steel: steelBodyIR(this.ctx),
       nylon: nylonBodyIR(this.ctx),
       archtop: archtopBodyIR(this.ctx),
+      piano: pianoBoardIR(this.ctx),
+      tine: tineBarIR(this.ctx),
       cabinet: cabinetIR(this.ctx),
     };
     this.room.buffer = roomIR(this.ctx);
@@ -3430,8 +4693,15 @@ class AudioEngine {
       hardness: hardness ?? s.hardness,
       pickupMix: s.pickupMix ?? 0,
       pickupPos: s.pickupPos ?? 0.12,
+      hammer: s.hammer ?? 0,
+      stiffness: s.stiffness ?? 0,
       muteAmount,
     });
+  }
+
+  /** True when the current preset is struck rather than plucked. */
+  get isKeyboard() {
+    return !!this.preset.isKeyboard;
   }
 
   /** Damp a ringing string — note release or a fret-hand mute. */
@@ -3464,6 +4734,17 @@ class AudioEngine {
     for (let s = 0; s < 6; s++) if (midi[s] !== null && midi[s] !== undefined) played.push(s);
     if (!played.length) return;
 
+    // Ten fingers land together; a pick crosses the strings one at a time. A
+    // keyboard preset played with a 22 ms strum sounds like a harp, so the
+    // spread collapses to the few milliseconds of a human hand and upstrokes
+    // stop dropping the bass — there is no such thing as an upstroke on a
+    // piano.
+    const keys = this.isKeyboard;
+    if (keys) {
+      spread = Math.min(spread, 0.006);
+      direction = 'D';
+    }
+
     let order = played;
     if (direction === 'U') {
       order = played.slice().reverse();
@@ -3483,7 +4764,7 @@ class AudioEngine {
         midi: midi[s],
         when: when + i * gap + jitter,
         velocity: Math.min(1, v),
-        muteAmount,
+        muteAmount: keys ? 0 : muteAmount, // no palm muting a piano
         pickPos: basePickPos * (direction === 'U' ? 1.15 : 1) + s * 0.004,
       });
     });
@@ -3846,6 +5127,7 @@ class Sequencer {
 
 
 
+
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -3854,10 +5136,11 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-const TONE_ORDER = ['acoustic', 'nylon', 'electric', 'crunch', 'jazz', 'reggae'];
+const TONE_ORDER = ['acoustic', 'nylon', 'electric', 'crunch', 'jazz', 'reggae', 'piano', 'rhodes'];
 const TONE_COLOR = {
   acoustic: 'var(--d)', nylon: 'var(--b)', electric: 'var(--a)',
   crunch: 'var(--c)', jazz: 'var(--c)', reggae: 'var(--b)',
+  piano: 'var(--a)', rhodes: 'var(--d)',
 };
 
 const TABS = [
@@ -3886,8 +5169,17 @@ const state = {
   modeIdx: 0,
   activeDegree: 0,
   voicingMode: 'root',
-  seventh: false,
   voicingIndex: 0,
+
+  /**
+   * How chords are built, applied to whichever degree is chosen. Stored as a
+   * recipe rather than a finished chord so a progression survives a key change:
+   * `Dm9 – E7♭9 – Am9` in A minor becomes `Gm9 – A7♭9 – Dm9` in D minor without
+   * anything being re-entered.
+   */
+  chordSize: 3,        // notes in the stack: 3 triad, 4 seventh, 5 ninth, 6 eleventh, 7 thirteenth
+  chordColour: null,   // null = whatever the key gives; otherwise a CHORD_COLOURS id
+  chordAlterations: [],
 
   tone: 'acoustic',
   rhythm: 'straight8',
@@ -3902,8 +5194,10 @@ const state = {
    * Sections are the song's loops — a verse, a chorus, a turnaround. Only one
    * plays at a time; switching while the transport runs waits for the bar line.
    */
-  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }],
+  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }],
   activeSection: 0,
+  /** {barIdx, slotIdx} of the bar the chord picker is open on, or null. */
+  picker: null,
   /** Section queued to take over at the next bar line, or null. */
   queuedSection: null,
 
@@ -3925,6 +5219,8 @@ const state = {
   templateId: null,
   templateFamily: 'All',
   showAbout: false,
+  /** Draw the secondary-dominant arrows on the wheel. */
+  showSecDom: false,
 
   /**
    * Key lock turns the wheel from a key picker into an explorer: taps stop
@@ -4036,12 +5332,53 @@ const modeId = () => MODE_IDS[state.modeIdx];
 const tuning = () => TUNINGS[state.tuningId].midi;
 const preferFlats = () => keySignaturePrefersFlats(state.rootPc, modeId());
 
-function currentChords() {
-  return diatonicChords(state.rootPc, modeId(), state.seventh);
+/** The spec the builder controls are currently set to. */
+function currentSpec(degree = state.activeDegree) {
+  return {
+    degree: degree % 7,
+    size: state.chordSize,
+    colour: state.chordColour,
+    alterations: state.chordAlterations.slice(),
+  };
 }
 
-function chordForDegree(degree, seventh = state.seventh) {
-  return diatonicChords(state.rootPc, modeId(), seventh)[degree % 7];
+/** The seven degrees of the key, each built to the current recipe. */
+function currentChords() {
+  return Array.from({ length: 7 }, (_, d) => chordForSpec(state.rootPc, modeId(), currentSpec(d)));
+}
+
+/**
+ * Chord for a degree. Accepts either a bare degree (built to the live settings)
+ * or a stored spec, which is what timeline slots and templates carry.
+ */
+function chordForDegree(degree, spec = null) {
+  if (spec && typeof spec === 'object') {
+    return chordForSpec(state.rootPc, modeId(), { ...spec, degree: (spec.degree ?? degree) % 7 });
+  }
+  return chordForSpec(state.rootPc, modeId(), currentSpec(degree));
+}
+
+/**
+ * Normalise the shorthand used by templates and moods into a spec. A number is
+ * a plain degree; an object may name any part of the recipe.
+ */
+function toSpec(entry, fallbackSize) {
+  if (entry && typeof entry === 'object') {
+    return {
+      degree: (entry.degree ?? 0) % 7,
+      size: entry.size ?? fallbackSize,
+      colour: entry.colour ?? null,
+      alterations: entry.alterations ? entry.alterations.slice() : [],
+    };
+  }
+  return { degree: entry % 7, size: fallbackSize, colour: null, alterations: [] };
+}
+
+/** Templates predate the size selector, so `seventh: true` still means "4 notes". */
+function sizeFromLegacy(value, fallback = 3) {
+  if (typeof value === 'number') return Math.max(3, Math.min(7, value));
+  if (typeof value === 'boolean') return value ? 4 : 3;
+  return fallback;
 }
 
 function voicingList(chord, mode = state.voicingMode) {
@@ -4157,17 +5494,23 @@ async function togglePlay() {
 
 // ------------------------------------------------------------ timeline edits
 
-function slotFromDegree(degree) {
-  const chord = chordForDegree(degree);
-  const list = voicingList(chord);
+/**
+ * Build a timeline slot. The spec travels with the slot, so the chord can be
+ * rebuilt from scratch after a key, mode or tuning change — and so a 9th chord
+ * stays a 9th chord when the rest of the timeline is plain triads.
+ */
+function slotFromDegree(degree, spec = null, voicingMode = state.voicingMode) {
+  const full = spec ? { ...toSpec(spec, state.chordSize), degree: degree % 7 } : currentSpec(degree);
+  const chord = chordForDegree(degree, full);
+  const list = voicingList(chord, voicingMode);
   const voicing = list.length ? list[state.voicingIndex % list.length] : null;
   return {
-    degree,
+    degree: degree % 7,
+    spec: full,
     chord,
     voicing,
-    voicingMode: state.voicingMode,
-    seventh: state.seventh,
-    label: chordLabel(chord, VOICING_MODES[state.voicingMode].inversion, preferFlats()),
+    voicingMode,
+    label: chordLabel(chord, VOICING_MODES[voicingMode].inversion, preferFlats()),
     roman: chord.numeral,
   };
 }
@@ -4199,23 +5542,46 @@ function applyDegrees(degrees, seventh, mode = null) {
   // A suggestion carries the mode it belongs in. Applying it without switching
   // would silently produce different chords from the ones it is named for.
   if (mode && MODE_IDS.includes(mode)) state.modeIdx = MODE_IDS.indexOf(mode);
-  const prevSeventh = state.seventh;
-  state.seventh = !!seventh;
+  const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
   const nextBars = makeBars(size);
-  degrees.forEach((d, i) => { nextBars[i] = { slots: [slotFromDegree(d)] }; });
-  state.seventh = prevSeventh || !!seventh;
+  degrees.forEach((entry, i) => {
+    const spec = toSpec(entry, defaultSize);
+    nextBars[i] = { slots: [slotFromDegree(spec.degree, spec)] };
+  });
+  // Leave the builder set to the progression's own recipe, so the next chord
+  // added by hand matches what was just loaded instead of reverting to triads.
+  state.chordSize = defaultSize;
+  state.chordColour = null;
+  state.chordAlterations = [];
   setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
   toast(`Loaded ${degrees.length} chords into ${size} bars.`);
 }
 
-/** Re-derive every stored shape — used after a key, tuning, or mode change. */
+/**
+ * Re-derive every stored shape — used after a key, tuning, or mode change.
+ * Each slot rebuilds from its own spec, so a progression keeps the chord
+ * qualities it was written with instead of collapsing to the live settings.
+ */
 function reresolveAll() {
-  for (const bar of bars()) {
-    bar.slots = bar.slots.map((slot) => (slot ? slotFromDegree(slot.degree) : null));
+  for (const sec of state.sections) {
+    for (const bar of sec.bars) {
+      bar.slots = bar.slots.map((slot) =>
+        slot ? slotFromDegree(slot.degree, slot.spec, slot.voicingMode) : null
+      );
+    }
   }
+  // Smoothing is a property of the section, not a one-off edit, so a key, mode
+  // or tuning change re-derives it rather than dropping back to root shapes.
+  const active = state.activeSection;
+  state.sections.forEach((sec, i) => {
+    if (!sec.smooth) return;
+    state.activeSection = i;
+    applySmoothing();
+  });
+  state.activeSection = active;
 }
 
 // ------------------------------------------------------------------ rendering
@@ -4369,6 +5735,7 @@ function renderCircle() {
     modeBtns.appendChild(b);
   }
 
+  renderSecondaryDominants(posAt);
   renderExplore();
 
   const strip = $('scaleStrip');
@@ -4391,6 +5758,102 @@ function renderCircle() {
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Draw each secondary dominant as an arrow into the chord it resolves to.
+ *
+ * This is the one thing the circle of fifths is uniquely good at showing. A
+ * dominant resolves down a fifth, and down a fifth is one step counter-clockwise
+ * on this wheel — so every one of these arrows is the same short hop, and seeing
+ * six of them at once is what makes the pattern obvious rather than a rule to
+ * memorise. The chord list underneath is the part you can play.
+ */
+function renderSecondaryDominants(posAt) {
+  const svg = $('wheelArcs');
+  const panel = $('secDomPanel');
+  const btn = $('secDomBtn');
+  btn.setAttribute('aria-pressed', String(state.showSecDom));
+  btn.textContent = state.showSecDom ? 'On' : 'Off';
+
+  svg.replaceChildren();
+  panel.hidden = !state.showSecDom;
+  if (!state.showSecDom) return;
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const doms = secondaryDominants(state.rootPc, modeId());
+  // Where each chord root sits on the wheel: CIRCLE lists pitch classes in
+  // fifths order, which is exactly the wedge order.
+  const wedgeOf = (pc) => CIRCLE.indexOf(pc);
+
+  for (const d of doms) {
+    const from = wedgeOf(d.chord.root);
+    const to = wedgeOf(d.targetChord.root);
+    if (from < 0 || to < 0) continue;
+    const isMinorTarget = d.targetChord.intervals[1] === 3;
+    // Minor chords live on the inner ring, majors on the outer.
+    const r1 = 95;
+    const r2 = isMinorTarget ? 84 : 95;
+    const a = posAt(r1, from);
+    const b = posAt(r2, to);
+    // Bow the line toward the hub so arrows never cross the labels.
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const cx = 140 + (mx - 140) * 0.62;
+    const cy = 140 + (my - 140) * 0.62;
+
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', d.isOwnDominant ? 'var(--a)' : 'var(--c)');
+    path.setAttribute('stroke-width', d.isOwnDominant ? '2.2' : '1.4');
+    path.setAttribute('opacity', d.isOwnDominant ? '0.95' : '0.6');
+    path.setAttribute('marker-end', 'url(#secdom-arrow)');
+    svg.appendChild(path);
+  }
+
+  // One shared arrowhead.
+  const defs = document.createElementNS(NS, 'defs');
+  const marker = document.createElementNS(NS, 'marker');
+  marker.setAttribute('id', 'secdom-arrow');
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '5');
+  marker.setAttribute('markerHeight', '5');
+  marker.setAttribute('orient', 'auto-start-reverse');
+  const head = document.createElementNS(NS, 'path');
+  head.setAttribute('d', 'M 0 1 L 9 5 L 0 9 z');
+  head.setAttribute('fill', 'var(--c)');
+  marker.appendChild(head);
+  defs.appendChild(marker);
+  svg.insertBefore(defs, svg.firstChild);
+
+  const row = $('secDomRow');
+  row.replaceChildren();
+  for (const d of doms) {
+    const b = el('button', `chip small${d.isOwnDominant ? ' active' : ''}`, d.label);
+    b.title = d.why;
+    b.onclick = async () => {
+      $('secDomHint').textContent = d.why;
+      // Hearing it resolve is the explanation — play the dominant, then the
+      // chord it lands on.
+      if (!(await ensureAudio())) return;
+      const dur = Math.max((60 / state.bpm) * 2, 0.85);
+      const t0 = auditionStart();
+      [d.chord, d.targetChord].forEach((c, i) => {
+        const v = resolveVoicing(c, 'root', { tuning: tuning() });
+        if (!v) return;
+        sequencer.scheduleChord({ chord: c, voicing: v }, t0 + i * dur, dur, {
+          rhythm: state.rhythm,
+          tuning: tuning(),
+          velocity: 1,
+        });
+      });
+    };
+    row.appendChild(b);
+  }
+  $('secDomHint').textContent = 'Tap one to hear it resolve. Each arrow points at the chord that chord pulls into.';
 }
 
 /**
@@ -4742,12 +6205,85 @@ function renderCompose() {
     invRow.appendChild(b);
   }
 
-  const seventhBtn = $('seventhBtn');
-  seventhBtn.classList.toggle('active', state.seventh);
-  seventhBtn.style.background = state.seventh ? 'var(--d)' : '';
-  seventhBtn.style.borderColor = state.seventh ? 'var(--d)' : '';
-
+  renderChordBuilder();
   renderDiagram(chord);
+}
+
+/** Note counts the size row offers, labelled the way a chart would name them. */
+const CHORD_SIZE_LABELS = [
+  [3, '△', 'Triad — root, third, fifth'],
+  [4, '7', 'Seventh chord'],
+  [5, '9', 'Ninth'],
+  [6, '11', 'Eleventh'],
+  [7, '13', 'Thirteenth — the full stack'],
+];
+
+/**
+ * The chord builder: size, colour, alterations.
+ *
+ * These three rows are what turn a fixed table of seven chords into a way of
+ * writing `Dm9 – E7♭9 – Am9`. Options that would not make sense on the current
+ * chord are disabled rather than hidden, so the shape of what is available
+ * stays learnable.
+ */
+function renderChordBuilder() {
+  const sizeRow = $('chordSizeRow');
+  sizeRow.replaceChildren();
+  for (const [size, label, title] of CHORD_SIZE_LABELS) {
+    const b = el('button', `chip small${state.chordSize === size ? ' active' : ''}`, label);
+    b.title = title;
+    b.onclick = () => {
+      state.chordSize = size;
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    sizeRow.appendChild(b);
+  }
+
+  const colourRow = $('chordColourRow');
+  colourRow.replaceChildren();
+  for (const c of CHORD_COLOURS) {
+    const on = state.chordColour === c.id;
+    const b = el('button', `chip small${on ? ' active' : ''}`, c.label);
+    b.title = c.hint;
+    if (on) { b.style.background = 'var(--b)'; b.style.borderColor = 'var(--b)'; }
+    b.onclick = () => {
+      state.chordColour = on ? null : c.id;
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    colourRow.appendChild(b);
+  }
+
+  // Alterations only mean something on a chord that has a seventh to alter.
+  const canAlter = state.chordSize >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(state.chordColour);
+  const alterRow = $('chordAlterRow');
+  alterRow.replaceChildren();
+  for (const a of CHORD_ALTERATIONS) {
+    const on = state.chordAlterations.includes(a.id);
+    const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
+    b.disabled = !canAlter;
+    b.title = canAlter ? `Add a ${a.label}` : 'Alterations need a seventh — pick 7 or larger first.';
+    if (on) { b.style.background = 'var(--c)'; b.style.borderColor = 'var(--c)'; }
+    b.onclick = () => {
+      state.chordAlterations = on
+        ? state.chordAlterations.filter((x) => x !== a.id)
+        : [...state.chordAlterations, a.id];
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    alterRow.appendChild(b);
+  }
+  if (!canAlter && state.chordAlterations.length) state.chordAlterations = [];
+
+  const spec = currentSpec();
+  $('chordBuilderHint').textContent = describeSpec(state.rootPc, modeId(), spec);
+  const sc = scaleForChord(spec, state.rootPc, modeId());
+  const avoid = sc.avoidPc === null ? '' : ` Careful with ${noteName(sc.avoidPc, preferFlats())}.`;
+  $('chordScaleHint').textContent = `Solo with ${sc.name}. ${sc.why}${avoid}`;
 }
 
 function renderDiagram(chord) {
@@ -4888,8 +6424,6 @@ function renderTimeline() {
         el('span', 'main', slot ? slot.label : '+'),
         el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : `Bar ${idx + 1}`)
       );
-      s.onclick = () => assignSlot(idx, slotIdx);
-      s.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); assignSlot(idx, slotIdx); } };
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('dragover'); };
       s.ondragleave = () => s.classList.remove('dragover');
       s.ondrop = (e) => {
@@ -4898,11 +6432,28 @@ function renderTimeline() {
         const deg = Number(e.dataTransfer.getData('text/plain'));
         if (!Number.isNaN(deg)) assignSlot(idx, slotIdx, deg);
       };
+      s.onclick = () => openPicker(idx, slotIdx);
+      s.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(idx, slotIdx); } };
+      if (state.picker && state.picker.barIdx === idx && state.picker.slotIdx === slotIdx) {
+        s.classList.add('editing');
+      }
       if (slot) {
         const x = el('button', 'clear', '✕');
         x.title = 'Clear';
         x.onclick = (e) => { e.stopPropagation(); clearSlot(idx, slotIdx); };
         s.appendChild(x);
+        // How far the hand travels to reach this chord from the one before it.
+        // Showing the number is what makes "Smooth voicings" legible rather
+        // than magic — the figures visibly drop when it is switched on.
+        const prev = previousSlot(idx, slotIdx);
+        if (prev && prev.voicing && slot.voicing) {
+          const move = Math.max(0, Math.round(voiceLeadCost(prev.voicing, slot.voicing)));
+          const tag = el('span', `move${move > 9 ? ' far' : ''}`, `↔${move}`);
+          tag.title = move > 9
+            ? 'A big jump from the previous chord — try Smooth voicings.'
+            : 'Fret movement from the previous chord.';
+          s.appendChild(tag);
+        }
       }
       inner.appendChild(s);
     });
@@ -4917,6 +6468,239 @@ function renderTimeline() {
     cell.appendChild(inner);
     grid.appendChild(cell);
   });
+
+  renderSectionRole();
+  renderPicker();
+  renderAnalysis();
+
+  const smooth = $('smoothBtn');
+  smooth.setAttribute('aria-pressed', String(!!section().smooth));
+  smooth.textContent = section().smooth ? 'On' : 'Off';
+}
+
+/** The section being edited. */
+function section() {
+  return state.sections[state.activeSection];
+}
+
+/** The part of a song that usually follows the one given. */
+function nextRole(role) {
+  const order = ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'outro'];
+  const i = order.indexOf(role || 'verse');
+  return order[Math.min(order.length - 1, i + 1)];
+}
+
+/** Every filled slot of the active section, in playing order. */
+function filledSlots() {
+  const out = [];
+  bars().forEach((bar, barIdx) => {
+    bar.slots.forEach((slot, slotIdx) => {
+      if (slot) out.push({ slot, barIdx, slotIdx });
+    });
+  });
+  return out;
+}
+
+/** The chord immediately before a given position, for voice-leading readouts. */
+function previousSlot(barIdx, slotIdx) {
+  const list = filledSlots();
+  const i = list.findIndex((e) => e.barIdx === barIdx && e.slotIdx === slotIdx);
+  return i > 0 ? list[i - 1].slot : null;
+}
+
+function renderSectionRole() {
+  const sel = $('sectionRoleSelect');
+  if (!sel.options.length) {
+    for (const [id, r] of Object.entries(SECTION_ROLES)) {
+      sel.appendChild(el('option', '', r.label)).value = id;
+    }
+  }
+  const role = section().role || 'verse';
+  sel.value = role;
+  $('sectionRoleHint').textContent = SECTION_ROLES[role].blurb;
+}
+
+/**
+ * Re-pick every shape in the section so the progression connects.
+ *
+ * Stored as a flag on the section rather than as frozen shapes, so a key or
+ * tuning change re-runs it: the progression stays smooth instead of smooth
+ * once.
+ */
+function applySmoothing() {
+  const sec = section();
+  const list = filledSlots();
+  if (!sec.smooth || list.length < 2) return;
+  const voicings = smoothProgression(list.map((e) => e.slot.chord), { tuning: tuning() });
+  list.forEach((e, i) => {
+    if (voicings[i]) {
+      e.slot.voicing = voicings[i];
+      e.slot.label = chordLabel(e.slot.chord, 0, preferFlats());
+    }
+  });
+}
+
+function renderAnalysis() {
+  const list = filledSlots();
+  const card = $('analysisCard');
+  if (list.length < 2) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const a = analyseProgression(
+    list.map((e) => e.slot.spec),
+    state.rootPc,
+    modeId(),
+    section().role || 'verse'
+  );
+  $('analysisSummary').textContent = `${a.summary}   ·   ${list.map((e) => e.slot.chord.symbol).join(' ')}`;
+  $('analysisCadence').textContent = a.cadence ? `${a.cadence.label} — ${a.cadence.note}` : '';
+
+  const notes = $('analysisNotes');
+  notes.replaceChildren();
+  for (const n of a.notes) notes.appendChild(el('li', n.level, n.text));
+
+  const cost = progressionCost(list.map((e) => e.slot.voicing).filter(Boolean));
+  notes.appendChild(el('li', 'idea', `Total fret movement across the loop: ${cost}.`));
+}
+
+function openPicker(barIdx, slotIdx) {
+  state.picker = { barIdx, slotIdx };
+  renderTimeline();
+  $('pickerCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closePicker() {
+  state.picker = null;
+  renderTimeline();
+}
+
+/**
+ * The chord picker.
+ *
+ * Three layers, in the order a writer needs them: what the app thinks should
+ * come next and why, then every chord the key contains, then the controls to
+ * take whichever chord was chosen and turn it into the exact voicing wanted.
+ */
+function renderPicker() {
+  const card = $('pickerCard');
+  if (!state.picker) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const { barIdx, slotIdx } = state.picker;
+  const bar = bars()[barIdx];
+  if (!bar || !bar.slots.length) { card.hidden = true; state.picker = null; return; }
+  const slot = bar.slots[slotIdx];
+  const role = section().role || 'verse';
+  $('pickerTitle').textContent =
+    bar.slots.length === 2 ? `BAR ${barIdx + 1} · ${slotIdx === 0 ? 'FIRST' : 'SECOND'} HALF` : `BAR ${barIdx + 1}`;
+
+  // Everything written before this position is the context for the suggestion.
+  const list = filledSlots();
+  const before = list.filter((e) => e.barIdx < barIdx || (e.barIdx === barIdx && e.slotIdx < slotIdx));
+  const suggestions = suggestNext({
+    tonicPc: state.rootPc,
+    modeId: modeId(),
+    written: before.map((e) => e.slot.spec),
+    role,
+    position: before.length,
+    total: Math.max(list.length + 1, barCount()),
+  }).slice(0, 5);
+
+  const sug = $('pickerSuggestions');
+  sug.replaceChildren();
+  for (const s of suggestions) {
+    const row = el('button', 'suggest');
+    row.append(
+      el('span', 'suggest-chord', s.chord.symbol),
+      el('span', 'suggest-numeral', s.chord.numeral),
+      el('span', `suggest-tag tag-${s.tag.toLowerCase()}`, s.tag),
+      el('span', 'suggest-why', s.reason)
+    );
+    row.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, s.spec);
+      previewSlot(barIdx, slotIdx);
+    };
+    sug.appendChild(row);
+  }
+
+  // Every chord in the key, at the size the builder is set to.
+  const scaleRow = $('pickerScale');
+  scaleRow.replaceChildren();
+  currentChords().forEach((c, d) => {
+    const on = slot && slot.spec.degree === d;
+    const b = el('button', `chip small${on ? ' active' : ''}`);
+    b.append(el('span', '', c.symbol), el('span', 'tag', c.numeral));
+    b.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, { ...currentSpec(d) });
+      previewSlot(barIdx, slotIdx);
+    };
+    scaleRow.appendChild(b);
+  });
+
+  // Per-chord editing, once there is a chord to edit.
+  const edit = $('pickerEdit');
+  edit.hidden = !slot;
+  if (!slot) return;
+  const spec = slot.spec;
+
+  const sizeRow = $('pickerSizeRow');
+  sizeRow.replaceChildren();
+  for (const [size, label, title] of CHORD_SIZE_LABELS) {
+    const b = el('button', `chip small${spec.size === size ? ' active' : ''}`, label);
+    b.title = title;
+    b.onclick = () => { setSlotSpec(barIdx, slotIdx, { ...spec, size }); previewSlot(barIdx, slotIdx); };
+    sizeRow.appendChild(b);
+  }
+
+  // Colours the key actually suggests for this degree come first and are
+  // marked, so the list teaches which ones belong rather than just listing all.
+  const idiomatic = new Set(idiomaticColours(spec.degree, modeId()).map((c) => c.colour));
+  const colourRow = $('pickerColourRow');
+  colourRow.replaceChildren();
+  for (const c of CHORD_COLOURS) {
+    const on = (spec.colour ?? null) === c.id;
+    const b = el('button', `chip small${on ? ' active' : ''}${idiomatic.has(c.id) ? ' idiomatic' : ''}`, c.label);
+    b.title = idiomatic.has(c.id) ? `${c.hint} — idiomatic on this degree.` : c.hint;
+    b.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, { ...spec, colour: on ? null : c.id });
+      previewSlot(barIdx, slotIdx);
+    };
+    colourRow.appendChild(b);
+  }
+
+  const canAlter = spec.size >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(spec.colour);
+  const alterRow = $('pickerAlterRow');
+  alterRow.replaceChildren();
+  for (const a of CHORD_ALTERATIONS) {
+    const on = (spec.alterations || []).includes(a.id);
+    const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
+    b.disabled = !canAlter;
+    b.onclick = () => {
+      const alterations = on
+        ? spec.alterations.filter((x) => x !== a.id)
+        : [...(spec.alterations || []), a.id];
+      setSlotSpec(barIdx, slotIdx, { ...spec, alterations });
+      previewSlot(barIdx, slotIdx);
+    };
+    alterRow.appendChild(b);
+  }
+
+  const sc = scaleForChord(spec, state.rootPc, modeId());
+  $('pickerHint').textContent = `${describeSpec(state.rootPc, modeId(), spec)} Solo with ${sc.name}.`;
+}
+
+function setSlotSpec(barIdx, slotIdx, spec) {
+  const bar = bars()[barIdx];
+  if (!bar) return;
+  bar.slots[slotIdx] = slotFromDegree(spec.degree, spec);
+  applySmoothing();
+  renderTimeline();
+}
+
+async function previewSlot(barIdx, slotIdx) {
+  const slot = bars()[barIdx] && bars()[barIdx].slots[slotIdx];
+  if (!slot || !slot.voicing || sequencer.playing) return;
+  await playChordNow(slot.chord, slot.voicing);
 }
 
 function renderLearn() {
@@ -5013,21 +6797,25 @@ function startQuiz() {
 }
 
 /**
- * The roman-numeral summary of a progression, derived from the chords it will
- * actually produce. Computing it rather than storing it means the label can
- * never drift from the sound — which is the whole point of showing it.
+ * The chords a suggestion will actually produce in the current key. Building
+ * them rather than storing labels means what is shown can never drift from what
+ * is heard — which is the whole point of showing it. Entries may be bare
+ * degrees or full specs, so a template can call for an altered dominant.
  */
-function numeralsFor(degrees, seventh, mode) {
+function chordsForSuggestion(degrees, seventh, mode) {
   const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
-  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
-  return degrees.map((d) => chords[d % 7].numeral).join('–');
+  const size = sizeFromLegacy(seventh, 3);
+  return degrees.map((entry) => chordForSpec(state.rootPc, modeName, toSpec(entry, size)));
+}
+
+/** The roman-numeral summary of a progression. */
+function numeralsFor(degrees, seventh, mode) {
+  return chordsForSuggestion(degrees, seventh, mode).map((c) => c.numeral).join('–');
 }
 
 /** The chord names a progression produces in the current key. */
 function chordNamesFor(degrees, seventh, mode) {
-  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
-  const chords = diatonicChords(state.rootPc, modeName, !!seventh);
-  return degrees.map((d) => chords[d % 7].symbol).join(' ');
+  return chordsForSuggestion(degrees, seventh, mode).map((c) => c.symbol).join(' ');
 }
 
 function renderAssist() {
@@ -5129,14 +6917,16 @@ async function previewProgression(t) {
   if (!(await ensureAudio())) return;
   if (sequencer.playing) { toast('Stop playback to preview a progression.'); return; }
 
-  const modeName = t.mode && MODE_IDS.includes(t.mode) ? t.mode : modeId();
-  const chords = diatonicChords(state.rootPc, modeName, !!t.seventh);
+  const chords = chordsForSuggestion(t.degrees, t.seventh, t.mode).slice(0, 8);
   const dur = barDuration(state.timeSig, state.bpm);
   const t0 = auditionStart();
 
-  t.degrees.slice(0, 8).forEach((d, i) => {
-    const chord = chords[d % 7];
-    const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+  // Preview the progression the way it should be played — connected shapes, not
+  // a root-position grip per chord, which is what makes an audition sound like
+  // an exercise instead of music.
+  const voicings = smoothProgression(chords, { tuning: tuning() });
+  chords.forEach((chord, i) => {
+    const v = voicings[i] || resolveVoicing(chord, 'root', { tuning: tuning() });
     if (!v) return;
     sequencer.scheduleChord({ chord, voicing: v }, t0 + i * dur, dur, {
       rhythm: state.rhythm,
@@ -5245,16 +7035,37 @@ function wire() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showAbout) closeAbout(); });
 
   $('previewBtn').onclick = () => previewDegree(state.activeDegree);
-  $('seventhBtn').onclick = () => {
-    state.seventh = !state.seventh;
-    state.voicingIndex = 0;
-    renderCompose();
-    previewDegree(state.activeDegree);
-  };
   $('nextVoicingBtn').onclick = () => {
     state.voicingIndex += 1;
     renderCompose();
     previewDegree(state.activeDegree);
+  };
+
+  $('secDomBtn').onclick = () => {
+    state.showSecDom = !state.showSecDom;
+    renderCircle();
+  };
+
+  // --- timeline: role, picker, voice leading ---
+  $('sectionRoleSelect').onchange = (e) => {
+    section().role = e.target.value;
+    renderTimeline();
+  };
+  $('smoothBtn').onclick = () => {
+    const sec = section();
+    sec.smooth = !sec.smooth;
+    // Turning it off should put the shapes back, not leave the smoothed ones
+    // in place with the switch reading "off".
+    if (sec.smooth) applySmoothing();
+    else reresolveAll();
+    renderTimeline();
+  };
+  $('pickerCloseBtn').onclick = closePicker;
+  $('pickerClearBtn').onclick = () => {
+    if (!state.picker) return;
+    const { barIdx, slotIdx } = state.picker;
+    clearSlot(barIdx, slotIdx);
+    closePicker();
   };
 
   $('playScaleBtn').onclick = () => playModeScale(state.learnModeIdx);
@@ -5279,7 +7090,16 @@ function wire() {
 
   $('addSectionBtn').onclick = () => {
     const count = barCount();
-    state.sections.push({ id: Date.now(), name: nextName(), barCount: count, bars: makeBars(count) });
+    // A new loop is usually the next part of the song, so it defaults to the
+    // role that follows the current one rather than always to "verse".
+    state.sections.push({
+      id: Date.now(),
+      name: nextName(),
+      barCount: count,
+      bars: makeBars(count),
+      role: nextRole(section().role),
+      smooth: !!section().smooth,
+    });
     selectSection(state.sections.length - 1);
     renderTimeline();
   };
@@ -5290,6 +7110,8 @@ function wire() {
       id: Date.now(),
       name: nextName(),
       barCount: sec.barCount,
+      role: sec.role || 'verse',
+      smooth: !!sec.smooth,
       // Slots are re-derived rather than shared, so editing the copy cannot
       // reach back into the original.
       bars: sec.bars.map((b) => ({ slots: b.slots.map((s) => (s ? { ...s } : null)) })),
@@ -5390,7 +7212,7 @@ function wire() {
 
 function exportSong() {
   const data = {
-    format: 'circlesong.v2',
+    format: 'circlesong.v3',
     title: state.projectTitle,
     bpm: state.bpm,
     timeSig: state.timeSig,
@@ -5404,7 +7226,11 @@ function exportSong() {
     sections: state.sections.map((sec) => ({
       name: sec.name,
       barCount: sec.barCount,
-      bars: sec.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+      role: sec.role || 'verse',
+      smooth: !!sec.smooth,
+      bars: sec.bars.map((b) =>
+        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, voicingMode: s.voicingMode } : null))
+      ),
     })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -5460,20 +7286,22 @@ function importSong(e) {
           built[b] = {
             slots: slots.map((slot) => {
               if (!slot) return null;
-              // slotFromDegree reads the live seventh/voicing settings, so they
-              // are borrowed for the rebuild and put straight back.
-              const prevSeventh = state.seventh;
-              const prevMode = state.voicingMode;
-              state.seventh = !!slot.seventh;
-              state.voicingMode = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
-              const rebuilt = slotFromDegree(slot.degree);
-              state.seventh = prevSeventh;
-              state.voicingMode = prevMode;
-              return rebuilt;
+              // Files written before the chord builder carry a `seventh` flag
+              // instead of a spec; both describe the same thing.
+              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
+              const vm = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              return slotFromDegree(slot.degree, spec, vm);
             }),
           };
         });
-        return { id: i + 1, name: sec.name || String.fromCharCode(65 + i), barCount: count, bars: built };
+        return {
+          id: i + 1,
+          name: sec.name || String.fromCharCode(65 + i),
+          barCount: count,
+          role: SECTION_ROLES[sec.role] ? sec.role : 'verse',
+          smooth: !!sec.smooth,
+          bars: built,
+        };
       });
       if (!state.sections.length) state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }];
       state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
@@ -5523,9 +7351,16 @@ window.CircleSong = {
   engine,
   sequencer,
   MODES,
+  PRESETS,
   /** Bars of the loop currently active — state.sections holds them all. */
   get bars() { return bars(); },
   activeSection,
+  render,
+  /** Re-derive every stored shape — what a key, mode or tuning change runs. */
+  reresolveAll,
+  // Exposed so tests can measure voice leading rather than eyeball it.
+  progressionCost,
+  voiceLeadCost,
 };
 
 })();
