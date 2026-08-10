@@ -17,6 +17,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,6 +70,35 @@ const MODULES = [
   const uncached = found.filter((f) => !sw.includes(`./${f}`));
   if (uncached.length) {
     throw new Error(`build: these modules are not precached in sw.js: ${uncached.join(', ')}`);
+  }
+}
+
+// Stamp the service worker's cache name with a hash of everything it precaches.
+//
+// A hand-maintained version number fails silently in the one direction that
+// matters: forget to bump it and every returning user keeps running the
+// previous build, which is indistinguishable from the change not working. The
+// hash cannot be forgotten, so shipping a change always invalidates the cache.
+{
+  const swPath = join(root, 'sw.js');
+  let sw = readFileSync(swPath, 'utf8');
+  const shell = [...sw.matchAll(/^\s*'\.\/([^']*)',/gm)].map((m) => m[1]).filter(Boolean);
+  const h = createHash('sha256');
+  for (const rel of shell.sort()) {
+    try {
+      h.update(rel);
+      h.update(readFileSync(join(root, rel)));
+    } catch {
+      // './' and any entry without a file on disk contribute their name only.
+    }
+  }
+  const stamp = `circlesong-${h.digest('hex').slice(0, 8)}`;
+  const current = sw.match(/const CACHE = '([^']+)'/);
+  if (!current) throw new Error('build: could not find the CACHE constant in sw.js');
+  if (current[1] !== stamp) {
+    sw = sw.replace(/const CACHE = '[^']+'/, `const CACHE = '${stamp}'`);
+    writeFileSync(swPath, sw);
+    console.log(`sw.js cache stamped ${current[1]} -> ${stamp}`);
   }
 }
 
