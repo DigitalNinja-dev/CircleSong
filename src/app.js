@@ -16,6 +16,10 @@ import {
   keySignaturePrefersFlats,
   midiToName,
   modeStepsAbsolute,
+  chordForSpec,
+  describeSpec,
+  CHORD_COLOURS,
+  CHORD_ALTERATIONS,
 } from './theory.js';
 import {
   TUNINGS,
@@ -25,12 +29,25 @@ import {
   voicingPosition,
   voicingToString,
   VOICING_MODES,
+  smoothProgression,
+  progressionCost,
+  voiceLeadCost,
 } from './fretboard.js';
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
-import { DrumKit, DRUM_KITS } from './audio/drums.js';
-import { DRUM_STYLES, DRUM_STYLE_BY_ID, stylesForMeter } from './drum-patterns.js';
+import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
+import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
+import {
+  SECTION_ROLES,
+  degreeFunction,
+  functionLabel,
+  suggestNext,
+  analyseProgression,
+  secondaryDominants,
+  scaleForChord,
+  idiomaticColours,
+} from './harmony.js';
 import {
   FUNCTION_NAMES,
   FUNCTION_BLURB,
@@ -44,6 +61,7 @@ import {
   BAR_SIZES,
   TIME_SIGS,
   INTERVAL_NAMES,
+  TEMPLATE_FAMILIES,
   nearestBarSize,
 } from './content.js';
 
@@ -55,19 +73,21 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-const TONE_ORDER = ['acoustic', 'nylon', 'electric', 'crunch', 'jazz', 'reggae'];
+const TONE_ORDER = ['acoustic', 'nylon', 'electric', 'crunch', 'jazz', 'reggae', 'piano', 'rhodes'];
 const TONE_COLOR = {
   acoustic: 'var(--d)', nylon: 'var(--b)', electric: 'var(--a)',
   crunch: 'var(--c)', jazz: 'var(--c)', reggae: 'var(--b)',
+  piano: 'var(--a)', rhodes: 'var(--d)',
 };
 
 const TABS = [
   { id: 'circle', label: 'Circle', glyph: 'circle' },
   { id: 'tone', label: 'Tone', glyph: 'square' },
+  { id: 'drums', label: 'Drums', glyph: 'grid' },
   { id: 'compose', label: 'Compose', glyph: 'diamond' },
   { id: 'timeline', label: 'Timeline', glyph: 'bars' },
-  { id: 'learn', label: 'Learn', glyph: 'book' },
   { id: 'assist', label: 'Assist', glyph: 'spark' },
+  { id: 'learn', label: 'Learn', glyph: 'book' },
 ];
 
 const params = new URLSearchParams(location.search);
@@ -86,8 +106,17 @@ const state = {
   modeIdx: 0,
   activeDegree: 0,
   voicingMode: 'root',
-  seventh: false,
   voicingIndex: 0,
+
+  /**
+   * How chords are built, applied to whichever degree is chosen. Stored as a
+   * recipe rather than a finished chord so a progression survives a key change:
+   * `Dm9 – E7♭9 – Am9` in A minor becomes `Gm9 – A7♭9 – Dm9` in D minor without
+   * anything being re-entered.
+   */
+  chordSize: 3,        // notes in the stack: 3 triad, 4 seventh, 5 ninth, 6 eleventh, 7 thirteenth
+  chordColour: null,   // null = whatever the key gives; otherwise a CHORD_COLOURS id
+  chordAlterations: [],
 
   tone: 'acoustic',
   rhythm: 'straight8',
@@ -102,8 +131,10 @@ const state = {
    * Sections are the song's loops — a verse, a chorus, a turnaround. Only one
    * plays at a time; switching while the transport runs waits for the bar line.
    */
-  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }],
+  sections: [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }],
   activeSection: 0,
+  /** {barIdx, slotIdx} of the bar the chord picker is open on, or null. */
+  picker: null,
   /** Section queued to take over at the next bar line, or null. */
   queuedSection: null,
 
@@ -112,12 +143,21 @@ const state = {
   drumKit: 'rock',
   drumVolume: 0.7,
   drumFills: true,
+  drumHumanize: 0.35,
+  /**
+   * The editable grid. A style seeds it, after which this is what plays — so
+   * anything typed into the sequencer is heard, not overwritten by the preset.
+   */
+  drumPattern: null,
 
   activeTab: 'circle',
   moodId: null,
   sectionId: null,
   templateId: null,
+  templateFamily: 'All',
   showAbout: false,
+  /** Draw the secondary-dominant arrows on the wheel. */
+  showSecDom: false,
 
   /**
    * Key lock turns the wheel from a key picker into an explorer: taps stop
@@ -165,8 +205,9 @@ const sequencer = new Sequencer(engine, () => ({
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
   drumsOn: state.drumsOn,
-  drumStyle: state.drumStyle,
+  drumPattern: state.drumPattern,
   drumFills: state.drumFills,
+  drumHumanize: state.drumHumanize,
 }));
 
 sequencer.onPlayhead = (idx) => {
@@ -228,12 +269,53 @@ const modeId = () => MODE_IDS[state.modeIdx];
 const tuning = () => TUNINGS[state.tuningId].midi;
 const preferFlats = () => keySignaturePrefersFlats(state.rootPc, modeId());
 
-function currentChords() {
-  return diatonicChords(state.rootPc, modeId(), state.seventh);
+/** The spec the builder controls are currently set to. */
+function currentSpec(degree = state.activeDegree) {
+  return {
+    degree: degree % 7,
+    size: state.chordSize,
+    colour: state.chordColour,
+    alterations: state.chordAlterations.slice(),
+  };
 }
 
-function chordForDegree(degree, seventh = state.seventh) {
-  return diatonicChords(state.rootPc, modeId(), seventh)[degree % 7];
+/** The seven degrees of the key, each built to the current recipe. */
+function currentChords() {
+  return Array.from({ length: 7 }, (_, d) => chordForSpec(state.rootPc, modeId(), currentSpec(d)));
+}
+
+/**
+ * Chord for a degree. Accepts either a bare degree (built to the live settings)
+ * or a stored spec, which is what timeline slots and templates carry.
+ */
+function chordForDegree(degree, spec = null) {
+  if (spec && typeof spec === 'object') {
+    return chordForSpec(state.rootPc, modeId(), { ...spec, degree: (spec.degree ?? degree) % 7 });
+  }
+  return chordForSpec(state.rootPc, modeId(), currentSpec(degree));
+}
+
+/**
+ * Normalise the shorthand used by templates and moods into a spec. A number is
+ * a plain degree; an object may name any part of the recipe.
+ */
+function toSpec(entry, fallbackSize) {
+  if (entry && typeof entry === 'object') {
+    return {
+      degree: (entry.degree ?? 0) % 7,
+      size: entry.size ?? fallbackSize,
+      colour: entry.colour ?? null,
+      alterations: entry.alterations ? entry.alterations.slice() : [],
+    };
+  }
+  return { degree: entry % 7, size: fallbackSize, colour: null, alterations: [] };
+}
+
+/** Templates predate the size selector, so `seventh: true` still means "4 notes". */
+function sizeFromLegacy(value, fallback = 3) {
+  if (typeof value === 'number') return Math.max(3, Math.min(7, value));
+  if (typeof value === 'boolean') return value ? 4 : 3;
+  return fallback;
 }
 
 function voicingList(chord, mode = state.voicingMode) {
@@ -274,12 +356,18 @@ function auditionStart() {
 async function playChordNow(chord, voicing, { duration, fraction } = {}) {
   if (!(await ensureAudio())) return;
   const dur = duration ?? barDuration(state.timeSig, state.bpm);
-  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, auditionStart(), dur, {
+  const frac = fraction ?? previewFraction();
+  const when = auditionStart();
+  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, when, dur, {
     rhythm: state.rhythm,
     tuning: tuning(),
     velocity: 1,
-    previewFraction: fraction ?? previewFraction(),
+    previewFraction: frac,
   });
+  // An audition is a question, not a performance: it has to end on its own.
+  // Left alone the strings ring for the preset's full decay — nine seconds on
+  // the piano — and the only way to stop them is to play something else.
+  engine.damp(when + dur * frac);
 }
 
 async function previewDegree(degree) {
@@ -308,6 +396,7 @@ async function playModeScale(idx) {
       layer: true,
     });
   });
+  engine.damp(t0 + steps.length * 0.26 + 0.5, { level: 0.85, time: 0.6 });
 }
 
 async function playModeVamp(idx) {
@@ -326,6 +415,7 @@ async function playModeVamp(idx) {
       velocity: 1,
     });
   });
+  engine.damp(t0 + info.vampDegrees.length * dur);
 }
 
 async function togglePlay() {
@@ -349,17 +439,23 @@ async function togglePlay() {
 
 // ------------------------------------------------------------ timeline edits
 
-function slotFromDegree(degree) {
-  const chord = chordForDegree(degree);
-  const list = voicingList(chord);
+/**
+ * Build a timeline slot. The spec travels with the slot, so the chord can be
+ * rebuilt from scratch after a key, mode or tuning change — and so a 9th chord
+ * stays a 9th chord when the rest of the timeline is plain triads.
+ */
+function slotFromDegree(degree, spec = null, voicingMode = state.voicingMode) {
+  const full = spec ? { ...toSpec(spec, state.chordSize), degree: degree % 7 } : currentSpec(degree);
+  const chord = chordForDegree(degree, full);
+  const list = voicingList(chord, voicingMode);
   const voicing = list.length ? list[state.voicingIndex % list.length] : null;
   return {
-    degree,
+    degree: degree % 7,
+    spec: full,
     chord,
     voicing,
-    voicingMode: state.voicingMode,
-    seventh: state.seventh,
-    label: chordLabel(chord, VOICING_MODES[state.voicingMode].inversion, preferFlats()),
+    voicingMode,
+    label: chordLabel(chord, VOICING_MODES[voicingMode].inversion, preferFlats()),
     roman: chord.numeral,
   };
 }
@@ -387,24 +483,52 @@ function addHalfBar(barIdx) {
   renderTimeline();
 }
 
-function applyDegrees(degrees, seventh) {
-  const prevSeventh = state.seventh;
-  state.seventh = !!seventh;
+function applyDegrees(degrees, seventh, mode = null) {
+  // A suggestion carries the mode it belongs in, and applying it without
+  // switching would produce different chords from the ones it is named for.
+  // A locked key overrides that: the user has already said what the song is.
+  const target = suggestionMode(mode);
+  if (MODE_IDS.includes(target)) state.modeIdx = MODE_IDS.indexOf(target);
+  const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
   const nextBars = makeBars(size);
-  degrees.forEach((d, i) => { nextBars[i] = { slots: [slotFromDegree(d)] }; });
-  state.seventh = prevSeventh || !!seventh;
+  degrees.forEach((entry, i) => {
+    const spec = toSpec(entry, defaultSize);
+    nextBars[i] = { slots: [slotFromDegree(spec.degree, spec)] };
+  });
+  // Leave the builder set to the progression's own recipe, so the next chord
+  // added by hand matches what was just loaded instead of reverting to triads.
+  state.chordSize = defaultSize;
+  state.chordColour = null;
+  state.chordAlterations = [];
   setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
   toast(`Loaded ${degrees.length} chords into ${size} bars.`);
 }
 
-/** Re-derive every stored shape — used after a key, tuning, or mode change. */
+/**
+ * Re-derive every stored shape — used after a key, tuning, or mode change.
+ * Each slot rebuilds from its own spec, so a progression keeps the chord
+ * qualities it was written with instead of collapsing to the live settings.
+ */
 function reresolveAll() {
-  for (const bar of bars()) {
-    bar.slots = bar.slots.map((slot) => (slot ? slotFromDegree(slot.degree) : null));
+  for (const sec of state.sections) {
+    for (const bar of sec.bars) {
+      bar.slots = bar.slots.map((slot) =>
+        slot ? slotFromDegree(slot.degree, slot.spec, slot.voicingMode) : null
+      );
+    }
   }
+  // Smoothing is a property of the section, not a one-off edit, so a key, mode
+  // or tuning change re-derives it rather than dropping back to root shapes.
+  const active = state.activeSection;
+  state.sections.forEach((sec, i) => {
+    if (!sec.smooth) return;
+    state.activeSection = i;
+    applySmoothing();
+  });
+  state.activeSection = active;
 }
 
 // ------------------------------------------------------------------ rendering
@@ -413,6 +537,7 @@ function render() {
   renderTransport();
   renderCircle();
   renderTone();
+  renderDrums();
   renderCompose();
   renderTimeline();
   renderLearn();
@@ -446,6 +571,9 @@ function glyph(kind, active) {
     diamond: `width:13px;height:13px;transform:rotate(45deg);border:2px solid ${col};`,
     bars: `width:16px;height:12px;background:linear-gradient(90deg,${col} 3px,transparent 3px);background-size:6px 100%;`,
     book: `width:13px;height:11px;border:2px solid ${col};border-radius:1px 4px 4px 1px;`,
+    grid: `width:15px;height:11px;background:
+      linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
+      linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
@@ -495,6 +623,13 @@ function renderCircle() {
     return { x: 140 + r * Math.sin(a), y: 140 - r * Math.cos(a) };
   };
 
+  // Which degree of the key each pitch class is, keyed by pitch class so both
+  // rings of the wheel can look themselves up.
+  const gradeAt = new Map();
+  diatonicChords(state.rootPc, modeId(), 3).forEach((chord, d) => {
+    gradeAt.set(chord.root, { numeral: chord.numeral, chord, fn: degreeFunction(d, modeId()) });
+  });
+
   CIRCLE.forEach((note, i) => {
     const hue = i * 30;
     const isRoot = note === state.rootPc;
@@ -522,6 +657,26 @@ function renderCircle() {
       isRootMinor || isDiaMinor ? 'oklch(0.97 0.003 250)' : 'oklch(0.65 0.006 250 / 0.55)'
     };`;
     labels.append(outer, inner);
+
+    // Grade markers. Every wedge that belongs to the key gets its roman
+    // numeral, so the whole chord set of the tone is readable straight off the
+    // wheel — and it re-labels itself the moment the root moves, which is the
+    // point: the same shape on the circle means a different degree in a
+    // different key. They ride inside the note label rather than being placed
+    // separately, which keeps them off the rim and stops them colliding with
+    // the wedge borders.
+    const grade = gradeAt.get(note);
+    if (grade) {
+      const g = el('i', `grade fn-${grade.fn.toLowerCase()}`, grade.numeral);
+      g.title = `${grade.chord.symbol} — ${functionLabel(grade.fn)}`;
+      outer.appendChild(g);
+    }
+    const gradeMinor = gradeAt.get(minorNote);
+    if (gradeMinor) {
+      const g = el('i', `grade fn-${gradeMinor.fn.toLowerCase()}`, gradeMinor.numeral);
+      g.title = `${gradeMinor.chord.symbol} — ${functionLabel(gradeMinor.fn)}`;
+      inner.appendChild(g);
+    }
   });
 
   $('wheelOuter').style.background = `conic-gradient(from -15deg, ${outerStops.join(', ')})`;
@@ -539,7 +694,10 @@ function renderCircle() {
 
   // The chord/note choice only means anything while locked, so it appears with
   // the mode it belongs to instead of sitting there inert.
-  $('exploreModeRow').hidden = !state.rootLocked;
+  // The chord/note choice governs every note button on this screen, not just
+  // the wheel, so it is always available rather than appearing only once the
+  // key is locked.
+  $('exploreModeRow').hidden = false;
   const modeBtns = $('exploreModeBtns');
   modeBtns.replaceChildren();
   for (const [id, label] of [['chord', 'Chord'], ['note', 'Note']]) {
@@ -554,28 +712,150 @@ function renderCircle() {
     modeBtns.appendChild(b);
   }
 
+  renderSecondaryDominants(posAt);
   renderExplore();
 
+  // The scale strip: every degree of the key, labelled with its roman numeral
+  // so the grades of the tone are visible here as well as on the wheel. It
+  // obeys the same Chord/Note switch as the wheel — one setting for every note
+  // button on the screen, rather than two rules to remember.
   const strip = $('scaleStrip');
   strip.replaceChildren();
+  const keyChords = diatonicChords(state.rootPc, modeId(), state.chordSize);
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
-    const b = el('button', i === 0 ? 'tonic' : '', noteName(pc, preferFlats()));
-    b.title = `Scale degree ${i + 1}`;
-    // Scale degrees are for jamming: they layer over whatever is sounding
-    // instead of cutting it, and each one is placed on a free string so a run
-    // rings like a real player moving across the neck.
+    const chord = keyChords[i];
+    const b = el('button', i === 0 ? 'tonic' : '');
+    b.append(
+      el('span', 'strip-note', noteName(pc, preferFlats())),
+      el('span', 'strip-grade', chord.numeral)
+    );
+    b.title =
+      state.exploreMode === 'chord'
+        ? `${chord.symbol} — degree ${i + 1} (${chord.numeral})`
+        : `${noteName(pc, preferFlats())} — degree ${i + 1}`;
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
+      if (state.exploreMode === 'chord') {
+        const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+        if (v) {
+          const when = auditionStart();
+          engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
+          engine.damp(when + exploreRingSeconds());
+          return;
+        }
+      }
+      // Single notes are for jamming: they layer over whatever is sounding
+      // instead of cutting it, and each is placed on a free string so a run
+      // rings like a real player moving across the neck.
+      const when = engine.currentTime + 0.02;
       engine.pluckNote({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
         tuning: tuning(),
-        when: engine.currentTime + 0.02,
+        when,
         velocity: 0.85,
         layer: true,
       });
+      engine.damp(when + exploreRingSeconds() + 0.8, { level: 0.8, time: 0.7 });
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Draw each secondary dominant as an arrow into the chord it resolves to.
+ *
+ * This is the one thing the circle of fifths is uniquely good at showing. A
+ * dominant resolves down a fifth, and down a fifth is one step counter-clockwise
+ * on this wheel — so every one of these arrows is the same short hop, and seeing
+ * six of them at once is what makes the pattern obvious rather than a rule to
+ * memorise. The chord list underneath is the part you can play.
+ */
+function renderSecondaryDominants(posAt) {
+  const svg = $('wheelArcs');
+  const panel = $('secDomPanel');
+  const btn = $('secDomBtn');
+  btn.setAttribute('aria-pressed', String(state.showSecDom));
+  btn.textContent = state.showSecDom ? 'On' : 'Off';
+
+  svg.replaceChildren();
+  panel.hidden = !state.showSecDom;
+  if (!state.showSecDom) return;
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const doms = secondaryDominants(state.rootPc, modeId());
+  // Where each chord root sits on the wheel: CIRCLE lists pitch classes in
+  // fifths order, which is exactly the wedge order.
+  const wedgeOf = (pc) => CIRCLE.indexOf(pc);
+
+  for (const d of doms) {
+    const from = wedgeOf(d.chord.root);
+    const to = wedgeOf(d.targetChord.root);
+    if (from < 0 || to < 0) continue;
+    const isMinorTarget = d.targetChord.intervals[1] === 3;
+    // Minor chords live on the inner ring, majors on the outer.
+    const r1 = 95;
+    const r2 = isMinorTarget ? 84 : 95;
+    const a = posAt(r1, from);
+    const b = posAt(r2, to);
+    // Bow the line toward the hub so arrows never cross the labels.
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const cx = 140 + (mx - 140) * 0.62;
+    const cy = 140 + (my - 140) * 0.62;
+
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', d.isOwnDominant ? 'var(--a)' : 'var(--c)');
+    path.setAttribute('stroke-width', d.isOwnDominant ? '2.2' : '1.4');
+    path.setAttribute('opacity', d.isOwnDominant ? '0.95' : '0.6');
+    path.setAttribute('marker-end', 'url(#secdom-arrow)');
+    svg.appendChild(path);
+  }
+
+  // One shared arrowhead.
+  const defs = document.createElementNS(NS, 'defs');
+  const marker = document.createElementNS(NS, 'marker');
+  marker.setAttribute('id', 'secdom-arrow');
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '5');
+  marker.setAttribute('markerHeight', '5');
+  marker.setAttribute('orient', 'auto-start-reverse');
+  const head = document.createElementNS(NS, 'path');
+  head.setAttribute('d', 'M 0 1 L 9 5 L 0 9 z');
+  head.setAttribute('fill', 'var(--c)');
+  marker.appendChild(head);
+  defs.appendChild(marker);
+  svg.insertBefore(defs, svg.firstChild);
+
+  const row = $('secDomRow');
+  row.replaceChildren();
+  for (const d of doms) {
+    const b = el('button', `chip small${d.isOwnDominant ? ' active' : ''}`, d.label);
+    b.title = d.why;
+    b.onclick = async () => {
+      $('secDomHint').textContent = d.why;
+      // Hearing it resolve is the explanation — play the dominant, then the
+      // chord it lands on.
+      if (!(await ensureAudio())) return;
+      const dur = Math.max((60 / state.bpm) * 2, 0.85);
+      const t0 = auditionStart();
+      [d.chord, d.targetChord].forEach((c, i) => {
+        const v = resolveVoicing(c, 'root', { tuning: tuning() });
+        if (!v) return;
+        sequencer.scheduleChord({ chord: c, voicing: v }, t0 + i * dur, dur, {
+          rhythm: state.rhythm,
+          tuning: tuning(),
+          velocity: 1,
+        });
+      });
+      engine.damp(t0 + 2 * dur);
+    };
+    row.appendChild(b);
+  }
+  $('secDomHint').textContent = 'Tap one to hear it resolve. Each arrow points at the chord that chord pulls into.';
 }
 
 /**
@@ -638,12 +918,22 @@ async function playExplore() {
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) { engine.strumOnce({ midi: v.midi, when, velocity: 0.9 }); return; }
+    if (v) {
+      engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
+      engine.damp(when + exploreRingSeconds());
+      return;
+    }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
   engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
+  engine.damp(when + exploreRingSeconds());
+}
+
+/** How long a tapped wedge rings before it is faded out. */
+function exploreRingSeconds() {
+  return Math.max(1.2, barDuration(state.timeSig, state.bpm) * previewFraction());
 }
 
 function renderTone() {
@@ -735,11 +1025,57 @@ function renderTone() {
     b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
     list.appendChild(b);
   }
-
-  renderDrums();
 }
 
+/** Seed the editable grid from a named groove. */
+function loadDrumStyle(id, { keepKit = false } = {}) {
+  const style = DRUM_STYLE_BY_ID[id];
+  if (!style) return;
+  state.drumStyle = id;
+  state.drumPattern = styleToPattern(style, DRUM_VOICES.map((v) => v.id));
+  if (!keepKit) {
+    state.drumKit = style.kit;
+    if (engine.drums) engine.drums.setKit(state.drumKit);
+  }
+}
+
+/**
+ * Highlight the step currently sounding. Driven from the audio clock, so the
+ * column shown is the one being heard rather than one a timer guessed at.
+ */
+let drumPlayheadRaf = null;
+function watchDrumPlayhead() {
+  cancelAnimationFrame(drumPlayheadRaf);
+  const step = () => {
+    const grid = $('drumGrid');
+    const visible = state.activeTab === 'drums' && !$('tab-drums').hidden;
+    if (visible) {
+      const win = sequencer.currentBarWindow();
+      let current = -1;
+      if (win && state.drumPattern) {
+        const through = (engine.currentTime - win.start) / win.duration;
+        if (through >= 0 && through < 1) current = Math.floor(through * state.drumPattern.steps);
+      }
+      if (grid.dataset.playStep !== String(current)) {
+        grid.dataset.playStep = String(current);
+        for (const cell of grid.querySelectorAll('.seq-cell')) {
+          cell.classList.toggle('playing', Number(cell.dataset.step) === current);
+        }
+      }
+    }
+    drumPlayheadRaf = requestAnimationFrame(step);
+  };
+  drumPlayheadRaf = requestAnimationFrame(step);
+}
+
+/** Steps cycle off -> soft -> medium -> hard, so one tap edits without a menu. */
+const STEP_LEVELS = [0, 4, 6, 9];
+const nextStepLevel = (v) => STEP_LEVELS[(STEP_LEVELS.indexOf(v) + 1) % STEP_LEVELS.length] ?? 0;
+
 function renderDrums() {
+  if (!state.drumPattern) loadDrumStyle(state.drumStyle);
+  const pattern = state.drumPattern;
+
   for (const id of ['drumsBtn', 'drumsQuickBtn']) {
     const b = $(id);
     b.setAttribute('aria-pressed', String(state.drumsOn));
@@ -761,23 +1097,74 @@ function renderDrums() {
   }
   kitSel.value = state.drumKit;
 
-  // Only offer grooves that fit the current metre — a 6/8 clave in 4/4 is not
-  // a useful option, it is a bug waiting to be reported.
-  const list = $('drumStyleList');
-  list.replaceChildren();
-  for (const style of stylesForMeter(state.timeSig)) {
-    const b = el('button', `list-btn${state.drumStyle === style.id ? ' active' : ''}`);
-    b.append(el('span', '', style.label), el('span', 'tag', style.meters.join(' ')));
-    b.onclick = () => {
-      state.drumStyle = style.id;
-      // Each groove names the kit it was written for; follow it unless the
-      // user has since chosen one deliberately.
-      state.drumKit = style.kit;
-      if (engine.drums) engine.drums.setKit(state.drumKit);
-      if (!state.drumsOn) toggleDrums(true);
-      renderDrums();
+  // Only grooves that fit the current metre — a 6/8 clave in 4/4 is not a
+  // useful option, it is a bug waiting to be reported.
+  const styleSel = $('drumStyleSelect');
+  const available = stylesForMeter(state.timeSig);
+  styleSel.replaceChildren();
+  // Grouped by family: thirty-five grooves in one flat list is a wall.
+  for (const [family, styles] of stylesByFamily(available)) {
+    const group = document.createElement('optgroup');
+    group.label = family;
+    for (const style of styles) {
+      const o = document.createElement('option');
+      o.value = style.id;
+      o.textContent = style.label;
+      group.appendChild(o);
+    }
+    styleSel.appendChild(group);
+  }
+  if (available.some((s) => s.id === state.drumStyle)) styleSel.value = state.drumStyle;
+
+  const swing = $('drumSwing');
+  swing.value = pattern.swing || 0;
+  $('drumSwingOut').textContent = `${Math.round((pattern.swing || 0) * 100)}%`;
+  const human = $('drumHumanize');
+  human.value = state.drumHumanize;
+  $('drumHumanizeOut').textContent = `${Math.round(state.drumHumanize * 100)}%`;
+
+  // --- the grid ---
+  const grid = $('drumGrid');
+  grid.replaceChildren();
+  grid.style.setProperty('--steps', pattern.steps);
+  // Group boundaries land every 4 steps in 4/4 and every 3 in compound metres.
+  const group = pattern.steps % 4 === 0 && pattern.steps !== 12 ? 4 : 3;
+
+  for (const voice of DRUM_VOICES) {
+    const lane = pattern.lanes[voice.id] || new Array(pattern.steps).fill(0);
+
+    const name = el('button', 'seq-name', voice.label);
+    name.title = `Preview ${voice.label}`;
+    name.onclick = async () => {
+      if (!(await ensureAudio())) return;
+      engine.drums.hit(voice.id, engine.currentTime + 0.02, 0.9);
     };
-    list.appendChild(b);
+    grid.appendChild(name);
+
+    const row = el('div', 'seq-row');
+    lane.forEach((vel, i) => {
+      const cell = el('button', `seq-cell${vel ? ' on' : ''}${i % group === 0 ? ' beat' : ''}`);
+      cell.dataset.step = String(i);
+      cell.dataset.voice = voice.id;
+      if (vel) cell.dataset.level = vel >= 9 ? 'hard' : vel >= 6 ? 'med' : 'soft';
+      cell.setAttribute('aria-label', `${voice.label} step ${i + 1}`);
+      cell.onclick = async () => {
+        lane[i] = nextStepLevel(lane[i]);
+        pattern.lanes[voice.id] = lane;
+        renderDrums();
+        // Audition the edit so the grid answers back.
+        if (lane[i] && (await ensureAudio())) {
+          engine.drums.hit(voice.id, engine.currentTime + 0.02, lane[i] / 9);
+        }
+      };
+      row.appendChild(cell);
+    });
+    grid.appendChild(row);
+
+    const clear = el('button', 'seq-clear', '✕');
+    clear.title = `Clear ${voice.label}`;
+    clear.onclick = () => { pattern.lanes[voice.id] = new Array(pattern.steps).fill(0); renderDrums(); };
+    grid.appendChild(clear);
   }
 }
 
@@ -830,12 +1217,85 @@ function renderCompose() {
     invRow.appendChild(b);
   }
 
-  const seventhBtn = $('seventhBtn');
-  seventhBtn.classList.toggle('active', state.seventh);
-  seventhBtn.style.background = state.seventh ? 'var(--d)' : '';
-  seventhBtn.style.borderColor = state.seventh ? 'var(--d)' : '';
-
+  renderChordBuilder();
   renderDiagram(chord);
+}
+
+/** Note counts the size row offers, labelled the way a chart would name them. */
+const CHORD_SIZE_LABELS = [
+  [3, '△', 'Triad — root, third, fifth'],
+  [4, '7', 'Seventh chord'],
+  [5, '9', 'Ninth'],
+  [6, '11', 'Eleventh'],
+  [7, '13', 'Thirteenth — the full stack'],
+];
+
+/**
+ * The chord builder: size, colour, alterations.
+ *
+ * These three rows are what turn a fixed table of seven chords into a way of
+ * writing `Dm9 – E7♭9 – Am9`. Options that would not make sense on the current
+ * chord are disabled rather than hidden, so the shape of what is available
+ * stays learnable.
+ */
+function renderChordBuilder() {
+  const sizeRow = $('chordSizeRow');
+  sizeRow.replaceChildren();
+  for (const [size, label, title] of CHORD_SIZE_LABELS) {
+    const b = el('button', `chip small${state.chordSize === size ? ' active' : ''}`, label);
+    b.title = title;
+    b.onclick = () => {
+      state.chordSize = size;
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    sizeRow.appendChild(b);
+  }
+
+  const colourRow = $('chordColourRow');
+  colourRow.replaceChildren();
+  for (const c of CHORD_COLOURS) {
+    const on = state.chordColour === c.id;
+    const b = el('button', `chip small${on ? ' active' : ''}`, c.label);
+    b.title = c.hint;
+    if (on) { b.style.background = 'var(--b)'; b.style.borderColor = 'var(--b)'; }
+    b.onclick = () => {
+      state.chordColour = on ? null : c.id;
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    colourRow.appendChild(b);
+  }
+
+  // Alterations only mean something on a chord that has a seventh to alter.
+  const canAlter = state.chordSize >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(state.chordColour);
+  const alterRow = $('chordAlterRow');
+  alterRow.replaceChildren();
+  for (const a of CHORD_ALTERATIONS) {
+    const on = state.chordAlterations.includes(a.id);
+    const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
+    b.disabled = !canAlter;
+    b.title = canAlter ? `Add a ${a.label}` : 'Alterations need a seventh — pick 7 or larger first.';
+    if (on) { b.style.background = 'var(--c)'; b.style.borderColor = 'var(--c)'; }
+    b.onclick = () => {
+      state.chordAlterations = on
+        ? state.chordAlterations.filter((x) => x !== a.id)
+        : [...state.chordAlterations, a.id];
+      state.voicingIndex = 0;
+      renderCompose();
+      previewDegree(state.activeDegree);
+    };
+    alterRow.appendChild(b);
+  }
+  if (!canAlter && state.chordAlterations.length) state.chordAlterations = [];
+
+  const spec = currentSpec();
+  $('chordBuilderHint').textContent = describeSpec(state.rootPc, modeId(), spec);
+  const sc = scaleForChord(spec, state.rootPc, modeId());
+  const avoid = sc.avoidPc === null ? '' : ` Careful with ${noteName(sc.avoidPc, preferFlats())}.`;
+  $('chordScaleHint').textContent = `Solo with ${sc.name}. ${sc.why}${avoid}`;
 }
 
 function renderDiagram(chord) {
@@ -976,8 +1436,6 @@ function renderTimeline() {
         el('span', 'main', slot ? slot.label : '+'),
         el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : `Bar ${idx + 1}`)
       );
-      s.onclick = () => assignSlot(idx, slotIdx);
-      s.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); assignSlot(idx, slotIdx); } };
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('dragover'); };
       s.ondragleave = () => s.classList.remove('dragover');
       s.ondrop = (e) => {
@@ -986,11 +1444,28 @@ function renderTimeline() {
         const deg = Number(e.dataTransfer.getData('text/plain'));
         if (!Number.isNaN(deg)) assignSlot(idx, slotIdx, deg);
       };
+      s.onclick = () => openPicker(idx, slotIdx);
+      s.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(idx, slotIdx); } };
+      if (state.picker && state.picker.barIdx === idx && state.picker.slotIdx === slotIdx) {
+        s.classList.add('editing');
+      }
       if (slot) {
         const x = el('button', 'clear', '✕');
         x.title = 'Clear';
         x.onclick = (e) => { e.stopPropagation(); clearSlot(idx, slotIdx); };
         s.appendChild(x);
+        // How far the hand travels to reach this chord from the one before it.
+        // Showing the number is what makes "Smooth voicings" legible rather
+        // than magic — the figures visibly drop when it is switched on.
+        const prev = previousSlot(idx, slotIdx);
+        if (prev && prev.voicing && slot.voicing) {
+          const move = Math.max(0, Math.round(voiceLeadCost(prev.voicing, slot.voicing)));
+          const tag = el('span', `move${move > 9 ? ' far' : ''}`, `↔${move}`);
+          tag.title = move > 9
+            ? 'A big jump from the previous chord — try Smooth voicings.'
+            : 'Fret movement from the previous chord.';
+          s.appendChild(tag);
+        }
       }
       inner.appendChild(s);
     });
@@ -1005,6 +1480,239 @@ function renderTimeline() {
     cell.appendChild(inner);
     grid.appendChild(cell);
   });
+
+  renderSectionRole();
+  renderPicker();
+  renderAnalysis();
+
+  const smooth = $('smoothBtn');
+  smooth.setAttribute('aria-pressed', String(!!section().smooth));
+  smooth.textContent = section().smooth ? 'On' : 'Off';
+}
+
+/** The section being edited. */
+function section() {
+  return state.sections[state.activeSection];
+}
+
+/** The part of a song that usually follows the one given. */
+function nextRole(role) {
+  const order = ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'outro'];
+  const i = order.indexOf(role || 'verse');
+  return order[Math.min(order.length - 1, i + 1)];
+}
+
+/** Every filled slot of the active section, in playing order. */
+function filledSlots() {
+  const out = [];
+  bars().forEach((bar, barIdx) => {
+    bar.slots.forEach((slot, slotIdx) => {
+      if (slot) out.push({ slot, barIdx, slotIdx });
+    });
+  });
+  return out;
+}
+
+/** The chord immediately before a given position, for voice-leading readouts. */
+function previousSlot(barIdx, slotIdx) {
+  const list = filledSlots();
+  const i = list.findIndex((e) => e.barIdx === barIdx && e.slotIdx === slotIdx);
+  return i > 0 ? list[i - 1].slot : null;
+}
+
+function renderSectionRole() {
+  const sel = $('sectionRoleSelect');
+  if (!sel.options.length) {
+    for (const [id, r] of Object.entries(SECTION_ROLES)) {
+      sel.appendChild(el('option', '', r.label)).value = id;
+    }
+  }
+  const role = section().role || 'verse';
+  sel.value = role;
+  $('sectionRoleHint').textContent = SECTION_ROLES[role].blurb;
+}
+
+/**
+ * Re-pick every shape in the section so the progression connects.
+ *
+ * Stored as a flag on the section rather than as frozen shapes, so a key or
+ * tuning change re-runs it: the progression stays smooth instead of smooth
+ * once.
+ */
+function applySmoothing() {
+  const sec = section();
+  const list = filledSlots();
+  if (!sec.smooth || list.length < 2) return;
+  const voicings = smoothProgression(list.map((e) => e.slot.chord), { tuning: tuning() });
+  list.forEach((e, i) => {
+    if (voicings[i]) {
+      e.slot.voicing = voicings[i];
+      e.slot.label = chordLabel(e.slot.chord, 0, preferFlats());
+    }
+  });
+}
+
+function renderAnalysis() {
+  const list = filledSlots();
+  const card = $('analysisCard');
+  if (list.length < 2) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const a = analyseProgression(
+    list.map((e) => e.slot.spec),
+    state.rootPc,
+    modeId(),
+    section().role || 'verse'
+  );
+  $('analysisSummary').textContent = `${a.summary}   ·   ${list.map((e) => e.slot.chord.symbol).join(' ')}`;
+  $('analysisCadence').textContent = a.cadence ? `${a.cadence.label} — ${a.cadence.note}` : '';
+
+  const notes = $('analysisNotes');
+  notes.replaceChildren();
+  for (const n of a.notes) notes.appendChild(el('li', n.level, n.text));
+
+  const cost = progressionCost(list.map((e) => e.slot.voicing).filter(Boolean));
+  notes.appendChild(el('li', 'idea', `Total fret movement across the loop: ${cost}.`));
+}
+
+function openPicker(barIdx, slotIdx) {
+  state.picker = { barIdx, slotIdx };
+  renderTimeline();
+  $('pickerCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closePicker() {
+  state.picker = null;
+  renderTimeline();
+}
+
+/**
+ * The chord picker.
+ *
+ * Three layers, in the order a writer needs them: what the app thinks should
+ * come next and why, then every chord the key contains, then the controls to
+ * take whichever chord was chosen and turn it into the exact voicing wanted.
+ */
+function renderPicker() {
+  const card = $('pickerCard');
+  if (!state.picker) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const { barIdx, slotIdx } = state.picker;
+  const bar = bars()[barIdx];
+  if (!bar || !bar.slots.length) { card.hidden = true; state.picker = null; return; }
+  const slot = bar.slots[slotIdx];
+  const role = section().role || 'verse';
+  $('pickerTitle').textContent =
+    bar.slots.length === 2 ? `BAR ${barIdx + 1} · ${slotIdx === 0 ? 'FIRST' : 'SECOND'} HALF` : `BAR ${barIdx + 1}`;
+
+  // Everything written before this position is the context for the suggestion.
+  const list = filledSlots();
+  const before = list.filter((e) => e.barIdx < barIdx || (e.barIdx === barIdx && e.slotIdx < slotIdx));
+  const suggestions = suggestNext({
+    tonicPc: state.rootPc,
+    modeId: modeId(),
+    written: before.map((e) => e.slot.spec),
+    role,
+    position: before.length,
+    total: Math.max(list.length + 1, barCount()),
+  }).slice(0, 5);
+
+  const sug = $('pickerSuggestions');
+  sug.replaceChildren();
+  for (const s of suggestions) {
+    const row = el('button', 'suggest');
+    row.append(
+      el('span', 'suggest-chord', s.chord.symbol),
+      el('span', 'suggest-numeral', s.chord.numeral),
+      el('span', `suggest-tag tag-${s.tag.toLowerCase()}`, s.tag),
+      el('span', 'suggest-why', s.reason)
+    );
+    row.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, s.spec);
+      previewSlot(barIdx, slotIdx);
+    };
+    sug.appendChild(row);
+  }
+
+  // Every chord in the key, at the size the builder is set to.
+  const scaleRow = $('pickerScale');
+  scaleRow.replaceChildren();
+  currentChords().forEach((c, d) => {
+    const on = slot && slot.spec.degree === d;
+    const b = el('button', `chip small${on ? ' active' : ''}`);
+    b.append(el('span', '', c.symbol), el('span', 'tag', c.numeral));
+    b.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, { ...currentSpec(d) });
+      previewSlot(barIdx, slotIdx);
+    };
+    scaleRow.appendChild(b);
+  });
+
+  // Per-chord editing, once there is a chord to edit.
+  const edit = $('pickerEdit');
+  edit.hidden = !slot;
+  if (!slot) return;
+  const spec = slot.spec;
+
+  const sizeRow = $('pickerSizeRow');
+  sizeRow.replaceChildren();
+  for (const [size, label, title] of CHORD_SIZE_LABELS) {
+    const b = el('button', `chip small${spec.size === size ? ' active' : ''}`, label);
+    b.title = title;
+    b.onclick = () => { setSlotSpec(barIdx, slotIdx, { ...spec, size }); previewSlot(barIdx, slotIdx); };
+    sizeRow.appendChild(b);
+  }
+
+  // Colours the key actually suggests for this degree come first and are
+  // marked, so the list teaches which ones belong rather than just listing all.
+  const idiomatic = new Set(idiomaticColours(spec.degree, modeId()).map((c) => c.colour));
+  const colourRow = $('pickerColourRow');
+  colourRow.replaceChildren();
+  for (const c of CHORD_COLOURS) {
+    const on = (spec.colour ?? null) === c.id;
+    const b = el('button', `chip small${on ? ' active' : ''}${idiomatic.has(c.id) ? ' idiomatic' : ''}`, c.label);
+    b.title = idiomatic.has(c.id) ? `${c.hint} — idiomatic on this degree.` : c.hint;
+    b.onclick = () => {
+      setSlotSpec(barIdx, slotIdx, { ...spec, colour: on ? null : c.id });
+      previewSlot(barIdx, slotIdx);
+    };
+    colourRow.appendChild(b);
+  }
+
+  const canAlter = spec.size >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(spec.colour);
+  const alterRow = $('pickerAlterRow');
+  alterRow.replaceChildren();
+  for (const a of CHORD_ALTERATIONS) {
+    const on = (spec.alterations || []).includes(a.id);
+    const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
+    b.disabled = !canAlter;
+    b.onclick = () => {
+      const alterations = on
+        ? spec.alterations.filter((x) => x !== a.id)
+        : [...(spec.alterations || []), a.id];
+      setSlotSpec(barIdx, slotIdx, { ...spec, alterations });
+      previewSlot(barIdx, slotIdx);
+    };
+    alterRow.appendChild(b);
+  }
+
+  const sc = scaleForChord(spec, state.rootPc, modeId());
+  $('pickerHint').textContent = `${describeSpec(state.rootPc, modeId(), spec)} Solo with ${sc.name}.`;
+}
+
+function setSlotSpec(barIdx, slotIdx, spec) {
+  const bar = bars()[barIdx];
+  if (!bar) return;
+  bar.slots[slotIdx] = slotFromDegree(spec.degree, spec);
+  applySmoothing();
+  renderTimeline();
+}
+
+async function previewSlot(barIdx, slotIdx) {
+  const slot = bars()[barIdx] && bars()[barIdx].slots[slotIdx];
+  if (!slot || !slot.voicing || sequencer.playing) return;
+  await playChordNow(slot.chord, slot.voicing);
 }
 
 function renderLearn() {
@@ -1100,7 +1808,51 @@ function startQuiz() {
   playModeVamp(correct);
 }
 
+/**
+ * The chords a suggestion will actually produce in the current key. Building
+ * them rather than storing labels means what is shown can never drift from what
+ * is heard — which is the whole point of showing it. Entries may be bare
+ * degrees or full specs, so a template can call for an altered dominant.
+ */
+function chordsForSuggestion(degrees, seventh, mode) {
+  const modeName = suggestionMode(mode);
+  const size = sizeFromLegacy(seventh, 3);
+  return degrees.map((entry) => chordForSpec(state.rootPc, modeName, toSpec(entry, size)));
+}
+
+/** The roman-numeral summary of a progression. */
+function numeralsFor(degrees, seventh, mode) {
+  return chordsForSuggestion(degrees, seventh, mode).map((c) => c.numeral).join('–');
+}
+
+/** The chord names a progression produces in the current key. */
+function chordNamesFor(degrees, seventh, mode) {
+  return chordsForSuggestion(degrees, seventh, mode).map((c) => c.symbol).join(' ');
+}
+
+/**
+ * The mode a suggestion should be read and played in.
+ *
+ * Templates carry the mode they belong to, which is right when browsing freely
+ * — a Mixolydian riff is not the same idea in Ionian. But once the key is
+ * locked the user has said what the song is, and a suggestion that silently
+ * changes the mode out from under them is no longer a suggestion in their song.
+ * Locking therefore wins: everything in Assist is shown, auditioned and applied
+ * in the locked key.
+ */
+function suggestionMode(templateMode) {
+  if (state.rootLocked) return modeId();
+  return templateMode && MODE_IDS.includes(templateMode) ? templateMode : modeId();
+}
+
 function renderAssist() {
+  const keyName = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
+  $('assistKeyName').textContent = keyName;
+  $('assistKeyLock').textContent = state.rootLocked
+    ? '🔒 locked — suggestions stay in this key'
+    : 'unlocked — a suggestion may bring its own mode';
+  $('assistKeyBanner').classList.toggle('locked', state.rootLocked);
+
   const moodRow = $('moodRow');
   moodRow.replaceChildren();
   for (const m of MOODS) {
@@ -1113,8 +1865,9 @@ function renderAssist() {
   const mood = MOODS.find((m) => m.id === state.moodId);
   $('suggestionCard').hidden = !mood;
   if (mood) {
-    $('suggestionLabel').textContent = `${mood.label} progression`;
-    $('suggestionText').textContent = mood.text;
+    $('suggestionLabel').textContent = `${mood.label} — ${numeralsFor(mood.degrees, mood.seventh, mood.mode)}`;
+    $('suggestionText').textContent =
+      `${chordNamesFor(mood.degrees, mood.seventh, mood.mode)} · ${mood.text}`;
   }
 
   const secRow = $('sectionRow');
@@ -1137,23 +1890,103 @@ function renderAssist() {
       const apply = el('button', 'chip', 'Apply');
       apply.onclick = () => applyDegrees(v.degrees, v.seventh);
       head.appendChild(apply);
-      card.append(head, el('p', '', v.blurb));
+      card.append(head);
+      card.append(el('span', 'variant-numerals', `${numeralsFor(v.degrees, v.seventh)}  ·  ${chordNamesFor(v.degrees, v.seventh)}`));
+      card.append(el('p', '', v.blurb));
       variants.appendChild(card);
     }
   }
 
+  // --- progression library, grouped by family ---
+  const familyRow = $('templateFamilyRow');
+  familyRow.replaceChildren();
+  const families = ['All', ...TEMPLATE_FAMILIES];
+  for (const fam of families) {
+    const active = (state.templateFamily || 'All') === fam;
+    const b = el('button', `chip${active ? ' active' : ''}`, fam);
+    if (active) { b.style.background = 'var(--a)'; b.style.borderColor = 'var(--a)'; }
+    b.onclick = () => { state.templateFamily = fam; renderAssist(); };
+    familyRow.appendChild(b);
+  }
+
   const tpl = $('templateList');
   tpl.replaceChildren();
+  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
   for (const t of TEMPLATES) {
-    const b = el('button', `list-btn${state.templateId === t.id ? ' active' : ''}`);
-    b.append(el('span', 'main', t.label), el('span', 'tag', t.tag));
-    b.onclick = () => {
+    if (wanted && t.family !== wanted) continue;
+    const card = el('div', `template-card${state.templateId === t.id ? ' active' : ''}`);
+
+    const head = el('div', 'row between');
+    head.append(el('span', 'label', t.label));
+    const apply = el('button', 'chip small filled-a', 'Apply');
+    apply.onclick = () => {
       state.templateId = t.id;
       state.moodId = null;
-      applyDegrees(t.degrees, t.seventh);
+      applyDegrees(t.degrees, t.seventh, t.mode);
     };
-    tpl.appendChild(b);
+    head.appendChild(apply);
+
+    // Both lines are derived from the chords this template will produce in the
+    // current key, so what is promised is what is heard.
+    const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
+    const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
+    // Name the mode it will actually be heard in, which is the locked one when
+    // the key is locked — not the mode the template was written in.
+    const shownMode = suggestionMode(t.mode);
+    const recast = state.rootLocked && shownMode !== t.mode;
+    const meta = el(
+      'span',
+      'template-meta',
+      `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars`
+    );
+
+    card.append(head, numerals, names, el('p', '', t.blurb), meta);
+
+    // Songs built on this progression. A roman numeral means little until you
+    // recognise something you already know inside it, so where the source names
+    // examples they are shown rather than kept in a data file.
+    if (t.songs && t.songs.length) {
+      const songs = el('ul', 'song-list');
+      for (const s of t.songs) songs.appendChild(el('li', '', s));
+      card.append(el('span', 'micro-label', 'HEARD IN'), songs);
+    }
+
+    // Tapping the card auditions the progression without replacing the timeline.
+    card.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      previewProgression(t);
+    };
+    tpl.appendChild(card);
   }
+}
+
+/**
+ * Audition a progression without committing it — hear before you overwrite the
+ * timeline. Chords are scheduled back to back at the current tempo.
+ */
+async function previewProgression(t) {
+  if (!(await ensureAudio())) return;
+  if (sequencer.playing) { toast('Stop playback to preview a progression.'); return; }
+
+  const chords = chordsForSuggestion(t.degrees, t.seventh, t.mode).slice(0, 8);
+  const dur = barDuration(state.timeSig, state.bpm);
+  const t0 = auditionStart();
+
+  // Preview the progression the way it should be played — connected shapes, not
+  // a root-position grip per chord, which is what makes an audition sound like
+  // an exercise instead of music.
+  const voicings = smoothProgression(chords, { tuning: tuning() });
+  chords.forEach((chord, i) => {
+    const v = voicings[i] || resolveVoicing(chord, 'root', { tuning: tuning() });
+    if (!v) return;
+    sequencer.scheduleChord({ chord, voicing: v }, t0 + i * dur, dur, {
+      rhythm: state.rhythm,
+      tuning: tuning(),
+      velocity: 1,
+    });
+  });
+  engine.damp(t0 + chords.length * dur);
+  toast(`Previewing ${t.label} — tap Apply to keep it.`);
 }
 
 // ------------------------------------------------------------ static wiring
@@ -1188,6 +2021,10 @@ function wire() {
     state.timeSig = timeSig.value;
     renderTransport();
     renderTone(); // audition-length labels depend on beats per bar
+    // Grooves are metre-specific; move to one that fits if the current one does not.
+    const fits = stylesForMeter(state.timeSig);
+    if (!fits.some((s) => s.id === state.drumStyle)) loadDrumStyle(fits[0].id);
+    renderDrums();
   };
 
   const modeSel = $('modeSelect');
@@ -1250,16 +2087,37 @@ function wire() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showAbout) closeAbout(); });
 
   $('previewBtn').onclick = () => previewDegree(state.activeDegree);
-  $('seventhBtn').onclick = () => {
-    state.seventh = !state.seventh;
-    state.voicingIndex = 0;
-    renderCompose();
-    previewDegree(state.activeDegree);
-  };
   $('nextVoicingBtn').onclick = () => {
     state.voicingIndex += 1;
     renderCompose();
     previewDegree(state.activeDegree);
+  };
+
+  $('secDomBtn').onclick = () => {
+    state.showSecDom = !state.showSecDom;
+    renderCircle();
+  };
+
+  // --- timeline: role, picker, voice leading ---
+  $('sectionRoleSelect').onchange = (e) => {
+    section().role = e.target.value;
+    renderTimeline();
+  };
+  $('smoothBtn').onclick = () => {
+    const sec = section();
+    sec.smooth = !sec.smooth;
+    // Turning it off should put the shapes back, not leave the smoothed ones
+    // in place with the switch reading "off".
+    if (sec.smooth) applySmoothing();
+    else reresolveAll();
+    renderTimeline();
+  };
+  $('pickerCloseBtn').onclick = closePicker;
+  $('pickerClearBtn').onclick = () => {
+    if (!state.picker) return;
+    const { barIdx, slotIdx } = state.picker;
+    clearSlot(barIdx, slotIdx);
+    closePicker();
   };
 
   $('playScaleBtn').onclick = () => playModeScale(state.learnModeIdx);
@@ -1284,7 +2142,16 @@ function wire() {
 
   $('addSectionBtn').onclick = () => {
     const count = barCount();
-    state.sections.push({ id: Date.now(), name: nextName(), barCount: count, bars: makeBars(count) });
+    // A new loop is usually the next part of the song, so it defaults to the
+    // role that follows the current one rather than always to "verse".
+    state.sections.push({
+      id: Date.now(),
+      name: nextName(),
+      barCount: count,
+      bars: makeBars(count),
+      role: nextRole(section().role),
+      smooth: !!section().smooth,
+    });
     selectSection(state.sections.length - 1);
     renderTimeline();
   };
@@ -1295,6 +2162,8 @@ function wire() {
       id: Date.now(),
       name: nextName(),
       barCount: sec.barCount,
+      role: sec.role || 'verse',
+      smooth: !!sec.smooth,
       // Slots are re-derived rather than shared, so editing the copy cannot
       // reach back into the original.
       bars: sec.bars.map((b) => ({ slots: b.slots.map((s) => (s ? { ...s } : null)) })),
@@ -1318,6 +2187,42 @@ function wire() {
   $('drumKitSelect').onchange = (e) => {
     state.drumKit = e.target.value;
     if (engine.drums) engine.drums.setKit(state.drumKit);
+  };
+  $('drumStyleSelect').onchange = (e) => {
+    loadDrumStyle(e.target.value);
+    if (!state.drumsOn) toggleDrums(true);
+    renderDrums();
+  };
+  $('drumClearBtn').onclick = () => {
+    for (const v of DRUM_VOICES) {
+      state.drumPattern.lanes[v.id] = new Array(state.drumPattern.steps).fill(0);
+    }
+    renderDrums();
+  };
+  $('drumResetBtn').onclick = () => { loadDrumStyle(state.drumStyle, { keepKit: true }); renderDrums(); };
+  $('drumDoubleBtn').onclick = () => {
+    // Write a one-bar idea in the first half, then fill the bar with it.
+    const p = state.drumPattern;
+    const half = Math.floor(p.steps / 2);
+    for (const v of DRUM_VOICES) {
+      const lane = p.lanes[v.id];
+      for (let i = 0; i < half; i++) lane[half + i] = lane[i];
+    }
+    renderDrums();
+  };
+  const swing = $('drumSwing');
+  swing.oninput = () => {
+    state.drumPattern.swing = Number(swing.value);
+    $('drumSwingOut').textContent = `${Math.round(state.drumPattern.swing * 100)}%`;
+  };
+  const human = $('drumHumanize');
+  human.oninput = () => {
+    state.drumHumanize = Number(human.value);
+    $('drumHumanizeOut').textContent = `${Math.round(state.drumHumanize * 100)}%`;
+  };
+  $('drumVaryBtn').onclick = () => {
+    state.drumPattern = varyPattern(state.drumPattern);
+    renderDrums();
   };
   const drumVol = $('drumVolume');
   drumVol.oninput = () => {
@@ -1359,7 +2264,7 @@ function wire() {
 
 function exportSong() {
   const data = {
-    format: 'circlesong.v2',
+    format: 'circlesong.v3',
     title: state.projectTitle,
     bpm: state.bpm,
     timeSig: state.timeSig,
@@ -1368,12 +2273,16 @@ function exportSong() {
     tone: state.tone,
     rhythm: state.rhythm,
     tuning: state.tuningId,
-    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills },
+    drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
     sections: state.sections.map((sec) => ({
       name: sec.name,
       barCount: sec.barCount,
-      bars: sec.bars.map((b) => b.slots.map((s) => (s ? { degree: s.degree, seventh: s.seventh, voicingMode: s.voicingMode } : null))),
+      role: sec.role || 'verse',
+      smooth: !!sec.smooth,
+      bars: sec.bars.map((b) =>
+        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, voicingMode: s.voicingMode } : null))
+      ),
     })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1410,6 +2319,9 @@ function importSong(e) {
         if (DRUM_KITS[data.drums.kit]) state.drumKit = data.drums.kit;
         if (Number.isFinite(data.drums.volume)) state.drumVolume = data.drums.volume;
         state.drumFills = data.drums.fills !== false;
+        // Prefer the saved grid over the style's defaults: it may have been edited.
+        if (data.drums.pattern && data.drums.pattern.lanes) state.drumPattern = data.drums.pattern;
+        else loadDrumStyle(state.drumStyle, { keepKit: true });
       }
 
       // v1 held a single loop; v2 holds named sections. Reading a v1 file just
@@ -1426,20 +2338,22 @@ function importSong(e) {
           built[b] = {
             slots: slots.map((slot) => {
               if (!slot) return null;
-              // slotFromDegree reads the live seventh/voicing settings, so they
-              // are borrowed for the rebuild and put straight back.
-              const prevSeventh = state.seventh;
-              const prevMode = state.voicingMode;
-              state.seventh = !!slot.seventh;
-              state.voicingMode = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
-              const rebuilt = slotFromDegree(slot.degree);
-              state.seventh = prevSeventh;
-              state.voicingMode = prevMode;
-              return rebuilt;
+              // Files written before the chord builder carry a `seventh` flag
+              // instead of a spec; both describe the same thing.
+              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
+              const vm = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              return slotFromDegree(slot.degree, spec, vm);
             }),
           };
         });
-        return { id: i + 1, name: sec.name || String.fromCharCode(65 + i), barCount: count, bars: built };
+        return {
+          id: i + 1,
+          name: sec.name || String.fromCharCode(65 + i),
+          barCount: count,
+          role: SECTION_ROLES[sec.role] ? sec.role : 'verse',
+          smooth: !!sec.smooth,
+          bars: built,
+        };
       });
       if (!state.sections.length) state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8) }];
       state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
@@ -1481,13 +2395,22 @@ if (
   });
 }
 
+watchDrumPlayhead();
+
 // Expose for debugging in the console.
 window.CircleSong = {
   state,
   engine,
   sequencer,
   MODES,
+  PRESETS,
   /** Bars of the loop currently active — state.sections holds them all. */
   get bars() { return bars(); },
   activeSection,
+  render,
+  /** Re-derive every stored shape — what a key, mode or tuning change runs. */
+  reresolveAll,
+  // Exposed so tests can measure voice leading rather than eyeball it.
+  progressionCost,
+  voiceLeadCost,
 };

@@ -93,17 +93,21 @@ running the version it cached. After deploying changes, bump `CACHE` in
 - **Multiple loops per song** — build a verse, a chorus and a turnaround as
   separate loops and switch between them while playing. A switch waits for the
   bar line, so the change lands on the beat instead of cutting mid-phrase.
-- **Backing drums** — twelve grooves across rock, funk, reggae, bossa,
-  Afro-Cuban 6/8, blues shuffle, waltz, Motown, cajon, lo-fi and metal, over six
-  kits. Scheduled against the same audio clock as the guitar, so they stay
-  locked bar for bar in any time signature, with an optional fill before the
-  loop turns around.
+- **Drum machine with a step sequencer** — thirty-five grooves in nine families:
+  rock, funk and soul, house/techno/breakbeat, reggae and soca, Latin (samba,
+  partido alto, two cumbias, bossa, merengue, son montuno, Afro-Cuban 6/8), jazz
+  and blues, folk, hip-hop and metal. Six kits, ten voices. Every groove loads
+  into an editable grid — tap a step to cycle it through soft, medium and hard —
+  with swing, humanise, a musical **Vary** button, and a live playhead driven
+  from the audio clock. Locked to the guitar bar for bar in any time signature.
 - **Dynamic Fretboard & Inversion Switcher** — exact fingerings with chord-tone
   colouring, and instant auditioning of root position, 1st/2nd inversion,
   Drop-2 and Drop-3 voicings. Cycle alternative shapes for any chord.
 - **Custom Tone & Strum Engine** — six modelled instruments (acoustic steel,
-  nylon classical, electric clean, crunch, jazz archtop, reggae) and seven
-  rhythm patterns, plus live control over sustain, brightness, and pick
+  nylon classical, electric clean, crunch, jazz archtop, reggae) and eighteen
+  strum and picking patterns — folk D-DU-UDU, driving 16ths, muted
+  chucks, ska, Charleston comping, rumba clave, waltz, 6/8 ballad, Travis
+  picking and more — plus live control over sustain, brightness, and pick
   position. Five tunings including Drop D, DADGAD and Open G.
 - **Predictable auditioning** — by default each chord you tap silences the one
   before it, so rapid exploring never turns into overlapping mush. Toggle it
@@ -119,9 +123,14 @@ running the version it cached. After deploying changes, bump `CACHE` in
   major scale, then test yourself with the "guess the mode" quiz, which tracks
   your streak and which modes you have identified.
 - **About panel** — tap the wordmark for what CircleSong is and who made it.
-- **Songwriting Assistant** — mood-based chord suggestions, song-section ideas,
-  and progression templates inspired by hit songs. Everything applies straight
-  to the timeline in the current key.
+- **Songwriting Assistant** — fourteen moods, six song sections with
+  twenty-three variants, and a **progression library of twenty-seven
+  templates** grouped by family: pop and rock, modal rock, minor keys, jazz,
+  blues, folk and country. Tap a card to hear it in your key, Apply to write it
+  to the timeline. Every template carries the mode it belongs in, so ♭VII
+  progressions land in Mixolydian rather than being mislabelled in Ionian, and
+  the roman numerals shown are computed from the chords that will actually
+  sound.
 - **Save / load** — export and re-import songs as JSON. Progressions are stored
   as scale degrees, so re-importing into a different key transposes the song.
 

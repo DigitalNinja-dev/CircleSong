@@ -8,7 +8,7 @@
 
 import { getPattern, swingTime } from './patterns.js';
 import { resolveVoicing, voicingNotes } from './fretboard.js';
-import { DRUM_STYLE_BY_ID, patternHits } from './drum-patterns.js';
+import { patternHits } from './drum-patterns.js';
 
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.15;
@@ -83,6 +83,18 @@ export class Sequencer {
     // Letting them ring out sounds like the transport ignored you.
     this.engine.cut(this.engine.currentTime, { level: 1, time: 0.04 });
     if (this.onPlayhead) this.onPlayhead(-1);
+  }
+
+  /**
+   * Where the bar currently sounding started, and how long it lasts. The UI
+   * uses this to draw a playhead from the audio clock rather than from a timer,
+   * so what is highlighted is what is actually being heard.
+   */
+  currentBarWindow() {
+    const head = this.scheduled[0];
+    if (!this.playing || !head) return null;
+    const st = this.getState();
+    return { start: head.time, duration: barDuration(st.timeSig, st.bpm) };
   }
 
   /** Restart the loop from the top without dropping the audio clock. */
@@ -173,17 +185,22 @@ export class Sequencer {
    * the same audio clock from the same bar start.
    */
   _scheduleDrums(startTime, dur, st) {
-    if (!this.drums || !st.drumsOn || !st.drumStyle) return;
-    const style = DRUM_STYLE_BY_ID[st.drumStyle];
-    if (!style) return;
+    if (!this.drums || !st.drumsOn || !st.drumPattern) return;
 
     // A fill on the last bar of the loop signals the turnaround.
     const bars = st.bars.length;
     const isLastBar = bars > 1 && this.barIndex === bars - 1;
     const fill = !!st.drumFills && isLastBar;
 
-    for (const hit of patternHits(style, { fill })) {
-      this.drums.hit(hit.voice, startTime + hit.t * dur, hit.velocity);
+    // Humanise: a real drummer's placement drifts by a few milliseconds and
+    // their velocity by a few percent. The downbeat drifts least — that is the
+    // reference everything else is heard against.
+    const h = st.drumHumanize || 0;
+    for (const hit of patternHits(st.drumPattern, { fill })) {
+      const anchor = hit.t === 0 ? 0.25 : 1;
+      const drift = h ? (Math.random() - 0.5) * 0.014 * h * anchor : 0;
+      const vel = h ? hit.velocity * (1 + (Math.random() - 0.5) * 0.24 * h) : hit.velocity;
+      this.drums.hit(hit.voice, startTime + hit.t * dur + drift, Math.max(0.05, Math.min(1.2, vel)));
     }
   }
 

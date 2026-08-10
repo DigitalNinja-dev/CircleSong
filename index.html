@@ -92,10 +92,18 @@
         <span class="micro-label">TAP PLAYS</span>
         <div class="row gap-xs grow" id="exploreModeBtns"></div>
       </div>
+      <div class="row between mb-s">
+        <div>
+          <span class="setting-name">Show secondary dominants</span>
+          <span class="setting-note">The chords that pull into each degree</span>
+        </div>
+        <button id="secDomBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
       <div class="wheel" id="wheel">
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
         <div class="wheel-spokes"></div>
+        <svg class="wheel-arcs" id="wheelArcs" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <div class="wheel-labels" id="wheelLabels"></div>
         <div class="wheel-hub">
           <span id="hubKey">C</span>
@@ -107,6 +115,11 @@
         <span>Fifths (dominant) ►</span>
       </div>
       <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant. Lock the key, then tap any wedge to hear it and see how it relates.</p>
+      <div id="secDomPanel" hidden>
+        <span class="micro-label">SECONDARY DOMINANTS</span>
+        <div id="secDomRow" class="row wrap gap-xs mt-s"></div>
+        <p id="secDomHint" class="body-copy tight"></p>
+      </div>
       <div id="exploreCard" class="explore-card" hidden>
         <span id="exploreName"></span>
         <p id="exploreText"></p>
@@ -142,26 +155,50 @@
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="stack" id="rhythmList"></div>
 
-      <h2 class="mt">/04 DRUMS</h2>
-      <div class="row between">
-        <div>
-          <span class="setting-name">Backing drums</span>
-          <span class="setting-note">Locked to the transport, bar for bar</span>
-        </div>
-        <button id="drumsBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+    </section>
+
+    <!-- DRUM MACHINE -->
+    <section class="panel" id="tab-drums" hidden>
+      <div class="head">
+        <h2>/03 DRUM_MACHINE</h2>
+        <button id="drumsBtn" class="chip toggle solid small" aria-pressed="false">Off</button>
       </div>
-      <div class="row mt-s">
-        <span class="micro-label">KIT</span>
-        <select id="drumKitSelect" class="select grow" aria-label="Drum kit"></select>
+
+      <div class="row gap-xs mb-s">
+        <select id="drumStyleSelect" class="select grow" aria-label="Groove"></select>
+        <select id="drumKitSelect" class="select" aria-label="Drum kit"></select>
       </div>
-      <div class="stack mt-s" id="drumStyleList"></div>
-      <div class="sliders mt-s">
+
+      <div class="seq-wrap">
+        <div class="seq" id="drumGrid" role="grid" aria-label="Drum step sequencer"></div>
+      </div>
+      <p class="hint block">Tap a step to cycle it through soft, medium and hard, then off. Tap a voice name to preview it; the ✕ clears that row.</p>
+
+      <div class="row gap-s">
+        <button id="drumClearBtn" class="chip small">Clear grid</button>
+        <button id="drumResetBtn" class="chip small">Reset groove</button>
+        <button id="drumDoubleBtn" class="chip small" title="Copy the first half onto the second">Double</button>
+        <button id="drumVaryBtn" class="chip small filled-b" title="Nudge the groove into a variation of itself">✦ Vary</button>
+      </div>
+
+      <div class="sliders mt">
         <div class="slider-row">
           <label for="drumVolume">DRUM VOL</label>
           <input id="drumVolume" type="range" min="0" max="1" step="0.01" value="0.7" class="grow">
           <output id="drumVolumeOut">70%</output>
         </div>
+        <div class="slider-row">
+          <label for="drumSwing">SWING</label>
+          <input id="drumSwing" type="range" min="0" max="0.6" step="0.01" value="0" class="grow">
+          <output id="drumSwingOut">0%</output>
+        </div>
+        <div class="slider-row">
+          <label for="drumHumanize">HUMANIZE</label>
+          <input id="drumHumanize" type="range" min="0" max="1" step="0.01" value="0.35" class="grow">
+          <output id="drumHumanizeOut">35%</output>
+        </div>
       </div>
+
       <div class="row between mt-s">
         <div>
           <span class="setting-name">Fill before the loop turns</span>
@@ -186,9 +223,25 @@
         </div>
         <p id="activeFunctionBlurb" class="body-copy tight"></p>
 
-        <div class="row wrap gap-s">
-          <div id="inversionRow" class="row wrap gap-s"></div>
-          <button id="seventhBtn" class="chip small">+7th</button>
+        <div class="builder">
+          <div class="builder-row">
+            <span class="micro-label">SIZE</span>
+            <div id="chordSizeRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">COLOUR</span>
+            <div id="chordColourRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">ALTER</span>
+            <div id="chordAlterRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">SHAPE</span>
+            <div id="inversionRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <p id="chordBuilderHint" class="body-copy tight"></p>
+          <p id="chordScaleHint" class="scale-hint"></p>
         </div>
 
         <div class="diagram-row">
@@ -220,8 +273,47 @@
           <button id="delSectionBtn" class="chip small" title="Delete this loop">Delete</button>
         </div>
       </div>
-      <p class="hint block">Tap a bar to drop in the active chord, drag a chord from Compose, or tap + to fit a second chord in the same bar. While playing, switching loops waits for the bar line.</p>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">THIS LOOP IS A</span>
+        <select id="sectionRoleSelect" class="select grow" aria-label="Section role"></select>
+      </div>
+      <p id="sectionRoleHint" class="hint block"></p>
       <div class="grid-4" id="timelineGrid"></div>
+
+      <!-- Chord picker: opens on the bar being edited. -->
+      <div id="pickerCard" class="card picker" hidden>
+        <div class="row between">
+          <span class="micro-label" id="pickerTitle">BAR 1</span>
+          <button id="pickerCloseBtn" class="chip small">Done</button>
+        </div>
+        <span class="micro-label mt-s">SUGGESTED NEXT</span>
+        <div id="pickerSuggestions" class="suggest-list"></div>
+        <span class="micro-label mt-s">EVERY CHORD IN THE KEY</span>
+        <div id="pickerScale" class="row wrap gap-xs"></div>
+        <div id="pickerEdit" hidden>
+          <span class="micro-label mt-s">THIS CHORD</span>
+          <div class="row wrap gap-xs" id="pickerSizeRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
+          <p id="pickerHint" class="body-copy tight"></p>
+          <button id="pickerClearBtn" class="chip small">Remove chord</button>
+        </div>
+      </div>
+
+      <div id="analysisCard" class="card analysis" hidden>
+        <span class="micro-label">HOW THIS LOOP READS</span>
+        <p id="analysisSummary" class="mono-strong"></p>
+        <p id="analysisCadence" class="body-copy tight"></p>
+        <ul id="analysisNotes" class="note-list"></ul>
+      </div>
+
+      <div class="row between mt">
+        <div>
+          <span class="setting-name">Smooth voicings</span>
+          <span class="setting-note">Pick shapes that connect, so the hand barely moves</span>
+        </div>
+        <button id="smoothBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
         <button id="exportBtn" class="chip small">Export JSON</button>
@@ -263,6 +355,11 @@
     <!-- /07 ASSISTANT -->
     <section class="panel" id="tab-assist" hidden>
       <h2>/07 SONGWRITING_ASSISTANT</h2>
+      <div class="key-banner" id="assistKeyBanner">
+        <span class="micro-label">EVERYTHING BELOW IS IN</span>
+        <span id="assistKeyName" class="key-name"></span>
+        <span id="assistKeyLock" class="key-lock"></span>
+      </div>
       <div class="chip-row" id="moodRow"></div>
       <div id="suggestionCard" class="card flat" hidden>
         <div class="row between">
@@ -276,7 +373,9 @@
       <div class="chip-row" id="sectionRow"></div>
       <div class="stack" id="sectionVariants"></div>
 
-      <h3>// HIT_SONG_TEMPLATES</h3>
+      <h3>// PROGRESSION_LIBRARY</h3>
+      <p class="hint block">Tap a card to hear it in the current key; Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
+      <div class="chip-row" id="templateFamilyRow"></div>
       <div class="stack" id="templateList"></div>
     </section>
 

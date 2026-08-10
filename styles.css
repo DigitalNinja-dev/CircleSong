@@ -429,3 +429,205 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .chip.queued.active { background: transparent; color: var(--b); }
 .chip[disabled] { opacity: 0.35; cursor: not-allowed; }
 .chip[disabled]:hover { border-color: var(--border); }
+
+/* ---------- drum step sequencer ---------- */
+.seq-wrap { overflow-x: auto; margin-bottom: 10px; padding-bottom: 4px; }
+.seq {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 3px 6px;
+  min-width: max-content;
+}
+.seq-name {
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font: 500 10px var(--mono); color: oklch(0.78 0.008 250);
+  text-align: left; white-space: nowrap;
+}
+.seq-name:hover { color: var(--a); }
+.seq-row { display: grid; grid-template-columns: repeat(var(--steps), 1fr); gap: 3px; min-width: 246px; }
+.seq-cell {
+  height: 20px; min-width: 13px; padding: 0; cursor: pointer;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  background: oklch(0.15 0.008 250);
+}
+/* The first step of each group is marked so the beat is readable at a glance. */
+.seq-cell.beat { border-color: oklch(0.65 0.2 135 / 0.35); background: oklch(0.18 0.01 250); }
+.seq-cell.on { border-color: transparent; }
+.seq-cell.on[data-level='soft'] { background: oklch(0.55 0.13 135); }
+.seq-cell.on[data-level='med'] { background: oklch(0.72 0.19 135); }
+.seq-cell.on[data-level='hard'] { background: var(--a); }
+.seq-cell:focus-visible { outline: 2px solid var(--a); outline-offset: 1px; }
+.seq-clear {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  color: var(--dimmer); font-size: 10px; line-height: 1;
+}
+.seq-clear:hover { color: oklch(0.7 0.15 25); }
+
+/* Seven tabs need a little more room than six. */
+.tabbar button { font-size: 9px; padding: 4px 1px; gap: 3px; }
+/* The step being heard right now, driven from the audio clock. */
+.seq-cell.playing { box-shadow: inset 0 0 0 2px var(--b); }
+.seq-cell.playing:not(.on) { background: oklch(0.28 0.04 85); }
+
+/* ---------- progression library ---------- */
+.template-card {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 13px; cursor: pointer;
+  background: var(--raised); border: 1px solid var(--border);
+}
+.template-card:hover { border-color: var(--a); }
+.template-card.active { background: var(--raised-hi); border-color: var(--a); }
+.template-card .label { font: 600 13px var(--display); color: oklch(0.93 0.006 250); }
+.template-numerals { font: 600 12px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+.template-chords { font: 500 11px var(--mono); color: oklch(0.7 0.008 250); }
+.template-card p { margin: 4px 0 0; font: 400 11px/1.5 var(--sans); color: oklch(0.66 0.008 250); }
+.template-meta { font: 400 9px var(--mono); color: var(--dimmer); letter-spacing: 0.05em; text-transform: uppercase; }
+.variant-numerals { display: block; margin-top: 4px; font: 600 11px var(--mono); color: var(--c); }
+
+/* ---------------------------------------------------------- chord builder */
+/* Size, colour and alterations. The fixed label column keeps the three rows
+   reading as one control rather than three unrelated chip strips. */
+.builder { margin-top: 10px; }
+.builder-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.builder-row .micro-label { min-width: 52px; padding-top: 7px; }
+.chip.idiomatic { border-color: oklch(0.65 0.11 150 / 0.55); }
+.chip.idiomatic::after {
+  content: '•';
+  margin-left: 4px;
+  color: var(--b);
+  font-size: 13px;
+  line-height: 0;
+}
+.chip.idiomatic.active::after { color: var(--ink); }
+.scale-hint {
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--c);
+  background: oklch(0.2 0.013 250);
+  font: 400 11px/1.5 var(--sans);
+  color: oklch(0.72 0.008 250);
+}
+
+/* ------------------------------------------------- timeline chord picker */
+.picker { border-color: var(--a); }
+.suggest-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.suggest {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: oklch(0.19 0.012 250);
+  color: oklch(0.9 0.006 250);
+  text-align: left;
+  cursor: pointer;
+}
+.suggest:hover { border-color: var(--a); background: oklch(0.23 0.02 220); }
+.suggest-chord { font: 600 13px var(--display); }
+.suggest-numeral { font: 500 11px var(--mono); color: var(--a); }
+.suggest-tag {
+  font: 500 9px var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: oklch(0.3 0.02 250);
+  color: oklch(0.85 0.006 250);
+}
+.tag-tonic { background: oklch(0.45 0.13 150 / 0.5); }
+.tag-subdominant { background: oklch(0.45 0.13 250 / 0.5); }
+.tag-dominant { background: oklch(0.5 0.15 40 / 0.5); }
+.tag-borrowed { background: oklch(0.5 0.16 330 / 0.5); }
+.suggest-why {
+  grid-column: 1 / -1;
+  font: 400 10px/1.45 var(--sans);
+  color: oklch(0.66 0.008 250);
+}
+@media (min-width: 520px) {
+  .suggest-why { grid-column: auto; }
+}
+
+/* Fret movement badge on a filled slot: the number Smooth voicings reduces. */
+.slot .move {
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  font: 500 8px var(--mono);
+  color: oklch(0.6 0.09 150);
+}
+.slot .move.far { color: oklch(0.68 0.16 40); }
+.slot.editing { border-color: var(--a); box-shadow: 0 0 0 1px var(--a) inset; }
+
+/* ------------------------------------------------------ loop analysis */
+.analysis { border-left: 2px solid var(--c); }
+.analysis .mono-strong { margin: 6px 0 0; font: 600 12px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+.note-list { margin: 8px 0 0; padding-left: 16px; }
+.note-list li { font: 400 11px/1.55 var(--sans); color: oklch(0.7 0.008 250); margin-bottom: 3px; }
+.note-list li.hint { color: oklch(0.75 0.1 75); }
+.note-list li.idea { color: oklch(0.68 0.008 250); }
+
+/* ------------------------------------- secondary dominants on the wheel */
+.wheel-arcs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#secDomPanel { margin-top: 12px; }
+
+/* ---------------------------------------- grade markers on the wheel */
+/* The roman numeral of every chord in the key, so the grades of the tone are
+   readable off the wheel itself and re-label when the root moves. */
+.wheel-labels .grade {
+  display: block;
+  margin-top: 1px;
+  font: 600 8px var(--mono);
+  font-style: normal;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px oklch(0 0 0 / 0.8);
+  white-space: nowrap;
+}
+.wheel-labels .inner .grade { font-size: 7px; }
+.wheel-labels .grade.fn-t { color: oklch(0.82 0.15 145); }
+.wheel-labels .grade.fn-s { color: oklch(0.78 0.13 245); }
+.wheel-labels .grade.fn-d { color: oklch(0.8 0.16 45); }
+
+/* Scale strip now carries the note and its grade. */
+.scale-strip button .strip-note { display: block; }
+.scale-strip button .strip-grade {
+  display: block;
+  font: 500 8px var(--mono);
+  opacity: 0.7;
+  margin-top: 1px;
+}
+
+/* ------------------------------------------ assist key banner */
+/* Says, once and plainly, which key everything below is in — and whether the
+   lock is holding it there. */
+.key-banner {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--dim);
+  background: oklch(0.18 0.011 250);
+}
+.key-banner.locked { border-left-color: var(--a); }
+.key-banner .key-name { font: 600 14px var(--display); color: oklch(0.95 0.006 250); }
+.key-banner .key-lock { font: 400 10px var(--sans); color: var(--dim); }
+.key-banner.locked .key-lock { color: var(--a); }
+
+/* ------------------------------------- song references on a template */
+.song-list { margin: 4px 0 0; padding-left: 15px; }
+.song-list li {
+  font: 400 10px/1.5 var(--sans);
+  color: oklch(0.64 0.008 250);
+  margin-bottom: 1px;
+}
