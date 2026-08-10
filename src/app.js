@@ -623,11 +623,21 @@ function renderCircle() {
     return { x: 140 + r * Math.sin(a), y: 140 - r * Math.cos(a) };
   };
 
-  // Which degree of the key each pitch class is, keyed by pitch class so both
-  // rings of the wheel can look themselves up.
+  // Which degree of the key each pitch class is.
+  //
+  // Keyed by root *and quality*, because the wheel's two rings are not two
+  // views of the same chord: the outer wedge is the major triad on that note
+  // and the inner one is the minor. Matching on the root alone labels the A
+  // major wedge "i" in A minor, which is exactly backwards — the key's chord on
+  // A is Am, and it lives on the inner ring.
   const gradeAt = new Map();
   diatonicChords(state.rootPc, modeId(), 3).forEach((chord, d) => {
-    gradeAt.set(chord.root, { numeral: chord.numeral, chord, fn: degreeFunction(d, modeId()) });
+    const minorish = chord.intervals[1] === 3; // minor third: minor or diminished
+    gradeAt.set(`${chord.root}:${minorish ? 'min' : 'maj'}`, {
+      numeral: chord.numeral,
+      chord,
+      fn: degreeFunction(d, modeId()),
+    });
   });
 
   CIRCLE.forEach((note, i) => {
@@ -665,13 +675,13 @@ function renderCircle() {
     // different key. They ride inside the note label rather than being placed
     // separately, which keeps them off the rim and stops them colliding with
     // the wedge borders.
-    const grade = gradeAt.get(note);
+    const grade = gradeAt.get(`${note}:maj`);
     if (grade) {
       const g = el('i', `grade fn-${grade.fn.toLowerCase()}`, grade.numeral);
       g.title = `${grade.chord.symbol} — ${functionLabel(grade.fn)}`;
       outer.appendChild(g);
     }
-    const gradeMinor = gradeAt.get(minorNote);
+    const gradeMinor = gradeAt.get(`${minorNote}:min`);
     if (gradeMinor) {
       const g = el('i', `grade fn-${gradeMinor.fn.toLowerCase()}`, gradeMinor.numeral);
       g.title = `${gradeMinor.chord.symbol} — ${functionLabel(gradeMinor.fn)}`;

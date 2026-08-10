@@ -5,11 +5,14 @@
  * shell is precached on install. There is no API and no user data to sync: once
  * cached, the app never needs the network again.
  *
- * Bump CACHE when shipping a change, otherwise installed copies keep serving
- * the old files.
+ * CACHE is stamped by `npm run build` with a hash of everything in SHELL, so
+ * shipping a change always invalidates installed copies. It used to be a hand
+ * written number, and the failure mode was silent and expensive: forget to bump
+ * it and every returning user keeps running the previous build while the source
+ * says otherwise — which looks exactly like the new feature not working.
  */
 
-const CACHE = 'circlesong-v5';
+const CACHE = 'circlesong-7ea2a3f0';
 
 const SHELL = [
   './',
