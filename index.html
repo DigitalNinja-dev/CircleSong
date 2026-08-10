@@ -153,7 +153,11 @@
       </div>
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
-      <div class="stack" id="rhythmList"></div>
+      <div class="row gap-xs mb-s">
+        <span class="micro-label">FEEL</span>
+        <select id="rhythmFamilySelect" class="select grow" aria-label="Rhythm family"></select>
+      </div>
+      <div id="rhythmList"></div>
 
     </section>
 
@@ -374,8 +378,13 @@
       <div class="stack" id="sectionVariants"></div>
 
       <h3>// PROGRESSION_LIBRARY</h3>
-      <p class="hint block">Tap a card to hear it in the current key; Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
-      <div class="chip-row" id="templateFamilyRow"></div>
+      <p class="hint block">Pick a family or search, then tap a progression to open it — you'll hear it in the current key. Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
+      <div class="row gap-xs">
+        <span class="micro-label">FAMILY</span>
+        <select id="templateFamilySelect" class="select grow" aria-label="Progression family"></select>
+      </div>
+      <input id="templateSearch" class="search-input" type="search" placeholder="Search name, numerals, or a song…" aria-label="Search progressions">
+      <p id="templateCount" class="micro-label"></p>
       <div class="stack" id="templateList"></div>
     </section>
 

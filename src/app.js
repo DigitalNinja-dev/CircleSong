@@ -155,6 +155,12 @@ const state = {
   sectionId: null,
   templateId: null,
   templateFamily: 'All',
+  /** Free-text filter over the progression library. */
+  templateSearch: '',
+  /** Which progression is expanded; only one at a time. */
+  templateOpen: null,
+  /** Which family of strum/rhythm feels is being browsed. */
+  rhythmFamily: 'All',
   showAbout: false,
   /** Draw the secondary-dominant arrows on the wheel. */
   showSecDom: false,
@@ -1027,13 +1033,64 @@ function renderTone() {
   }
   sel.value = state.tuningId;
 
+  renderRhythms();
+}
+
+/**
+ * How the rhythms are grouped for browsing.
+ *
+ * The pattern data tags each rhythm with what it *is*; this says what a player
+ * would go looking for. Eighteen options in one flat column is a scroll rather
+ * than a choice, so they are gathered into a handful of families and laid out
+ * two across — every option still present, in about a third of the height.
+ */
+const RHYTHM_FAMILIES = [
+  { label: 'Strumming', tags: ['strum'] },
+  { label: 'Muted & Percussive', tags: ['percussive'] },
+  { label: 'Offbeat', tags: ['offbeat'] },
+  { label: 'Jazz Comping', tags: ['comp'] },
+  { label: 'Latin & Syncopated', tags: ['syncop'] },
+  { label: 'Other Meters', tags: ['3/4', '6/8'] },
+  { label: 'Fingerstyle', tags: ['arp', 'sustain'] },
+];
+
+function renderRhythms() {
+  const sel = $('rhythmFamilySelect');
+  if (!sel.options.length) {
+    const all = el('option', '', `All feels (${RHYTHMS.length})`);
+    all.value = 'All';
+    sel.appendChild(all);
+    for (const f of RHYTHM_FAMILIES) {
+      const n = RHYTHMS.filter((r) => f.tags.includes(r.tag)).length;
+      if (!n) continue;
+      const o = el('option', '', `${f.label} (${n})`);
+      o.value = f.label;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { state.rhythmFamily = sel.value; renderRhythms(); };
+  }
+  sel.value = state.rhythmFamily || 'All';
+
   const list = $('rhythmList');
   list.replaceChildren();
-  for (const r of RHYTHMS) {
-    const b = el('button', `list-btn${state.rhythm === r.id ? ' active' : ''}`);
-    b.append(el('span', '', r.label), el('span', 'tag', r.tag));
-    b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
-    list.appendChild(b);
+  const wanted = RHYTHM_FAMILIES.filter(
+    (f) => (state.rhythmFamily || 'All') === 'All' || f.label === state.rhythmFamily
+  );
+
+  for (const fam of wanted) {
+    const items = RHYTHMS.filter((r) => fam.tags.includes(r.tag));
+    if (!items.length) continue;
+    // The heading is skipped when a single family is selected — the dropdown
+    // already says which one it is.
+    if (wanted.length > 1) list.appendChild(el('span', 'micro-label group-head', fam.label));
+    const grid = el('div', 'rhythm-grid');
+    for (const r of items) {
+      const b = el('button', `rhythm-btn${state.rhythm === r.id ? ' active' : ''}`);
+      b.append(el('span', 'name', r.label), el('span', 'tag', r.tag));
+      b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
+      grid.appendChild(b);
+    }
+    list.appendChild(grid);
   }
 }
 
@@ -1907,65 +1964,130 @@ function renderAssist() {
     }
   }
 
-  // --- progression library, grouped by family ---
-  const familyRow = $('templateFamilyRow');
-  familyRow.replaceChildren();
-  const families = ['All', ...TEMPLATE_FAMILIES];
-  for (const fam of families) {
-    const active = (state.templateFamily || 'All') === fam;
-    const b = el('button', `chip${active ? ' active' : ''}`, fam);
-    if (active) { b.style.background = 'var(--a)'; b.style.borderColor = 'var(--a)'; }
-    b.onclick = () => { state.templateFamily = fam; renderAssist(); };
-    familyRow.appendChild(b);
+  renderTemplateLibrary();
+}
+
+/**
+ * The progression library.
+ *
+ * There are now around fifty progressions across eight families, and a flat
+ * column of full-height cards makes that a scroll rather than a choice. Three
+ * things fix it without hiding a single option: a family dropdown, a search
+ * that also looks inside the song lists — "Marley" or "I-V-vi-IV" both find
+ * something — and rows that stay one line until you open one.
+ */
+function renderTemplateLibrary() {
+  const sel = $('templateFamilySelect');
+  if (!sel.options.length) {
+    const all = el('option', '', `All families (${TEMPLATES.length})`);
+    all.value = 'All';
+    sel.appendChild(all);
+    for (const fam of TEMPLATE_FAMILIES) {
+      const n = TEMPLATES.filter((t) => t.family === fam).length;
+      const o = el('option', '', `${fam} (${n})`);
+      o.value = fam;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { state.templateFamily = sel.value; renderAssist(); };
   }
+  sel.value = state.templateFamily || 'All';
+
+  const search = $('templateSearch');
+  if (search.value !== state.templateSearch) search.value = state.templateSearch || '';
+  if (!search.oninput) {
+    search.oninput = () => {
+      state.templateSearch = search.value;
+      renderTemplateLibrary();
+    };
+  }
+
+  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
+  const q = (state.templateSearch || '').trim().toLowerCase();
+  const matches = TEMPLATES.filter((t) => {
+    if (wanted && t.family !== wanted) return false;
+    if (!q) return true;
+    // Search the words a person would actually reach for: the name, the family,
+    // the numerals as displayed, and the songs it is known from.
+    const hay = [
+      t.label,
+      t.family,
+      t.blurb,
+      numeralsFor(t.degrees, t.seventh, t.mode),
+      chordNamesFor(t.degrees, t.seventh, t.mode),
+      ...(t.songs || []),
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+
+  $('templateCount').textContent =
+    `${matches.length} PROGRESSION${matches.length === 1 ? '' : 'S'}${q ? ` MATCHING “${state.templateSearch.trim()}”` : ''}`;
 
   const tpl = $('templateList');
   tpl.replaceChildren();
-  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
-  for (const t of TEMPLATES) {
-    if (wanted && t.family !== wanted) continue;
-    const card = el('div', `template-card${state.templateId === t.id ? ' active' : ''}`);
+  if (!matches.length) {
+    tpl.appendChild(el('p', 'body-copy', 'Nothing matches that. Try a song name, a chord, or clear the search.'));
+    return;
+  }
 
-    const head = el('div', 'row between');
-    head.append(el('span', 'label', t.label));
-    const apply = el('button', 'chip small filled-a', 'Apply');
-    apply.onclick = () => {
-      state.templateId = t.id;
-      state.moodId = null;
-      applyDegrees(t.degrees, t.seventh, t.mode);
-    };
-    head.appendChild(apply);
+  for (const t of matches) {
+    const open = state.templateOpen === t.id;
+    const card = el('div', `template-card${open ? ' open' : ''}${state.templateId === t.id ? ' active' : ''}`);
 
-    // Both lines are derived from the chords this template will produce in the
-    // current key, so what is promised is what is heard.
-    const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
-    const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
-    // Name the mode it will actually be heard in, which is the locked one when
-    // the key is locked — not the mode the template was written in.
-    const shownMode = suggestionMode(t.mode);
-    const recast = state.rootLocked && shownMode !== t.mode;
-    const meta = el(
-      'span',
-      'template-meta',
-      `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars`
+    // The collapsed row: enough to recognise the progression, nothing more.
+    const head = el('button', 'template-head');
+    head.setAttribute('aria-expanded', String(open));
+    head.append(
+      el('span', 'label', t.label),
+      el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode)),
+      el('span', 'caret', open ? '▾' : '▸')
     );
+    head.onclick = () => {
+      state.templateOpen = open ? null : t.id;
+      renderTemplateLibrary();
+      if (!open) previewProgression(t);
+    };
+    card.appendChild(head);
 
-    card.append(head, numerals, names, el('p', '', t.blurb), meta);
+    if (open) {
+      const body = el('div', 'template-body');
+      body.append(el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode)));
 
-    // Songs built on this progression. A roman numeral means little until you
-    // recognise something you already know inside it, so where the source names
-    // examples they are shown rather than kept in a data file.
-    if (t.songs && t.songs.length) {
-      const songs = el('ul', 'song-list');
-      for (const s of t.songs) songs.appendChild(el('li', '', s));
-      card.append(el('span', 'micro-label', 'HEARD IN'), songs);
+      // Name the mode it will actually be heard in, which is the locked one when
+      // the key is locked — not the mode the template was written in.
+      const shownMode = suggestionMode(t.mode);
+      const recast = state.rootLocked && shownMode !== t.mode;
+      body.append(el('p', '', t.blurb));
+      body.append(
+        el(
+          'span',
+          'template-meta',
+          `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars · ${t.family}`
+        )
+      );
+
+      // Songs built on this progression. A roman numeral means little until you
+      // recognise something you already know inside it, so where the source
+      // names examples they are shown rather than kept in a data file.
+      if (t.songs && t.songs.length) {
+        const songs = el('ul', 'song-list');
+        for (const s of t.songs) songs.appendChild(el('li', '', s));
+        body.append(el('span', 'micro-label', 'HEARD IN'), songs);
+      }
+
+      const actions = el('div', 'row gap-xs mt-s');
+      const hear = el('button', 'chip small', '▶ Hear it');
+      hear.onclick = () => previewProgression(t);
+      const apply = el('button', 'chip small filled-a', 'Apply to timeline');
+      apply.onclick = () => {
+        state.templateId = t.id;
+        state.moodId = null;
+        applyDegrees(t.degrees, t.seventh, t.mode);
+      };
+      actions.append(hear, apply);
+      body.appendChild(actions);
+      card.appendChild(body);
     }
 
-    // Tapping the card auditions the progression without replacing the timeline.
-    card.onclick = (e) => {
-      if (e.target.closest('button')) return;
-      previewProgression(t);
-    };
     tpl.appendChild(card);
   }
 }
