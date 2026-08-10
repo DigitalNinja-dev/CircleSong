@@ -12,7 +12,7 @@
  * says otherwise — which looks exactly like the new feature not working.
  */
 
-const CACHE = 'circlesong-43782ec7';
+const CACHE = 'circlesong-e477dae9';
 
 const SHELL = [
   './',

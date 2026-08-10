@@ -244,6 +244,10 @@
             <span class="micro-label">SHAPE</span>
             <div id="inversionRow" class="row wrap gap-xs grow"></div>
           </div>
+          <div class="builder-row">
+            <span class="micro-label"></span>
+            <div id="chordResetRow" class="row wrap gap-xs grow"></div>
+          </div>
           <p id="chordBuilderHint" class="body-copy tight"></p>
           <p id="chordScaleHint" class="scale-hint"></p>
         </div>
@@ -300,7 +304,10 @@
           <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
           <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
           <p id="pickerHint" class="body-copy tight"></p>
-          <button id="pickerClearBtn" class="chip small">Remove chord</button>
+          <div class="row gap-xs">
+            <button id="pickerResetBtn" class="chip small">Follow the key</button>
+            <button id="pickerClearBtn" class="chip small">Remove chord</button>
+          </div>
         </div>
       </div>
 

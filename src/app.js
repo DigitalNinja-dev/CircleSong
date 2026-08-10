@@ -114,9 +114,14 @@ const state = {
    * `Dm9 – E7♭9 – Am9` in A minor becomes `Gm9 – A7♭9 – Dm9` in D minor without
    * anything being re-entered.
    */
-  chordSize: 3,        // notes in the stack: 3 triad, 4 seventh, 5 ninth, 6 eleventh, 7 thirteenth
-  chordColour: null,   // null = whatever the key gives; otherwise a CHORD_COLOURS id
-  chordAlterations: [],
+  /**
+   * Per-degree variations, keyed by scale degree. A degree with no entry is a
+   * plain diatonic triad. Editing one in Compose changes that chord everywhere
+   * it appears — including in a timeline that is currently playing — which is
+   * what makes trying a 7th or a 9th against the loop a single tap rather than
+   * an edit of every bar.
+   */
+  degreeSpec: {},
 
   tone: 'acoustic',
   rhythm: 'straight8',
@@ -276,13 +281,40 @@ const tuning = () => TUNINGS[state.tuningId].midi;
 const preferFlats = () => keySignaturePrefersFlats(state.rootPc, modeId());
 
 /** The spec the builder controls are currently set to. */
+/** A degree with no variation set: the chord the key gives, as a triad. */
+const DEFAULT_DEGREE_SPEC = { size: 3, colour: null, alterations: [] };
+
+/** The variation currently set for a degree, or the default if none is. */
 function currentSpec(degree = state.activeDegree) {
+  const d = ((degree % 7) + 7) % 7;
+  const v = state.degreeSpec[d] || DEFAULT_DEGREE_SPEC;
   return {
-    degree: degree % 7,
-    size: state.chordSize,
-    colour: state.chordColour,
-    alterations: state.chordAlterations.slice(),
+    degree: d,
+    size: v.size ?? 3,
+    colour: v.colour ?? null,
+    alterations: (v.alterations || []).slice(),
   };
+}
+
+/** True when a degree has been varied away from the plain diatonic triad. */
+function degreeIsVaried(degree) {
+  const v = state.degreeSpec[((degree % 7) + 7) % 7];
+  return !!v && (v.size !== 3 || v.colour || (v.alterations && v.alterations.length));
+}
+
+/**
+ * Change the variation on a degree and push it through the song.
+ *
+ * Timeline slots follow their degree unless they were edited individually, so
+ * re-resolving is what makes the change appear in the bars. Done while the
+ * transport runs, the next scheduled bar picks it up — the loop keeps playing
+ * and the chords simply become sevenths.
+ */
+function setDegreeSpec(degree, patch) {
+  const d = ((degree % 7) + 7) % 7;
+  if (patch === null) delete state.degreeSpec[d];
+  else state.degreeSpec[d] = { ...currentSpec(d), ...patch, degree: d };
+  reresolveAll();
 }
 
 /** The seven degrees of the key, each built to the current recipe. */
@@ -451,13 +483,19 @@ async function togglePlay() {
  * stays a 9th chord when the rest of the timeline is plain triads.
  */
 function slotFromDegree(degree, spec = null, voicingMode = state.voicingMode) {
-  const full = spec ? { ...toSpec(spec, state.chordSize), degree: degree % 7 } : currentSpec(degree);
+  // `spec` present means this slot was set explicitly — by the picker, a
+  // template, or a loaded file — and keeps its own quality. Without one the
+  // slot follows whatever variation its degree currently carries, which is how
+  // a change in Compose reaches the timeline.
+  const full = spec ? { ...toSpec(spec, 3), degree: degree % 7 } : currentSpec(degree);
   const chord = chordForDegree(degree, full);
   const list = voicingList(chord, voicingMode);
   const voicing = list.length ? list[state.voicingIndex % list.length] : null;
   return {
     degree: degree % 7,
     spec: full,
+    /** Set individually, so it ignores its degree's variation. */
+    override: !!spec,
     chord,
     voicing,
     voicingMode,
@@ -497,16 +535,24 @@ function applyDegrees(degrees, seventh, mode = null) {
   if (MODE_IDS.includes(target)) state.modeIdx = MODE_IDS.indexOf(target);
   const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
+  // Each degree carries the quality the progression asked for, so the builder
+  // opens on what was just loaded and any bar added by hand matches. The bars
+  // then follow their degree rather than freezing a copy, which is what lets
+  // the loaded progression be varied afterwards from Compose.
+  state.degreeSpec = {};
+  for (const entry of degrees) {
+    const spec = toSpec(entry, defaultSize);
+    state.degreeSpec[spec.degree] = {
+      degree: spec.degree,
+      size: spec.size,
+      colour: spec.colour,
+      alterations: spec.alterations,
+    };
+  }
   const nextBars = makeBars(size);
   degrees.forEach((entry, i) => {
-    const spec = toSpec(entry, defaultSize);
-    nextBars[i] = { slots: [slotFromDegree(spec.degree, spec)] };
+    nextBars[i] = { slots: [slotFromDegree(toSpec(entry, defaultSize).degree)] };
   });
-  // Leave the builder set to the progression's own recipe, so the next chord
-  // added by hand matches what was just loaded instead of reverting to triads.
-  state.chordSize = defaultSize;
-  state.chordColour = null;
-  state.chordAlterations = [];
   setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
@@ -522,7 +568,9 @@ function reresolveAll() {
   for (const sec of state.sections) {
     for (const bar of sec.bars) {
       bar.slots = bar.slots.map((slot) =>
-        slot ? slotFromDegree(slot.degree, slot.spec, slot.voicingMode) : null
+        // A slot that was not edited individually re-reads its degree's current
+        // variation; one that was keeps what it was given.
+        slot ? slotFromDegree(slot.degree, slot.override ? slot.spec : null, slot.voicingMode) : null
       );
     }
   }
@@ -737,7 +785,7 @@ function renderCircle() {
   // button on the screen, rather than two rules to remember.
   const strip = $('scaleStrip');
   strip.replaceChildren();
-  const keyChords = diatonicChords(state.rootPc, modeId(), state.chordSize);
+  const keyChords = currentChords();
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
     const chord = keyChords[i];
     const b = el('button', i === 0 ? 'tonic' : '');
@@ -763,15 +811,20 @@ function renderCircle() {
       // Single notes are for jamming: they layer over whatever is sounding
       // instead of cutting it, and each is placed on a free string so a run
       // rings like a real player moving across the neck.
+      //
+      // Crucially they never touch anything else. A global damp here would fade
+      // the loop and every other note still ringing, which makes it impossible
+      // to try a melody over a playing progression — so the note releases only
+      // the one string it was given.
       const when = engine.currentTime + 0.02;
-      engine.pluckNote({
+      const string = engine.pluckNote({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
         tuning: tuning(),
         when,
         velocity: 0.85,
         layer: true,
       });
-      engine.damp(when + exploreRingSeconds() + 0.8, { level: 0.8, time: 0.7 });
+      if (string >= 0) engine.release(string, when + 2.2, 0.85, 0.8);
     };
     strip.appendChild(b);
   });
@@ -1306,15 +1359,17 @@ const CHORD_SIZE_LABELS = [
  * stays learnable.
  */
 function renderChordBuilder() {
+  const spec = currentSpec();
+
   const sizeRow = $('chordSizeRow');
   sizeRow.replaceChildren();
   for (const [size, label, title] of CHORD_SIZE_LABELS) {
-    const b = el('button', `chip small${state.chordSize === size ? ' active' : ''}`, label);
+    const b = el('button', `chip small${spec.size === size ? ' active' : ''}`, label);
     b.title = title;
     b.onclick = () => {
-      state.chordSize = size;
+      setDegreeSpec(state.activeDegree, { size });
       state.voicingIndex = 0;
-      renderCompose();
+      render();
       previewDegree(state.activeDegree);
     };
     sizeRow.appendChild(b);
@@ -1323,42 +1378,65 @@ function renderChordBuilder() {
   const colourRow = $('chordColourRow');
   colourRow.replaceChildren();
   for (const c of CHORD_COLOURS) {
-    const on = state.chordColour === c.id;
+    const on = spec.colour === c.id;
     const b = el('button', `chip small${on ? ' active' : ''}`, c.label);
     b.title = c.hint;
     if (on) { b.style.background = 'var(--b)'; b.style.borderColor = 'var(--b)'; }
     b.onclick = () => {
-      state.chordColour = on ? null : c.id;
+      setDegreeSpec(state.activeDegree, { colour: on ? null : c.id });
       state.voicingIndex = 0;
-      renderCompose();
+      render();
       previewDegree(state.activeDegree);
     };
     colourRow.appendChild(b);
   }
 
   // Alterations only mean something on a chord that has a seventh to alter.
-  const canAlter = state.chordSize >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(state.chordColour);
+  const canAlter = spec.size >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(spec.colour);
   const alterRow = $('chordAlterRow');
   alterRow.replaceChildren();
   for (const a of CHORD_ALTERATIONS) {
-    const on = state.chordAlterations.includes(a.id);
+    const on = spec.alterations.includes(a.id);
     const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
     b.disabled = !canAlter;
     b.title = canAlter ? `Add a ${a.label}` : 'Alterations need a seventh — pick 7 or larger first.';
     if (on) { b.style.background = 'var(--c)'; b.style.borderColor = 'var(--c)'; }
     b.onclick = () => {
-      state.chordAlterations = on
-        ? state.chordAlterations.filter((x) => x !== a.id)
-        : [...state.chordAlterations, a.id];
+      const alterations = on
+        ? spec.alterations.filter((x) => x !== a.id)
+        : [...spec.alterations, a.id];
+      setDegreeSpec(state.activeDegree, { alterations });
       state.voicingIndex = 0;
-      renderCompose();
+      render();
       previewDegree(state.activeDegree);
     };
     alterRow.appendChild(b);
   }
-  if (!canAlter && state.chordAlterations.length) state.chordAlterations = [];
 
-  const spec = currentSpec();
+  // Reset this chord, and reset them all. Trying a variation is only free if
+  // getting back is free too.
+  const varied = degreeIsVaried(state.activeDegree);
+  const anyVaried = Array.from({ length: 7 }, (_, d) => degreeIsVaried(d)).some(Boolean);
+  const resetRow = $('chordResetRow');
+  resetRow.replaceChildren();
+  const one = el('button', 'chip small', 'Reset this chord');
+  one.disabled = !varied;
+  one.onclick = () => {
+    setDegreeSpec(state.activeDegree, null);
+    state.voicingIndex = 0;
+    render();
+    previewDegree(state.activeDegree);
+  };
+  const all = el('button', 'chip small', 'Reset all');
+  all.disabled = !anyVaried;
+  all.onclick = () => {
+    state.degreeSpec = {};
+    reresolveAll();
+    state.voicingIndex = 0;
+    render();
+  };
+  resetRow.append(one, all);
+
   $('chordBuilderHint').textContent = describeSpec(state.rootPc, modeId(), spec);
   const sc = scaleForChord(spec, state.rootPc, modeId());
   const avoid = sc.avoidPc === null ? '' : ` Careful with ${noteName(sc.avoidPc, preferFlats())}.`;
@@ -1721,6 +1799,13 @@ function renderPicker() {
   edit.hidden = !slot;
   if (!slot) return;
   const spec = slot.spec;
+  // Only a slot that has been pinned to its own quality has anything to give
+  // back, so the button says what it does and is otherwise out of the way.
+  const reset = $('pickerResetBtn');
+  reset.disabled = !slot.override;
+  reset.title = slot.override
+    ? 'Drop this bar\'s own setting and follow the chord variation from Compose.'
+    : 'This bar already follows the chord variation set in Compose.';
 
   const sizeRow = $('pickerSizeRow');
   sizeRow.replaceChildren();
@@ -2245,6 +2330,16 @@ function wire() {
     renderTimeline();
   };
   $('pickerCloseBtn').onclick = closePicker;
+  $('pickerResetBtn').onclick = () => {
+    // Hand the slot back to its degree, so it follows the Compose builder again.
+    if (!state.picker) return;
+    const { barIdx, slotIdx } = state.picker;
+    const slot = bars()[barIdx] && bars()[barIdx].slots[slotIdx];
+    if (!slot) return;
+    bars()[barIdx].slots[slotIdx] = slotFromDegree(slot.degree, null, slot.voicingMode);
+    applySmoothing();
+    renderTimeline();
+  };
   $('pickerClearBtn').onclick = () => {
     if (!state.picker) return;
     const { barIdx, slotIdx } = state.picker;
@@ -2407,13 +2502,14 @@ function exportSong() {
     tuning: state.tuningId,
     drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
+    degreeSpec: state.degreeSpec,
     sections: state.sections.map((sec) => ({
       name: sec.name,
       barCount: sec.barCount,
       role: sec.role || 'verse',
       smooth: !!sec.smooth,
       bars: sec.bars.map((b) =>
-        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, voicingMode: s.voicingMode } : null))
+        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, override: !!s.override, voicingMode: s.voicingMode } : null))
       ),
     })),
   };
@@ -2444,6 +2540,7 @@ function importSong(e) {
       state.tone = PRESETS[data.tone] ? data.tone : 'acoustic';
       state.rhythm = data.rhythm || 'straight8';
       state.tuningId = TUNINGS[data.tuning] ? data.tuning : 'standard';
+      state.degreeSpec = data.degreeSpec && typeof data.degreeSpec === 'object' ? data.degreeSpec : {};
 
       if (data.drums) {
         state.drumsOn = !!data.drums.on;
@@ -2472,8 +2569,11 @@ function importSong(e) {
               if (!slot) return null;
               // Files written before the chord builder carry a `seventh` flag
               // instead of a spec; both describe the same thing.
-              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
               const vm = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              // Slots saved before per-degree variations always carried their
+              // own quality, so they are restored as pinned.
+              if (slot.override === false) return slotFromDegree(slot.degree, null, vm);
+              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
               return slotFromDegree(slot.degree, spec, vm);
             }),
           };
