@@ -40,6 +40,8 @@ import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
   SECTION_ROLES,
+  degreeFunction,
+  functionLabel,
   suggestNext,
   analyseProgression,
   secondaryDominants,
@@ -354,12 +356,18 @@ function auditionStart() {
 async function playChordNow(chord, voicing, { duration, fraction } = {}) {
   if (!(await ensureAudio())) return;
   const dur = duration ?? barDuration(state.timeSig, state.bpm);
-  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, auditionStart(), dur, {
+  const frac = fraction ?? previewFraction();
+  const when = auditionStart();
+  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, when, dur, {
     rhythm: state.rhythm,
     tuning: tuning(),
     velocity: 1,
-    previewFraction: fraction ?? previewFraction(),
+    previewFraction: frac,
   });
+  // An audition is a question, not a performance: it has to end on its own.
+  // Left alone the strings ring for the preset's full decay — nine seconds on
+  // the piano — and the only way to stop them is to play something else.
+  engine.damp(when + dur * frac);
 }
 
 async function previewDegree(degree) {
@@ -388,6 +396,7 @@ async function playModeScale(idx) {
       layer: true,
     });
   });
+  engine.damp(t0 + steps.length * 0.26 + 0.5, { level: 0.85, time: 0.6 });
 }
 
 async function playModeVamp(idx) {
@@ -406,6 +415,7 @@ async function playModeVamp(idx) {
       velocity: 1,
     });
   });
+  engine.damp(t0 + info.vampDegrees.length * dur);
 }
 
 async function togglePlay() {
@@ -474,9 +484,11 @@ function addHalfBar(barIdx) {
 }
 
 function applyDegrees(degrees, seventh, mode = null) {
-  // A suggestion carries the mode it belongs in. Applying it without switching
-  // would silently produce different chords from the ones it is named for.
-  if (mode && MODE_IDS.includes(mode)) state.modeIdx = MODE_IDS.indexOf(mode);
+  // A suggestion carries the mode it belongs in, and applying it without
+  // switching would produce different chords from the ones it is named for.
+  // A locked key overrides that: the user has already said what the song is.
+  const target = suggestionMode(mode);
+  if (MODE_IDS.includes(target)) state.modeIdx = MODE_IDS.indexOf(target);
   const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
   const nextBars = makeBars(size);
@@ -611,6 +623,13 @@ function renderCircle() {
     return { x: 140 + r * Math.sin(a), y: 140 - r * Math.cos(a) };
   };
 
+  // Which degree of the key each pitch class is, keyed by pitch class so both
+  // rings of the wheel can look themselves up.
+  const gradeAt = new Map();
+  diatonicChords(state.rootPc, modeId(), 3).forEach((chord, d) => {
+    gradeAt.set(chord.root, { numeral: chord.numeral, chord, fn: degreeFunction(d, modeId()) });
+  });
+
   CIRCLE.forEach((note, i) => {
     const hue = i * 30;
     const isRoot = note === state.rootPc;
@@ -638,6 +657,26 @@ function renderCircle() {
       isRootMinor || isDiaMinor ? 'oklch(0.97 0.003 250)' : 'oklch(0.65 0.006 250 / 0.55)'
     };`;
     labels.append(outer, inner);
+
+    // Grade markers. Every wedge that belongs to the key gets its roman
+    // numeral, so the whole chord set of the tone is readable straight off the
+    // wheel — and it re-labels itself the moment the root moves, which is the
+    // point: the same shape on the circle means a different degree in a
+    // different key. They ride inside the note label rather than being placed
+    // separately, which keeps them off the rim and stops them colliding with
+    // the wedge borders.
+    const grade = gradeAt.get(note);
+    if (grade) {
+      const g = el('i', `grade fn-${grade.fn.toLowerCase()}`, grade.numeral);
+      g.title = `${grade.chord.symbol} — ${functionLabel(grade.fn)}`;
+      outer.appendChild(g);
+    }
+    const gradeMinor = gradeAt.get(minorNote);
+    if (gradeMinor) {
+      const g = el('i', `grade fn-${gradeMinor.fn.toLowerCase()}`, gradeMinor.numeral);
+      g.title = `${gradeMinor.chord.symbol} — ${functionLabel(gradeMinor.fn)}`;
+      inner.appendChild(g);
+    }
   });
 
   $('wheelOuter').style.background = `conic-gradient(from -15deg, ${outerStops.join(', ')})`;
@@ -655,7 +694,10 @@ function renderCircle() {
 
   // The chord/note choice only means anything while locked, so it appears with
   // the mode it belongs to instead of sitting there inert.
-  $('exploreModeRow').hidden = !state.rootLocked;
+  // The chord/note choice governs every note button on this screen, not just
+  // the wheel, so it is always available rather than appearing only once the
+  // key is locked.
+  $('exploreModeRow').hidden = false;
   const modeBtns = $('exploreModeBtns');
   modeBtns.replaceChildren();
   for (const [id, label] of [['chord', 'Chord'], ['note', 'Note']]) {
@@ -673,23 +715,47 @@ function renderCircle() {
   renderSecondaryDominants(posAt);
   renderExplore();
 
+  // The scale strip: every degree of the key, labelled with its roman numeral
+  // so the grades of the tone are visible here as well as on the wheel. It
+  // obeys the same Chord/Note switch as the wheel — one setting for every note
+  // button on the screen, rather than two rules to remember.
   const strip = $('scaleStrip');
   strip.replaceChildren();
+  const keyChords = diatonicChords(state.rootPc, modeId(), state.chordSize);
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
-    const b = el('button', i === 0 ? 'tonic' : '', noteName(pc, preferFlats()));
-    b.title = `Scale degree ${i + 1}`;
-    // Scale degrees are for jamming: they layer over whatever is sounding
-    // instead of cutting it, and each one is placed on a free string so a run
-    // rings like a real player moving across the neck.
+    const chord = keyChords[i];
+    const b = el('button', i === 0 ? 'tonic' : '');
+    b.append(
+      el('span', 'strip-note', noteName(pc, preferFlats())),
+      el('span', 'strip-grade', chord.numeral)
+    );
+    b.title =
+      state.exploreMode === 'chord'
+        ? `${chord.symbol} — degree ${i + 1} (${chord.numeral})`
+        : `${noteName(pc, preferFlats())} — degree ${i + 1}`;
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
+      if (state.exploreMode === 'chord') {
+        const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+        if (v) {
+          const when = auditionStart();
+          engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
+          engine.damp(when + exploreRingSeconds());
+          return;
+        }
+      }
+      // Single notes are for jamming: they layer over whatever is sounding
+      // instead of cutting it, and each is placed on a free string so a run
+      // rings like a real player moving across the neck.
+      const when = engine.currentTime + 0.02;
       engine.pluckNote({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
         tuning: tuning(),
-        when: engine.currentTime + 0.02,
+        when,
         velocity: 0.85,
         layer: true,
       });
+      engine.damp(when + exploreRingSeconds() + 0.8, { level: 0.8, time: 0.7 });
     };
     strip.appendChild(b);
   });
@@ -785,6 +851,7 @@ function renderSecondaryDominants(posAt) {
           velocity: 1,
         });
       });
+      engine.damp(t0 + 2 * dur);
     };
     row.appendChild(b);
   }
@@ -851,12 +918,22 @@ async function playExplore() {
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) { engine.strumOnce({ midi: v.midi, when, velocity: 0.9 }); return; }
+    if (v) {
+      engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
+      engine.damp(when + exploreRingSeconds());
+      return;
+    }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
   engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
+  engine.damp(when + exploreRingSeconds());
+}
+
+/** How long a tapped wedge rings before it is faded out. */
+function exploreRingSeconds() {
+  return Math.max(1.2, barDuration(state.timeSig, state.bpm) * previewFraction());
 }
 
 function renderTone() {
@@ -1738,7 +1815,7 @@ function startQuiz() {
  * degrees or full specs, so a template can call for an altered dominant.
  */
 function chordsForSuggestion(degrees, seventh, mode) {
-  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
+  const modeName = suggestionMode(mode);
   const size = sizeFromLegacy(seventh, 3);
   return degrees.map((entry) => chordForSpec(state.rootPc, modeName, toSpec(entry, size)));
 }
@@ -1753,7 +1830,29 @@ function chordNamesFor(degrees, seventh, mode) {
   return chordsForSuggestion(degrees, seventh, mode).map((c) => c.symbol).join(' ');
 }
 
+/**
+ * The mode a suggestion should be read and played in.
+ *
+ * Templates carry the mode they belong to, which is right when browsing freely
+ * — a Mixolydian riff is not the same idea in Ionian. But once the key is
+ * locked the user has said what the song is, and a suggestion that silently
+ * changes the mode out from under them is no longer a suggestion in their song.
+ * Locking therefore wins: everything in Assist is shown, auditioned and applied
+ * in the locked key.
+ */
+function suggestionMode(templateMode) {
+  if (state.rootLocked) return modeId();
+  return templateMode && MODE_IDS.includes(templateMode) ? templateMode : modeId();
+}
+
 function renderAssist() {
+  const keyName = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
+  $('assistKeyName').textContent = keyName;
+  $('assistKeyLock').textContent = state.rootLocked
+    ? '🔒 locked — suggestions stay in this key'
+    : 'unlocked — a suggestion may bring its own mode';
+  $('assistKeyBanner').classList.toggle('locked', state.rootLocked);
+
   const moodRow = $('moodRow');
   moodRow.replaceChildren();
   for (const m of MOODS) {
@@ -1831,9 +1930,26 @@ function renderAssist() {
     // current key, so what is promised is what is heard.
     const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
     const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
-    const meta = el('span', 'template-meta', `${MODE_NAMES[MODE_IDS.indexOf(t.mode)]} · ${t.degrees.length} bars`);
+    // Name the mode it will actually be heard in, which is the locked one when
+    // the key is locked — not the mode the template was written in.
+    const shownMode = suggestionMode(t.mode);
+    const recast = state.rootLocked && shownMode !== t.mode;
+    const meta = el(
+      'span',
+      'template-meta',
+      `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars`
+    );
 
     card.append(head, numerals, names, el('p', '', t.blurb), meta);
+
+    // Songs built on this progression. A roman numeral means little until you
+    // recognise something you already know inside it, so where the source names
+    // examples they are shown rather than kept in a data file.
+    if (t.songs && t.songs.length) {
+      const songs = el('ul', 'song-list');
+      for (const s of t.songs) songs.appendChild(el('li', '', s));
+      card.append(el('span', 'micro-label', 'HEARD IN'), songs);
+    }
 
     // Tapping the card auditions the progression without replacing the timeline.
     card.onclick = (e) => {
@@ -1869,6 +1985,7 @@ async function previewProgression(t) {
       velocity: 1,
     });
   });
+  engine.damp(t0 + chords.length * dur);
   toast(`Previewing ${t.label} — tap Apply to keep it.`);
 }
 

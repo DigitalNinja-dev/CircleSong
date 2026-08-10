@@ -578,3 +578,56 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   pointer-events: none;
 }
 #secDomPanel { margin-top: 12px; }
+
+/* ---------------------------------------- grade markers on the wheel */
+/* The roman numeral of every chord in the key, so the grades of the tone are
+   readable off the wheel itself and re-label when the root moves. */
+.wheel-labels .grade {
+  display: block;
+  margin-top: 1px;
+  font: 600 8px var(--mono);
+  font-style: normal;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px oklch(0 0 0 / 0.8);
+  white-space: nowrap;
+}
+.wheel-labels .inner .grade { font-size: 7px; }
+.wheel-labels .grade.fn-t { color: oklch(0.82 0.15 145); }
+.wheel-labels .grade.fn-s { color: oklch(0.78 0.13 245); }
+.wheel-labels .grade.fn-d { color: oklch(0.8 0.16 45); }
+
+/* Scale strip now carries the note and its grade. */
+.scale-strip button .strip-note { display: block; }
+.scale-strip button .strip-grade {
+  display: block;
+  font: 500 8px var(--mono);
+  opacity: 0.7;
+  margin-top: 1px;
+}
+
+/* ------------------------------------------ assist key banner */
+/* Says, once and plainly, which key everything below is in — and whether the
+   lock is holding it there. */
+.key-banner {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--dim);
+  background: oklch(0.18 0.011 250);
+}
+.key-banner.locked { border-left-color: var(--a); }
+.key-banner .key-name { font: 600 14px var(--display); color: oklch(0.95 0.006 250); }
+.key-banner .key-lock { font: 400 10px var(--sans); color: var(--dim); }
+.key-banner.locked .key-lock { color: var(--a); }
+
+/* ------------------------------------- song references on a template */
+.song-list { margin: 4px 0 0; padding-left: 15px; }
+.song-list li {
+  font: 400 10px/1.5 var(--sans);
+  color: oklch(0.64 0.008 250);
+  margin-bottom: 1px;
+}

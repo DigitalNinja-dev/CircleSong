@@ -112,7 +112,10 @@ export const PRESETS = {
     tone: { low: 1.5, mid: -1, midFreq: 600, high: 1.5 },
     reverb: 0.24,
     gain: 0.42,
-    coupling: 0.02, // undamped neighbours ring in sympathy, as on a real piano
+    // Undamped neighbours ring in sympathy, as on a real piano — but gently.
+    // A long decay leaves very little headroom before the coupled loop stops
+    // being passive, and the sympathetic ring is a colour, not the sound.
+    coupling: 0.006,
     isKeyboard: true,
   },
   rhodes: {
@@ -579,6 +582,25 @@ export class AudioEngine {
     const t = Math.max(when ?? this.currentTime, 0);
     this.node.port.postMessage({
       type: 'cut',
+      frame: Math.max(0, Math.round(t * this.ctx.sampleRate)),
+      level,
+      time,
+    });
+  }
+
+  /**
+   * Fade the strings out at a moment in the future.
+   *
+   * Unlike `cut`, this leaves the event queue alone, so it can be scheduled at
+   * the *end* of an audition without cancelling the audition itself. Without
+   * it a tapped chord rings for its full decay time — nine seconds on the
+   * piano — and the only way to stop it is to play something else.
+   */
+  damp(when, { level = 0.92, time = 0.45 } = {}) {
+    if (!this.ready) return;
+    const t = Math.max(when ?? this.currentTime, 0);
+    this.node.port.postMessage({
+      type: 'damp',
       frame: Math.max(0, Math.round(t * this.ctx.sampleRate)),
       level,
       time,

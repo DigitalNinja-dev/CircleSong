@@ -352,6 +352,7 @@ class StringModel {
     this.lpState = (1 - this.lpCoef) * y + this.lpCoef * this.lpState;
 
     this.muteGain = this.muteTarget + (this.muteGain - this.muteTarget) * this.muteRate;
+
     const fed = this.lpState * this.loopGain * this.muteGain + coupling;
 
     this.buf[this.w] = fed;
@@ -428,6 +429,17 @@ class GuitarProcessor extends AudioWorkletProcessor {
         });
         this.queue.sort((a, b) => a.frame - b.frame);
         break;
+      // Like 'cut', but it does not discard queued events — it is scheduled at
+      // the end of an audition, after the notes it is meant to fade.
+      case 'damp':
+        this.queue.push({
+          type: 'cutAll',
+          frame: msg.frame,
+          level: msg.level ?? 0.9,
+          time: msg.time ?? 0.4,
+        });
+        this.queue.sort((a, b) => a.frame - b.frame);
+        break;
       case 'config':
         if (msg.coupling !== undefined) this.coupling = msg.coupling;
         if (msg.master !== undefined) this.master = msg.master;
@@ -468,7 +480,18 @@ class GuitarProcessor extends AudioWorkletProcessor {
       let l = 0;
       let r = 0;
       let sum = 0;
+      let live = 0;
+      for (let k = 0; k < 6; k++) if (this.strings[k].active) live++;
       const bridge = this.bridgeState;
+      // The bridge carries the *sum* of the strings, so a chord drives each
+      // string several times harder than a single note does. Left unnormalised
+      // the coupling therefore scales with how many notes are held, and a full
+      // chord on a long-decaying preset pushes the round-trip gain above unity
+      // — the string stops decaying and starts growing. A piano chord did
+      // exactly that, swelling instead of ringing out. Dividing by the number
+      // of neighbours makes the drive an average rather than a total, so the
+      // loop stays passive whether one note is sounding or six.
+      const c = this.coupling / Math.max(1, live - 1);
 
       for (let k = 0; k < 6; k++) {
         const st = this.strings[k];
@@ -480,7 +503,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
         // strings. Leaving its own contribution in place is positive feedback:
         // it silently raises the loop gain and stretches every note far past
         // the decay time the preset asked for.
-        const v = st.tick((bridge - this.last[k]) * this.coupling);
+        const v = st.tick((bridge - this.last[k]) * c);
         this.last[k] = v;
         sum += v;
         const p = this.pan[k];

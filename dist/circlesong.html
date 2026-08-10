@@ -598,6 +598,59 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 }
 #secDomPanel { margin-top: 12px; }
 
+/* ---------------------------------------- grade markers on the wheel */
+/* The roman numeral of every chord in the key, so the grades of the tone are
+   readable off the wheel itself and re-label when the root moves. */
+.wheel-labels .grade {
+  display: block;
+  margin-top: 1px;
+  font: 600 8px var(--mono);
+  font-style: normal;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px oklch(0 0 0 / 0.8);
+  white-space: nowrap;
+}
+.wheel-labels .inner .grade { font-size: 7px; }
+.wheel-labels .grade.fn-t { color: oklch(0.82 0.15 145); }
+.wheel-labels .grade.fn-s { color: oklch(0.78 0.13 245); }
+.wheel-labels .grade.fn-d { color: oklch(0.8 0.16 45); }
+
+/* Scale strip now carries the note and its grade. */
+.scale-strip button .strip-note { display: block; }
+.scale-strip button .strip-grade {
+  display: block;
+  font: 500 8px var(--mono);
+  opacity: 0.7;
+  margin-top: 1px;
+}
+
+/* ------------------------------------------ assist key banner */
+/* Says, once and plainly, which key everything below is in — and whether the
+   lock is holding it there. */
+.key-banner {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--dim);
+  background: oklch(0.18 0.011 250);
+}
+.key-banner.locked { border-left-color: var(--a); }
+.key-banner .key-name { font: 600 14px var(--display); color: oklch(0.95 0.006 250); }
+.key-banner .key-lock { font: 400 10px var(--sans); color: var(--dim); }
+.key-banner.locked .key-lock { color: var(--a); }
+
+/* ------------------------------------- song references on a template */
+.song-list { margin: 4px 0 0; padding-left: 15px; }
+.song-list li {
+  font: 400 10px/1.5 var(--sans);
+  color: oklch(0.64 0.008 250);
+  margin-bottom: 1px;
+}
+
 </style>
 </head>
 <body>
@@ -935,6 +988,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
     <!-- /07 ASSISTANT -->
     <section class="panel" id="tab-assist" hidden>
       <h2>/07 SONGWRITING_ASSISTANT</h2>
+      <div class="key-banner" id="assistKeyBanner">
+        <span class="micro-label">EVERYTHING BELOW IS IN</span>
+        <span id="assistKeyName" class="key-name"></span>
+        <span id="assistKeyLock" class="key-lock"></span>
+      </div>
       <div class="chip-row" id="moodRow"></div>
       <div id="suggestionCard" class="card flat" hidden>
         <div class="row between">
@@ -968,7 +1026,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 (() => {
 'use strict';
 
-const WORKLET_SRC = "/**\n * CircleSong string synthesis worklet.\n *\n * Six independent digital waveguide (extended Karplus-Strong) string models,\n * coupled through a shared bridge. Running in an AudioWorklet is what makes\n * this possible at all: the string loop needs single-sample feedback, which no\n * arrangement of native WebAudio nodes can express.\n *\n * Per string:\n *   excitation -> [ delay line -> fractional-delay allpass -> loop filter\n *                   -> loop gain -> (+ bridge coupling) ] -> pickup comb -> out\n *\n * The excitation is a noise burst shaped by pick hardness (one-pole lowpass)\n * and pick position (feed-forward comb), which is what gives the attack its\n * character. Loop gain is derived from a target T60 so decay time is specified\n * in seconds rather than by an opaque coefficient, and the loop filter makes\n * high partials die faster than low ones — the single most audible property of\n * a real plucked string.\n */\n\nconst MAX_DELAY = 4096; // ~11.7 Hz at 48 kHz, far below any guitar string\nconst MASK = MAX_DELAY - 1;\nconst DISPERSION_MAX = 8; // allpass sections available for string stiffness\n\nclass StringModel {\n  constructor(sampleRate, index) {\n    this.sr = sampleRate;\n    this.index = index;\n    this.buf = new Float32Array(MAX_DELAY);\n    this.w = 0;\n\n    this.delay = 100;\n    this.intDelay = 99;\n    this.apCoef = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    this.lpState = 0;\n    this.lpCoef = 0.5;\n    this.loopGain = 0.995;\n\n    // Stiffness dispersion. A cascade of first-order allpasses delays low\n    // frequencies more than high ones, so the partials spread upward instead of\n    // sitting at exact integer multiples. That stretch is what a piano is: it\n    // is why a piano and a guitar playing the same note are never confusable,\n    // and why piano tuners stretch the octaves to match it.\n    this.dispCoef = 0;\n    this.dispN = 0;\n    this.dispX = new Float32Array(DISPERSION_MAX);\n    this.dispY = new Float32Array(DISPERSION_MAX);\n\n    this.freq = 110;\n    this.amp = 0;\n    this.active = false;\n\n    // Pickup comb (electric): fraction of the string length from the bridge.\n    this.pickupPos = 0.12;\n    this.pickupMix = 0;\n\n    // Body/bridge DC blocker so coupling can't build up a rail offset.\n    this.dcX1 = 0;\n    this.dcY1 = 0;\n\n    // Mute envelope: multiplies loop gain, used for palm mutes and note-offs.\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    this.rng = 0x9e3779b9 ^ (index * 0x85ebca6b);\n  }\n\n  noise() {\n    // xorshift32 — deterministic per string, no allocation.\n    let x = this.rng;\n    x ^= x << 13;\n    x ^= x >>> 17;\n    x ^= x << 5;\n    this.rng = x >>> 0;\n    return (this.rng / 0x7fffffff) - 1;\n  }\n\n  /**\n   * Phase delay, in samples, of one first-order allpass at a given frequency.\n   * H(z) = (a + z^-1) / (1 + a z^-1)\n   */\n  phaseDelay(a, freq) {\n    const w = (2 * Math.PI * freq) / this.sr;\n    if (w < 1e-9) return (1 - a) / (1 + a);\n    const cw = Math.cos(w);\n    const sw = Math.sin(w);\n    let ph = Math.atan2(-sw, a + cw) - Math.atan2(-a * sw, 1 + a * cw);\n    if (ph > 0) ph -= 2 * Math.PI;\n    return -ph / w;\n  }\n\n  /**\n   * Phase delay, in samples, of the one-pole loop filter at a given frequency.\n   * H(z) = (1-c) / (1 - c z^-1)\n   *\n   * This is not a refinement. The loop filter sits inside the feedback path, so\n   * its delay is part of the string's length whether or not anyone accounts for\n   * it — and it is roughly a constant number of samples, which means it is a\n   * negligible fraction of a long bass string and a large fraction of a short\n   * treble one. Ignoring it makes the instrument play progressively flat as it\n   * goes up: about 5 cents at C3 and over 20 by G5, which is enough to make\n   * chords sound sour rather than merely imperfect.\n   */\n  filterPhaseDelay(c, freq) {\n    const w = (2 * Math.PI * freq) / this.sr;\n    if (w < 1e-9) return c / (1 - c);\n    return Math.atan2(c * Math.sin(w), 1 - c * Math.cos(w)) / w;\n  }\n\n  /**\n   * Excite the string.\n   * @param {object} p\n   *  freq, velocity, decay (T60 seconds), brightness 0..1, pickPos 0..0.5,\n   *  hardness 0..1, pickupPos, pickupMix, muteAmount 0..1\n   */\n  pluck(p) {\n    const freq = Math.max(20, Math.min(this.sr / 4, p.freq));\n    this.freq = freq;\n    const total = this.sr / freq;\n\n    const vel = Math.max(0.02, Math.min(1, p.velocity ?? 0.8));\n    const mute = Math.max(0, Math.min(1, p.muteAmount ?? 0));\n\n    // The loop filter is set before the delay line because it is *part* of the\n    // delay line: its phase delay has to be subtracted from the loop length or\n    // the string plays flat. See filterPhaseDelay.\n    //\n    // The cutoff tracks the fundamental rather than sitting at a fixed\n    // frequency: a real string's losses scale with partial number, so what\n    // stays constant across the neck is roughly *how many harmonics* survive,\n    // not which kilohertz. A fixed cutoff is the single biggest reason naive\n    // Karplus-Strong sounds like a sitar on the low strings and like a rubber\n    // band on the high ones. The absolute ceiling then keeps the top strings\n    // from screaming, which is also what real ones do.\n    const brightness = Math.max(0.02, Math.min(0.999, (p.brightness ?? 0.5) * (0.75 + 0.35 * vel)));\n    const harmonics = 8 + brightness * 46;\n    const ceiling = 6500 * (1 - 0.65 * mute);\n    const cutoff = Math.max(\n      120,\n      Math.min(freq * harmonics * (1 - 0.5 * mute), ceiling, this.sr * 0.45)\n    );\n    this.lpCoef = Math.exp((-2 * Math.PI * cutoff) / this.sr);\n    const filterDelay = this.filterPhaseDelay(this.lpCoef, freq);\n\n    // Stiffness: how many allpass sections, and how strong. Each section is\n    // itself a delay at low frequencies, so its contribution has to come out of\n    // the delay line or the note plays flat — the dispersion has to stretch the\n    // partials without moving the fundamental.\n    const stiffness = Math.max(0, Math.min(1, p.stiffness ?? 0));\n    let dispDelay = 0;\n    if (stiffness > 0.001) {\n      // The coefficient must be NEGATIVE. This allpass has phase delay\n      // (1-a)/(1+a) at DC and (1+a)/(1-a) at Nyquist, so a *positive*\n      // coefficient delays the high partials — which flattens them, the\n      // opposite of what a stiff string does. A negative one lets the highs\n      // through sooner, shortening their effective loop and pushing them\n      // sharp: the stretched partials of a real piano.\n      //\n      // It also has to be near -1. The audible partials of a bass note sit in\n      // the bottom few percent of the spectrum, and a gentle coefficient does\n      // nearly all of its bending far above them — at a = -0.2 the stretch is\n      // B ~ 2e-6, roughly a thousandth of a real piano's. Around -0.75 the\n      // phase curve is steep enough down where the partials actually are.\n      const bass = 1 - Math.min(1, freq / 300);\n      const scaled = stiffness * (0.72 + 0.55 * bass);\n      this.dispCoef = -Math.min(0.86, 0.58 + 0.3 * scaled);\n\n      // Each section now costs several samples of delay, so a short (high)\n      // string cannot afford the whole chain — there would be no delay line\n      // left to hold the note. Shortening the chain up there is also what the\n      // physics says: treble strings are proportionally far less stiff.\n      const perSection = this.phaseDelay(this.dispCoef, freq);\n      this.dispN = Math.max(1, Math.min(DISPERSION_MAX, Math.floor((total * 0.4) / perSection)));\n      dispDelay = this.dispN * perSection;\n    } else {\n      this.dispN = 0;\n      this.dispCoef = 0;\n    }\n    this.dispX.fill(0);\n    this.dispY.fill(0);\n    // Every filter inside the loop lengthens it, so every one of them comes off\n    // the delay line. Measured at the fundamental, not at DC: with a dispersion\n    // coefficient this close to -1 the two differ by many samples.\n    const target = Math.max(4, total - dispDelay - filterDelay);\n\n    // Split into an integer delay plus a first-order allpass handling the\n    // fractional part. Keep the fractional part near 1.0 where the allpass is\n    // best behaved (a delay of ~0 makes the filter ring).\n    let intDelay = Math.floor(target) - 1;\n    let frac = target - intDelay;\n    if (intDelay < 2) {\n      intDelay = 2;\n      frac = Math.max(0.1, target - intDelay);\n    }\n    this.delay = total;\n    this.intDelay = intDelay;\n    this.apCoef = (1 - frac) / (1 + frac);\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    // T60 -> per-period loop gain: g^(freq*T60) = 10^-3\n    let t60 = Math.max(0.05, p.decay ?? 3.0);\n    if (mute > 0) t60 *= 1 - 0.93 * mute;\n    // Lower strings sustain longer; higher strings shed energy faster.\n    t60 *= 1 + 0.35 * (1 - Math.min(1, freq / 330));\n    this.loopGain = Math.min(0.99995, Math.pow(10, -3 / (freq * t60)));\n\n    this.pickupPos = p.pickupPos ?? 0.12;\n    this.pickupMix = p.pickupMix ?? 0;\n\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    // --- Build the excitation burst ---\n    const n = Math.max(2, Math.round(total));\n    const hardness = Math.max(0, Math.min(1, p.hardness ?? 0.5));\n    // A soft fingertip is a low-passed impulse; a hard plectrum is closer to\n    // white. Map hardness onto the one-pole smoothing of the noise burst.\n    const smooth = 0.9 - 0.88 * hardness;\n\n    const burst = new Float32Array(n);\n    const hammer = Math.max(0, Math.min(1, p.hammer ?? 0));\n    if (hammer > 0) {\n      // A felt hammer is not a pick. It stays in contact with the string for a\n      // millisecond or two and leaves a smooth pulse rather than a broadband\n      // scrape, and it compresses when struck harder — so a loud note is\n      // brighter because the contact is *shorter*, not because anything was\n      // equalised. That coupling is most of what makes a piano respond like\n      // one. A little noise rides along for the felt itself.\n      const contactMs = (3.2 - 1.9 * vel) * (1 + 0.5 * (1 - Math.min(1, freq / 440)));\n      const width = Math.max(2, Math.min(n, Math.round((contactMs / 1000) * this.sr)));\n      let ns = 0;\n      for (let i = 0; i < n; i++) {\n        // Raised cosine contact pulse.\n        const pulse = i < width ? 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / width) : 0;\n        const white = this.noise();\n        ns = smooth * ns + (1 - smooth) * white;\n        const env = i < width ? 1 - i / width : 0;\n        burst[i] = pulse * (1 - 0.18 * hammer) + ns * env * 0.18 * hammer;\n      }\n    } else {\n      let s = 0;\n      for (let i = 0; i < n; i++) {\n        const white = this.noise();\n        s = smooth * s + (1 - smooth) * white;\n        // Taper the burst so the pluck has a short, non-clicky rise.\n        const env = i < n * 0.1 ? i / (n * 0.1) : 1;\n        burst[i] = s * env;\n      }\n    }\n\n    // Pick position comb: plucking at position β notches every (1/β)-th\n    // harmonic. The coefficient is just under 1 so the notches are deep\n    // without turning the whole burst into a differentiator.\n    const beta = Math.max(0.02, Math.min(0.5, p.pickPos ?? 0.13));\n    const dly = Math.max(1, Math.round(beta * n));\n    const combed = new Float32Array(n);\n    for (let i = 0; i < n; i++) {\n      combed[i] = burst[i] - 0.9 * (i >= dly ? burst[i - dly] : 0);\n    }\n\n    // Spectral tilt. An ideal plucked string's initial displacement puts\n    // amplitude ~ sin(nπβ)/n² into partial n — the comb above supplies the\n    // sin(nπβ) term, this supplies the 1/n². Two cascaded one-poles give the\n    // required -12 dB/oct; a single pole (-6 dB/oct) leaves the note thin and\n    // nasal, with more energy around the 11th harmonic than the fundamental.\n    // The corner is referenced to the pitch and opened up by pick hardness, so\n    // a fingertip is mellow and a plectrum is bright at every pitch.\n    // A hammer pulse is already smooth and band-limited by its contact time, so\n    // it needs far less of this than a pick does — running the full tilt over\n    // it buries the note.\n    const tiltFc = Math.min(freq * (0.5 + 1.5 * hardness) * (1 + 6 * hammer), this.sr * 0.4);\n    const tiltA = 1 - Math.exp((-2 * Math.PI * tiltFc) / this.sr);\n    let t1 = 0;\n    let t2 = 0;\n    for (let i = 0; i < n; i++) {\n      t1 += tiltA * (combed[i] - t1);\n      t2 += tiltA * (t1 - t2);\n      combed[i] = t2;\n    }\n\n    // Normalise so velocity, not the RNG, controls level.\n    let peak = 1e-6;\n    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(combed[i]));\n    const gain = (vel * 0.7) / peak;\n\n    // Replace the delay-line contents. Re-plucking a ringing string damps what\n    // was there rather than summing with it, which is what a real pick does.\n    const keep = 0.25;\n    for (let i = 0; i < MAX_DELAY; i++) this.buf[i] *= keep;\n    for (let i = 0; i < n; i++) {\n      const idx = (this.w - i + MAX_DELAY) & MASK;\n      this.buf[idx] += combed[i] * gain;\n    }\n\n    this.lpState = 0;\n    this.active = true;\n    this.amp = vel;\n  }\n\n  /** Damp a ringing string (note-off, fret-hand mute, or palm mute). */\n  release(level = 0.5, timeSec = 0.12) {\n    this.muteTarget = Math.max(0, 1 - level);\n    this.muteRate = Math.exp(-1 / Math.max(1, timeSec * this.sr));\n  }\n\n  silence() {\n    this.buf.fill(0);\n    this.active = false;\n    this.amp = 0;\n    this.lpState = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n    this.dispX.fill(0);\n    this.dispY.fill(0);\n    this.muteGain = 1;\n    this.muteTarget = 1;\n  }\n\n  /** Advance one sample. `coupling` is the shared bridge signal. */\n  tick(coupling) {\n    if (!this.active) return 0;\n\n    const r = (this.w - this.intDelay + MAX_DELAY) & MASK;\n    const x = this.buf[r];\n\n    // First-order allpass for the fractional delay.\n    const a = this.apCoef;\n    let y = a * x + this.apX1 - a * this.apY1;\n    this.apX1 = x;\n    this.apY1 = y;\n\n    // Stiffness dispersion: identical allpass sections in cascade. Phase only —\n    // no energy is added or removed, the partials are just moved off the\n    // harmonic series.\n    if (this.dispN > 0) {\n      const d = this.dispCoef;\n      for (let k = 0; k < this.dispN; k++) {\n        const inp = y;\n        y = d * inp + this.dispX[k] - d * this.dispY[k];\n        this.dispX[k] = inp;\n        this.dispY[k] = y;\n      }\n    }\n\n    // One-pole lowpass in the loop => frequency-dependent decay.\n    this.lpState = (1 - this.lpCoef) * y + this.lpCoef * this.lpState;\n\n    this.muteGain = this.muteTarget + (this.muteGain - this.muteTarget) * this.muteRate;\n    const fed = this.lpState * this.loopGain * this.muteGain + coupling;\n\n    this.buf[this.w] = fed;\n\n    // Output tap. With pickupMix > 0 we take the difference between the bridge\n    // and a point further along the string: the comb notch of a magnetic pickup.\n    let out = y;\n    if (this.pickupMix > 0) {\n      const pd = Math.max(1, Math.round(this.pickupPos * this.delay));\n      const pr = (this.w - pd + MAX_DELAY) & MASK;\n      out = y - this.buf[pr] * this.pickupMix;\n    }\n\n    // A hand landing on the strings silences what is already travelling down\n    // the delay line, not just what recirculates — so damping has to attenuate\n    // the output too, otherwise a \"cut\" still rings for a full period.\n    out *= this.muteGain;\n\n    this.w = (this.w + 1) & MASK;\n\n    // DC blocker.\n    const dc = out - this.dcX1 + 0.9985 * this.dcY1;\n    this.dcX1 = out;\n    this.dcY1 = dc;\n\n    // Cheap activity gate so idle strings cost nothing.\n    this.amp = Math.max(Math.abs(dc), this.amp * 0.9995);\n    if (this.amp < 2e-5) {\n      this.active = false;\n      this.amp = 0;\n    }\n    return dc;\n  }\n}\n\nclass GuitarProcessor extends AudioWorkletProcessor {\n  constructor() {\n    super();\n    this.strings = Array.from({ length: 6 }, (_, i) => new StringModel(sampleRate, i));\n    this.queue = [];\n    this.coupling = 0.006;\n    this.bridgeState = 0;\n    /** Previous-sample output per string, so a string never drives itself. */\n    this.last = new Float32Array(6);\n    // Slight stereo spread: low strings left, high strings right.\n    this.pan = [-0.35, -0.22, -0.08, 0.08, 0.22, 0.35];\n    this.master = 0.9;\n    this.running = true;\n\n    this.port.onmessage = (e) => this.onMessage(e.data);\n  }\n\n  onMessage(msg) {\n    switch (msg.type) {\n      case 'pluck':\n      case 'release':\n        this.queue.push(msg);\n        // Keep the queue ordered by scheduled frame.\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n\n      // Retrigger: silence everything from `frame` onward. Pending events at or\n      // after that point are dropped rather than allowed to fire, which is what\n      // stops a rapid series of clicks from piling chords on top of each other.\n      // Notes scheduled *after* this message arrives still play, so the caller\n      // cuts first and schedules the replacement second.\n      case 'cut':\n        this.queue = this.queue.filter((e) => e.frame < msg.frame);\n        this.queue.push({\n          type: 'cutAll',\n          frame: msg.frame,\n          level: msg.level ?? 1,\n          time: msg.time ?? 0.03,\n        });\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n      case 'config':\n        if (msg.coupling !== undefined) this.coupling = msg.coupling;\n        if (msg.master !== undefined) this.master = msg.master;\n        break;\n      case 'allNotesOff':\n        this.queue.length = 0;\n        this.strings.forEach((s) => s.silence());\n        break;\n      case 'stop':\n        this.running = false;\n        break;\n    }\n  }\n\n  applyEvent(ev) {\n    if (ev.type === 'cutAll') {\n      for (const s of this.strings) s.release(ev.level, ev.time);\n      return;\n    }\n    const s = this.strings[ev.string & 5];\n    if (ev.type === 'pluck') s.pluck(ev);\n    else s.release(ev.level ?? 0.6, ev.time ?? 0.1);\n  }\n\n  process(_inputs, outputs) {\n    const out = outputs[0];\n    const left = out[0];\n    const right = out.length > 1 ? out[1] : out[0];\n    const n = left.length;\n    const base = currentFrame;\n\n    for (let i = 0; i < n; i++) {\n      // Sample-accurate event dispatch.\n      while (this.queue.length && this.queue[0].frame <= base + i) {\n        this.applyEvent(this.queue.shift());\n      }\n\n      let l = 0;\n      let r = 0;\n      let sum = 0;\n      const bridge = this.bridgeState;\n\n      for (let k = 0; k < 6; k++) {\n        const st = this.strings[k];\n        if (!st.active) {\n          this.last[k] = 0;\n          continue;\n        }\n        // Drive each string with the bridge motion caused by the *other*\n        // strings. Leaving its own contribution in place is positive feedback:\n        // it silently raises the loop gain and stretches every note far past\n        // the decay time the preset asked for.\n        const v = st.tick((bridge - this.last[k]) * this.coupling);\n        this.last[k] = v;\n        sum += v;\n        const p = this.pan[k];\n        l += v * (1 - p) * 0.5;\n        r += v * (1 + p) * 0.5;\n      }\n\n      // Bridge admittance: lowpassed sum of all strings.\n      this.bridgeState = this.bridgeState * 0.72 + sum * 0.28;\n\n      left[i] = l * this.master;\n      right[i] = r * this.master;\n    }\n\n    return this.running;\n  }\n}\n\nregisterProcessor('guitar-processor', GuitarProcessor);\n";
+const WORKLET_SRC = "/**\n * CircleSong string synthesis worklet.\n *\n * Six independent digital waveguide (extended Karplus-Strong) string models,\n * coupled through a shared bridge. Running in an AudioWorklet is what makes\n * this possible at all: the string loop needs single-sample feedback, which no\n * arrangement of native WebAudio nodes can express.\n *\n * Per string:\n *   excitation -> [ delay line -> fractional-delay allpass -> loop filter\n *                   -> loop gain -> (+ bridge coupling) ] -> pickup comb -> out\n *\n * The excitation is a noise burst shaped by pick hardness (one-pole lowpass)\n * and pick position (feed-forward comb), which is what gives the attack its\n * character. Loop gain is derived from a target T60 so decay time is specified\n * in seconds rather than by an opaque coefficient, and the loop filter makes\n * high partials die faster than low ones — the single most audible property of\n * a real plucked string.\n */\n\nconst MAX_DELAY = 4096; // ~11.7 Hz at 48 kHz, far below any guitar string\nconst MASK = MAX_DELAY - 1;\nconst DISPERSION_MAX = 8; // allpass sections available for string stiffness\n\nclass StringModel {\n  constructor(sampleRate, index) {\n    this.sr = sampleRate;\n    this.index = index;\n    this.buf = new Float32Array(MAX_DELAY);\n    this.w = 0;\n\n    this.delay = 100;\n    this.intDelay = 99;\n    this.apCoef = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    this.lpState = 0;\n    this.lpCoef = 0.5;\n    this.loopGain = 0.995;\n\n    // Stiffness dispersion. A cascade of first-order allpasses delays low\n    // frequencies more than high ones, so the partials spread upward instead of\n    // sitting at exact integer multiples. That stretch is what a piano is: it\n    // is why a piano and a guitar playing the same note are never confusable,\n    // and why piano tuners stretch the octaves to match it.\n    this.dispCoef = 0;\n    this.dispN = 0;\n    this.dispX = new Float32Array(DISPERSION_MAX);\n    this.dispY = new Float32Array(DISPERSION_MAX);\n\n    this.freq = 110;\n    this.amp = 0;\n    this.active = false;\n\n    // Pickup comb (electric): fraction of the string length from the bridge.\n    this.pickupPos = 0.12;\n    this.pickupMix = 0;\n\n    // Body/bridge DC blocker so coupling can't build up a rail offset.\n    this.dcX1 = 0;\n    this.dcY1 = 0;\n\n    // Mute envelope: multiplies loop gain, used for palm mutes and note-offs.\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    this.rng = 0x9e3779b9 ^ (index * 0x85ebca6b);\n  }\n\n  noise() {\n    // xorshift32 — deterministic per string, no allocation.\n    let x = this.rng;\n    x ^= x << 13;\n    x ^= x >>> 17;\n    x ^= x << 5;\n    this.rng = x >>> 0;\n    return (this.rng / 0x7fffffff) - 1;\n  }\n\n  /**\n   * Phase delay, in samples, of one first-order allpass at a given frequency.\n   * H(z) = (a + z^-1) / (1 + a z^-1)\n   */\n  phaseDelay(a, freq) {\n    const w = (2 * Math.PI * freq) / this.sr;\n    if (w < 1e-9) return (1 - a) / (1 + a);\n    const cw = Math.cos(w);\n    const sw = Math.sin(w);\n    let ph = Math.atan2(-sw, a + cw) - Math.atan2(-a * sw, 1 + a * cw);\n    if (ph > 0) ph -= 2 * Math.PI;\n    return -ph / w;\n  }\n\n  /**\n   * Phase delay, in samples, of the one-pole loop filter at a given frequency.\n   * H(z) = (1-c) / (1 - c z^-1)\n   *\n   * This is not a refinement. The loop filter sits inside the feedback path, so\n   * its delay is part of the string's length whether or not anyone accounts for\n   * it — and it is roughly a constant number of samples, which means it is a\n   * negligible fraction of a long bass string and a large fraction of a short\n   * treble one. Ignoring it makes the instrument play progressively flat as it\n   * goes up: about 5 cents at C3 and over 20 by G5, which is enough to make\n   * chords sound sour rather than merely imperfect.\n   */\n  filterPhaseDelay(c, freq) {\n    const w = (2 * Math.PI * freq) / this.sr;\n    if (w < 1e-9) return c / (1 - c);\n    return Math.atan2(c * Math.sin(w), 1 - c * Math.cos(w)) / w;\n  }\n\n  /**\n   * Excite the string.\n   * @param {object} p\n   *  freq, velocity, decay (T60 seconds), brightness 0..1, pickPos 0..0.5,\n   *  hardness 0..1, pickupPos, pickupMix, muteAmount 0..1\n   */\n  pluck(p) {\n    const freq = Math.max(20, Math.min(this.sr / 4, p.freq));\n    this.freq = freq;\n    const total = this.sr / freq;\n\n    const vel = Math.max(0.02, Math.min(1, p.velocity ?? 0.8));\n    const mute = Math.max(0, Math.min(1, p.muteAmount ?? 0));\n\n    // The loop filter is set before the delay line because it is *part* of the\n    // delay line: its phase delay has to be subtracted from the loop length or\n    // the string plays flat. See filterPhaseDelay.\n    //\n    // The cutoff tracks the fundamental rather than sitting at a fixed\n    // frequency: a real string's losses scale with partial number, so what\n    // stays constant across the neck is roughly *how many harmonics* survive,\n    // not which kilohertz. A fixed cutoff is the single biggest reason naive\n    // Karplus-Strong sounds like a sitar on the low strings and like a rubber\n    // band on the high ones. The absolute ceiling then keeps the top strings\n    // from screaming, which is also what real ones do.\n    const brightness = Math.max(0.02, Math.min(0.999, (p.brightness ?? 0.5) * (0.75 + 0.35 * vel)));\n    const harmonics = 8 + brightness * 46;\n    const ceiling = 6500 * (1 - 0.65 * mute);\n    const cutoff = Math.max(\n      120,\n      Math.min(freq * harmonics * (1 - 0.5 * mute), ceiling, this.sr * 0.45)\n    );\n    this.lpCoef = Math.exp((-2 * Math.PI * cutoff) / this.sr);\n    const filterDelay = this.filterPhaseDelay(this.lpCoef, freq);\n\n    // Stiffness: how many allpass sections, and how strong. Each section is\n    // itself a delay at low frequencies, so its contribution has to come out of\n    // the delay line or the note plays flat — the dispersion has to stretch the\n    // partials without moving the fundamental.\n    const stiffness = Math.max(0, Math.min(1, p.stiffness ?? 0));\n    let dispDelay = 0;\n    if (stiffness > 0.001) {\n      // The coefficient must be NEGATIVE. This allpass has phase delay\n      // (1-a)/(1+a) at DC and (1+a)/(1-a) at Nyquist, so a *positive*\n      // coefficient delays the high partials — which flattens them, the\n      // opposite of what a stiff string does. A negative one lets the highs\n      // through sooner, shortening their effective loop and pushing them\n      // sharp: the stretched partials of a real piano.\n      //\n      // It also has to be near -1. The audible partials of a bass note sit in\n      // the bottom few percent of the spectrum, and a gentle coefficient does\n      // nearly all of its bending far above them — at a = -0.2 the stretch is\n      // B ~ 2e-6, roughly a thousandth of a real piano's. Around -0.75 the\n      // phase curve is steep enough down where the partials actually are.\n      const bass = 1 - Math.min(1, freq / 300);\n      const scaled = stiffness * (0.72 + 0.55 * bass);\n      this.dispCoef = -Math.min(0.86, 0.58 + 0.3 * scaled);\n\n      // Each section now costs several samples of delay, so a short (high)\n      // string cannot afford the whole chain — there would be no delay line\n      // left to hold the note. Shortening the chain up there is also what the\n      // physics says: treble strings are proportionally far less stiff.\n      const perSection = this.phaseDelay(this.dispCoef, freq);\n      this.dispN = Math.max(1, Math.min(DISPERSION_MAX, Math.floor((total * 0.4) / perSection)));\n      dispDelay = this.dispN * perSection;\n    } else {\n      this.dispN = 0;\n      this.dispCoef = 0;\n    }\n    this.dispX.fill(0);\n    this.dispY.fill(0);\n    // Every filter inside the loop lengthens it, so every one of them comes off\n    // the delay line. Measured at the fundamental, not at DC: with a dispersion\n    // coefficient this close to -1 the two differ by many samples.\n    const target = Math.max(4, total - dispDelay - filterDelay);\n\n    // Split into an integer delay plus a first-order allpass handling the\n    // fractional part. Keep the fractional part near 1.0 where the allpass is\n    // best behaved (a delay of ~0 makes the filter ring).\n    let intDelay = Math.floor(target) - 1;\n    let frac = target - intDelay;\n    if (intDelay < 2) {\n      intDelay = 2;\n      frac = Math.max(0.1, target - intDelay);\n    }\n    this.delay = total;\n    this.intDelay = intDelay;\n    this.apCoef = (1 - frac) / (1 + frac);\n    this.apX1 = 0;\n    this.apY1 = 0;\n\n    // T60 -> per-period loop gain: g^(freq*T60) = 10^-3\n    let t60 = Math.max(0.05, p.decay ?? 3.0);\n    if (mute > 0) t60 *= 1 - 0.93 * mute;\n    // Lower strings sustain longer; higher strings shed energy faster.\n    t60 *= 1 + 0.35 * (1 - Math.min(1, freq / 330));\n    this.loopGain = Math.min(0.99995, Math.pow(10, -3 / (freq * t60)));\n\n    this.pickupPos = p.pickupPos ?? 0.12;\n    this.pickupMix = p.pickupMix ?? 0;\n\n    this.muteGain = 1;\n    this.muteTarget = 1;\n    this.muteRate = 1;\n\n    // --- Build the excitation burst ---\n    const n = Math.max(2, Math.round(total));\n    const hardness = Math.max(0, Math.min(1, p.hardness ?? 0.5));\n    // A soft fingertip is a low-passed impulse; a hard plectrum is closer to\n    // white. Map hardness onto the one-pole smoothing of the noise burst.\n    const smooth = 0.9 - 0.88 * hardness;\n\n    const burst = new Float32Array(n);\n    const hammer = Math.max(0, Math.min(1, p.hammer ?? 0));\n    if (hammer > 0) {\n      // A felt hammer is not a pick. It stays in contact with the string for a\n      // millisecond or two and leaves a smooth pulse rather than a broadband\n      // scrape, and it compresses when struck harder — so a loud note is\n      // brighter because the contact is *shorter*, not because anything was\n      // equalised. That coupling is most of what makes a piano respond like\n      // one. A little noise rides along for the felt itself.\n      const contactMs = (3.2 - 1.9 * vel) * (1 + 0.5 * (1 - Math.min(1, freq / 440)));\n      const width = Math.max(2, Math.min(n, Math.round((contactMs / 1000) * this.sr)));\n      let ns = 0;\n      for (let i = 0; i < n; i++) {\n        // Raised cosine contact pulse.\n        const pulse = i < width ? 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / width) : 0;\n        const white = this.noise();\n        ns = smooth * ns + (1 - smooth) * white;\n        const env = i < width ? 1 - i / width : 0;\n        burst[i] = pulse * (1 - 0.18 * hammer) + ns * env * 0.18 * hammer;\n      }\n    } else {\n      let s = 0;\n      for (let i = 0; i < n; i++) {\n        const white = this.noise();\n        s = smooth * s + (1 - smooth) * white;\n        // Taper the burst so the pluck has a short, non-clicky rise.\n        const env = i < n * 0.1 ? i / (n * 0.1) : 1;\n        burst[i] = s * env;\n      }\n    }\n\n    // Pick position comb: plucking at position β notches every (1/β)-th\n    // harmonic. The coefficient is just under 1 so the notches are deep\n    // without turning the whole burst into a differentiator.\n    const beta = Math.max(0.02, Math.min(0.5, p.pickPos ?? 0.13));\n    const dly = Math.max(1, Math.round(beta * n));\n    const combed = new Float32Array(n);\n    for (let i = 0; i < n; i++) {\n      combed[i] = burst[i] - 0.9 * (i >= dly ? burst[i - dly] : 0);\n    }\n\n    // Spectral tilt. An ideal plucked string's initial displacement puts\n    // amplitude ~ sin(nπβ)/n² into partial n — the comb above supplies the\n    // sin(nπβ) term, this supplies the 1/n². Two cascaded one-poles give the\n    // required -12 dB/oct; a single pole (-6 dB/oct) leaves the note thin and\n    // nasal, with more energy around the 11th harmonic than the fundamental.\n    // The corner is referenced to the pitch and opened up by pick hardness, so\n    // a fingertip is mellow and a plectrum is bright at every pitch.\n    // A hammer pulse is already smooth and band-limited by its contact time, so\n    // it needs far less of this than a pick does — running the full tilt over\n    // it buries the note.\n    const tiltFc = Math.min(freq * (0.5 + 1.5 * hardness) * (1 + 6 * hammer), this.sr * 0.4);\n    const tiltA = 1 - Math.exp((-2 * Math.PI * tiltFc) / this.sr);\n    let t1 = 0;\n    let t2 = 0;\n    for (let i = 0; i < n; i++) {\n      t1 += tiltA * (combed[i] - t1);\n      t2 += tiltA * (t1 - t2);\n      combed[i] = t2;\n    }\n\n    // Normalise so velocity, not the RNG, controls level.\n    let peak = 1e-6;\n    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(combed[i]));\n    const gain = (vel * 0.7) / peak;\n\n    // Replace the delay-line contents. Re-plucking a ringing string damps what\n    // was there rather than summing with it, which is what a real pick does.\n    const keep = 0.25;\n    for (let i = 0; i < MAX_DELAY; i++) this.buf[i] *= keep;\n    for (let i = 0; i < n; i++) {\n      const idx = (this.w - i + MAX_DELAY) & MASK;\n      this.buf[idx] += combed[i] * gain;\n    }\n\n    this.lpState = 0;\n    this.active = true;\n    this.amp = vel;\n  }\n\n  /** Damp a ringing string (note-off, fret-hand mute, or palm mute). */\n  release(level = 0.5, timeSec = 0.12) {\n    this.muteTarget = Math.max(0, 1 - level);\n    this.muteRate = Math.exp(-1 / Math.max(1, timeSec * this.sr));\n  }\n\n  silence() {\n    this.buf.fill(0);\n    this.active = false;\n    this.amp = 0;\n    this.lpState = 0;\n    this.apX1 = 0;\n    this.apY1 = 0;\n    this.dispX.fill(0);\n    this.dispY.fill(0);\n    this.muteGain = 1;\n    this.muteTarget = 1;\n  }\n\n  /** Advance one sample. `coupling` is the shared bridge signal. */\n  tick(coupling) {\n    if (!this.active) return 0;\n\n    const r = (this.w - this.intDelay + MAX_DELAY) & MASK;\n    const x = this.buf[r];\n\n    // First-order allpass for the fractional delay.\n    const a = this.apCoef;\n    let y = a * x + this.apX1 - a * this.apY1;\n    this.apX1 = x;\n    this.apY1 = y;\n\n    // Stiffness dispersion: identical allpass sections in cascade. Phase only —\n    // no energy is added or removed, the partials are just moved off the\n    // harmonic series.\n    if (this.dispN > 0) {\n      const d = this.dispCoef;\n      for (let k = 0; k < this.dispN; k++) {\n        const inp = y;\n        y = d * inp + this.dispX[k] - d * this.dispY[k];\n        this.dispX[k] = inp;\n        this.dispY[k] = y;\n      }\n    }\n\n    // One-pole lowpass in the loop => frequency-dependent decay.\n    this.lpState = (1 - this.lpCoef) * y + this.lpCoef * this.lpState;\n\n    this.muteGain = this.muteTarget + (this.muteGain - this.muteTarget) * this.muteRate;\n\n    const fed = this.lpState * this.loopGain * this.muteGain + coupling;\n\n    this.buf[this.w] = fed;\n\n    // Output tap. With pickupMix > 0 we take the difference between the bridge\n    // and a point further along the string: the comb notch of a magnetic pickup.\n    let out = y;\n    if (this.pickupMix > 0) {\n      const pd = Math.max(1, Math.round(this.pickupPos * this.delay));\n      const pr = (this.w - pd + MAX_DELAY) & MASK;\n      out = y - this.buf[pr] * this.pickupMix;\n    }\n\n    // A hand landing on the strings silences what is already travelling down\n    // the delay line, not just what recirculates — so damping has to attenuate\n    // the output too, otherwise a \"cut\" still rings for a full period.\n    out *= this.muteGain;\n\n    this.w = (this.w + 1) & MASK;\n\n    // DC blocker.\n    const dc = out - this.dcX1 + 0.9985 * this.dcY1;\n    this.dcX1 = out;\n    this.dcY1 = dc;\n\n    // Cheap activity gate so idle strings cost nothing.\n    this.amp = Math.max(Math.abs(dc), this.amp * 0.9995);\n    if (this.amp < 2e-5) {\n      this.active = false;\n      this.amp = 0;\n    }\n    return dc;\n  }\n}\n\nclass GuitarProcessor extends AudioWorkletProcessor {\n  constructor() {\n    super();\n    this.strings = Array.from({ length: 6 }, (_, i) => new StringModel(sampleRate, i));\n    this.queue = [];\n    this.coupling = 0.006;\n    this.bridgeState = 0;\n    /** Previous-sample output per string, so a string never drives itself. */\n    this.last = new Float32Array(6);\n    // Slight stereo spread: low strings left, high strings right.\n    this.pan = [-0.35, -0.22, -0.08, 0.08, 0.22, 0.35];\n    this.master = 0.9;\n    this.running = true;\n\n    this.port.onmessage = (e) => this.onMessage(e.data);\n  }\n\n  onMessage(msg) {\n    switch (msg.type) {\n      case 'pluck':\n      case 'release':\n        this.queue.push(msg);\n        // Keep the queue ordered by scheduled frame.\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n\n      // Retrigger: silence everything from `frame` onward. Pending events at or\n      // after that point are dropped rather than allowed to fire, which is what\n      // stops a rapid series of clicks from piling chords on top of each other.\n      // Notes scheduled *after* this message arrives still play, so the caller\n      // cuts first and schedules the replacement second.\n      case 'cut':\n        this.queue = this.queue.filter((e) => e.frame < msg.frame);\n        this.queue.push({\n          type: 'cutAll',\n          frame: msg.frame,\n          level: msg.level ?? 1,\n          time: msg.time ?? 0.03,\n        });\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n      // Like 'cut', but it does not discard queued events — it is scheduled at\n      // the end of an audition, after the notes it is meant to fade.\n      case 'damp':\n        this.queue.push({\n          type: 'cutAll',\n          frame: msg.frame,\n          level: msg.level ?? 0.9,\n          time: msg.time ?? 0.4,\n        });\n        this.queue.sort((a, b) => a.frame - b.frame);\n        break;\n      case 'config':\n        if (msg.coupling !== undefined) this.coupling = msg.coupling;\n        if (msg.master !== undefined) this.master = msg.master;\n        break;\n      case 'allNotesOff':\n        this.queue.length = 0;\n        this.strings.forEach((s) => s.silence());\n        break;\n      case 'stop':\n        this.running = false;\n        break;\n    }\n  }\n\n  applyEvent(ev) {\n    if (ev.type === 'cutAll') {\n      for (const s of this.strings) s.release(ev.level, ev.time);\n      return;\n    }\n    const s = this.strings[ev.string & 5];\n    if (ev.type === 'pluck') s.pluck(ev);\n    else s.release(ev.level ?? 0.6, ev.time ?? 0.1);\n  }\n\n  process(_inputs, outputs) {\n    const out = outputs[0];\n    const left = out[0];\n    const right = out.length > 1 ? out[1] : out[0];\n    const n = left.length;\n    const base = currentFrame;\n\n    for (let i = 0; i < n; i++) {\n      // Sample-accurate event dispatch.\n      while (this.queue.length && this.queue[0].frame <= base + i) {\n        this.applyEvent(this.queue.shift());\n      }\n\n      let l = 0;\n      let r = 0;\n      let sum = 0;\n      let live = 0;\n      for (let k = 0; k < 6; k++) if (this.strings[k].active) live++;\n      const bridge = this.bridgeState;\n      // The bridge carries the *sum* of the strings, so a chord drives each\n      // string several times harder than a single note does. Left unnormalised\n      // the coupling therefore scales with how many notes are held, and a full\n      // chord on a long-decaying preset pushes the round-trip gain above unity\n      // — the string stops decaying and starts growing. A piano chord did\n      // exactly that, swelling instead of ringing out. Dividing by the number\n      // of neighbours makes the drive an average rather than a total, so the\n      // loop stays passive whether one note is sounding or six.\n      const c = this.coupling / Math.max(1, live - 1);\n\n      for (let k = 0; k < 6; k++) {\n        const st = this.strings[k];\n        if (!st.active) {\n          this.last[k] = 0;\n          continue;\n        }\n        // Drive each string with the bridge motion caused by the *other*\n        // strings. Leaving its own contribution in place is positive feedback:\n        // it silently raises the loop gain and stretches every note far past\n        // the decay time the preset asked for.\n        const v = st.tick((bridge - this.last[k]) * c);\n        this.last[k] = v;\n        sum += v;\n        const p = this.pan[k];\n        l += v * (1 - p) * 0.5;\n        r += v * (1 + p) * 0.5;\n      }\n\n      // Bridge admittance: lowpassed sum of all strings.\n      this.bridgeState = this.bridgeState * 0.72 + sum * 0.28;\n\n      left[i] = l * this.master;\n      right[i] = r * this.master;\n    }\n\n    return this.running;\n  }\n}\n\nregisterProcessor('guitar-processor', GuitarProcessor);\n";
 
 /**
  * Load the string-model processor. A blob URL is the normal path; some
@@ -3637,6 +3695,127 @@ const TEMPLATES = [
       { degree: 4, size: 4, colour: 'sus4' },
     ],
     blurb: 'Dorian with ninths on everything. The major IV is what makes Dorian sound like Dorian rather than minor.' },
+
+  // --- The Chord Progression Handbook ---
+  //
+  // Matney & Niemuth, "Chord Progression Handbook" (University of Kansas
+  // Libraries, 2019, CC BY-NC 4.0). The book orders its twenty progressions by
+  // difficulty rather than by style — one chord, then two, then cadences, then
+  // modal and chromatic — and that ordering is kept here, because it is the
+  // teaching. The song lists are the book's own: a roman numeral means little
+  // until you hear a song you already know built out of it.
+  { id: 'hbSingleMajor', family: 'Handbook', label: '1 · Single Major Chord', mode: 'ionian',
+    degrees: [0, 0, 0, 0], seventh: false,
+    blurb: 'One chord, held. Everything else in music is a departure from this.',
+    songs: ['Chain of Fools — Aretha Franklin', 'Get Up Stand Up — Bob Marley', 'Everyday People — Sly & the Family Stone', 'Bad to the Bone — George Thorogood'] },
+  { id: 'hbSingleMinor', family: 'Handbook', label: '2 · Single Minor Chord', mode: 'aeolian',
+    degrees: [0, 0, 0, 0], seventh: false,
+    blurb: 'The same drone in minor. A whole song can live here.',
+    songs: ['Papa Was a Rollin\' Stone — The Temptations', 'Get Up, Stand Up — Bob Marley', 'We Will Rock You — Queen'] },
+  { id: 'hbTonicDomMajor', family: 'Handbook', label: '3 · Tonic–Dominant, Major', mode: 'ionian',
+    degrees: [0, 4], seventh: false,
+    blurb: 'Away and back. The smallest complete musical sentence there is.',
+    songs: ['Jocko Homo — Devo', 'Achy Breaky Heart — Billy Ray Cyrus', 'Jambalaya — Hank Williams', 'Wheels on the Bus'] },
+  { id: 'hbTonicDomMinor', family: 'Handbook', label: '4 · Tonic–Dominant, Minor', mode: 'aeolian',
+    degrees: [0, 4], seventh: false,
+    blurb: 'The same two-chord motion with a minor tonic — darker, and it leans harder.',
+    songs: ['Black Horse and a Cherry Tree — KT Tunstall'] },
+  { id: 'hbTonicSubdom', family: 'Handbook', label: '5 · Tonic–Subdominant', mode: 'ionian',
+    degrees: [0, 3], seventh: false,
+    blurb: 'Away and back without tension. Restful where the dominant is restless.',
+    songs: ['I Still Haven\'t Found What I\'m Looking For — U2', 'Born in the USA — Bruce Springsteen', 'Paperback Writer — The Beatles', 'What I Got — Sublime'] },
+  { id: 'hbMajorRelMinor', family: 'Handbook', label: '6 · Major to Relative Minor', mode: 'ionian',
+    degrees: [0, 5], seventh: false,
+    blurb: 'The same seven notes, seen from its shadow.',
+    songs: ['Want to Want Me — Jason Derulo', 'Buffalo Soldier — Bob Marley', 'Roar — Katy Perry'] },
+  { id: 'hbOneFourFive', family: 'Handbook', label: '7 · I–IV–V', mode: 'ionian',
+    degrees: [0, 3, 4], seventh: false,
+    blurb: 'The three chords most songs are made of.',
+    songs: ['La Bamba — Ritchie Valens', 'Twist and Shout — The Beatles', 'Mr. Jones — Counting Crows'] },
+  { id: 'hbPlagal', family: 'Handbook', label: '8 · I–IV–V, Plagal Cadence', mode: 'ionian',
+    degrees: [0, 4, 0, 3], seventh: false,
+    blurb: 'Ends IV to I rather than V to I — the softer landing.',
+    songs: ['Learn to Fly — Foo Fighters', 'Drift Away — Mentor Williams', 'Semi-Charmed Life — Third Eye Blind'] },
+  { id: 'hbLouie', family: 'Handbook', label: '9 · I–IV–V–IV', mode: 'ionian',
+    degrees: [0, 3, 4, 3], seventh: false,
+    blurb: 'The loop that never resolves, so it can go round forever.',
+    songs: ['Louie Louie — The Kingsmen', 'Wild Thing — The Troggs', 'I Love Rock and Roll — Joan Jett'] },
+  { id: 'hbMinorFlatThree', family: 'Handbook', label: '10 · Minor to ♭III', mode: 'aeolian',
+    degrees: [0, 2], seventh: false,
+    blurb: 'Minor tonic to its relative major. Used alone, or to open something longer.',
+    songs: ['Eleanor Rigby — The Beatles', 'Need You Now — Lady A', 'Something in the Way — Nirvana', 'Hey There Delilah — Plain White T\'s'] },
+  { id: 'hbMinorFlatSeven', family: 'Handbook', label: '11 · Minor to ♭VII', mode: 'aeolian',
+    degrees: [0, 6], seventh: false,
+    blurb: 'The first chord from outside the major scale. Modal, and instantly modern.',
+    songs: ['Ramblin\' Man — The Allman Brothers'] },
+  { id: 'hbDooWop', family: 'Handbook', label: '12 · Doo-Wop / Ice Cream', mode: 'ionian',
+    degrees: [0, 5, 3, 4], seventh: false,
+    blurb: 'I–vi–IV–V. Fifty years of hits and it still has not worn out.',
+    songs: ['Stand by Me — Ben E. King', 'Earth Angel — The Penguins', 'Heart and Soul — Hoagy Carmichael', 'Perfect — Ed Sheeran'] },
+  { id: 'hbAxisHb', family: 'Handbook', label: '12A · I–V–vi–IV', mode: 'ionian',
+    degrees: [0, 4, 5, 3], seventh: false,
+    blurb: 'The same four chords rotated. Probably the most recorded loop alive.',
+    songs: ['No Woman No Cry — Bob Marley', 'Demons — Imagine Dragons', 'I\'m Yours — Jason Mraz', 'Torn — Natalie Imbruglia'] },
+  { id: 'hbOneFourSixFive', family: 'Handbook', label: '12B · I–IV–vi–V', mode: 'ionian',
+    degrees: [0, 3, 5, 4], seventh: false,
+    blurb: 'The subdominant arrives early, so the minor lands harder.',
+    songs: ['More Than a Feeling — Boston', 'She Drives Me Crazy — Fine Young Cannibals'] },
+  { id: 'hbRhythmChanges', family: 'Handbook', label: '13 · Rhythm Changes', mode: 'ionian',
+    degrees: [0, 5, 1, 4], seventh: false,
+    blurb: 'I–vi–ii–V. The circle of fifths, walked backwards, four bars at a time.',
+    songs: ['I Got Rhythm — George Gershwin', 'Blue Moon — Rodgers and Hart', 'Dancing in the Moonlight — King Harvest'] },
+  { id: 'hbSecondaryDom', family: 'Handbook', label: '13B · Secondary Dominants', mode: 'ionian',
+    degrees: [
+      { degree: 0, size: 4 },
+      { degree: 5, size: 4, colour: 'dom' },
+      { degree: 1, size: 4, colour: 'dom' },
+      { degree: 4, size: 4, colour: 'dom' },
+    ],
+    blurb: 'Each chord turned into the dominant of the next, so the loop pulls all the way round.',
+    songs: ['Come and Get Your Love — Redbone', 'Walk Right In — Gus Cannon', 'Alice\'s Restaurant — Arlo Guthrie'] },
+  { id: 'hbTurnaround', family: 'Handbook', label: '13D · The Turnaround', mode: 'ionian',
+    degrees: [
+      { degree: 2, size: 4 },
+      { degree: 5, size: 4 },
+      { degree: 1, size: 4 },
+      { degree: 4, size: 4, colour: 'dom' },
+    ],
+    blurb: 'iii–vi–ii–V. Tacked on the end to extend an ending, in show tunes and jazz.',
+    songs: ['Standard jazz and show-tune ending'] },
+  { id: 'hbTwoFiveOneFour', family: 'Handbook', label: '14 · ii–V–I–IV', mode: 'ionian',
+    degrees: [
+      { degree: 1, size: 4 },
+      { degree: 4, size: 4, colour: 'dom' },
+      { degree: 0, size: 3 },
+      { degree: 3, size: 3 },
+    ],
+    blurb: 'The jazz cadence, then straight out to the subdominant instead of resting.',
+    songs: ['Ice Cream — Sarah McLachlan'] },
+  { id: 'hbModalTwoFour', family: 'Handbook', label: '15 · Modal with ii and IV', mode: 'ionian',
+    degrees: [0, 1, 3, 4], seventh: false,
+    blurb: 'Stepwise out of the tonic. Modern pop leans on this constantly.',
+    songs: ['Marry You — Bruno Mars', 'Lips Are Movin — Meghan Trainor', 'What\'s Up — 4 Non Blondes'] },
+  { id: 'hbFlatSevenLoop', family: 'Handbook', label: '16 · I–♭VII–IV–I', mode: 'mixolydian',
+    degrees: [0, 6, 3, 0], seventh: false,
+    blurb: 'Mixolydian rock. The ♭VII is what stops it sounding like a hymn.',
+    songs: ['Born This Way — Lady Gaga', 'Who Are You — The Who', 'Royals — Lorde', 'Gloria — Them'] },
+  { id: 'hbMinorFlatSevenThree', family: 'Handbook', label: '18 · i–♭III–♭VII–i', mode: 'aeolian',
+    degrees: [0, 2, 6, 0], seventh: false,
+    blurb: 'Minor, its relative major, and the subtonic. Endlessly loopable.',
+    songs: ['Right Round — Flo Rida', 'Jolene — Dolly Parton', 'Na Na Hey Hey Kiss Him Goodbye — Steam'] },
+  { id: 'hbAndalusian', family: 'Handbook', label: '19 · Andalusian Cadence', mode: 'aeolian',
+    degrees: [
+      { degree: 0, size: 3 },
+      { degree: 6, size: 3 },
+      { degree: 5, size: 3 },
+      { degree: 4, size: 4, colour: 'dom' },
+    ],
+    blurb: 'Stepwise descending, out of Flamenco. The V7 at the bottom is what makes it Spanish rather than merely minor.',
+    songs: ['Greensleeves — traditional', 'Hit the Road Jack — Ray Charles', 'Stray Cat Strut — Stray Cats', 'All Along the Watchtower — Jimi Hendrix'] },
+  { id: 'hbPachelbel', family: 'Handbook', label: '20 · Pachelbel\'s Canon', mode: 'ionian',
+    degrees: [0, 4, 5, 2, 3, 0, 3, 4], seventh: false,
+    blurb: 'Eight bars from 1680 that pop music has never stopped borrowing.',
+    songs: ['Basket Case — Green Day', 'Changes — David Bowie', 'Hook — Blues Traveler', 'Hometown — Joe Jackson'] },
 ];
 
 const TEMPLATE_FAMILIES = [...new Set(TEMPLATES.map((t) => t.family))];
@@ -4335,7 +4514,10 @@ const PRESETS = {
     tone: { low: 1.5, mid: -1, midFreq: 600, high: 1.5 },
     reverb: 0.24,
     gain: 0.42,
-    coupling: 0.02, // undamped neighbours ring in sympathy, as on a real piano
+    // Undamped neighbours ring in sympathy, as on a real piano — but gently.
+    // A long decay leaves very little headroom before the coupled loop stops
+    // being passive, and the sympathetic ring is a colour, not the sound.
+    coupling: 0.006,
     isKeyboard: true,
   },
   rhodes: {
@@ -4802,6 +4984,25 @@ class AudioEngine {
     const t = Math.max(when ?? this.currentTime, 0);
     this.node.port.postMessage({
       type: 'cut',
+      frame: Math.max(0, Math.round(t * this.ctx.sampleRate)),
+      level,
+      time,
+    });
+  }
+
+  /**
+   * Fade the strings out at a moment in the future.
+   *
+   * Unlike `cut`, this leaves the event queue alone, so it can be scheduled at
+   * the *end* of an audition without cancelling the audition itself. Without
+   * it a tapped chord rings for its full decay time — nine seconds on the
+   * piano — and the only way to stop it is to play something else.
+   */
+  damp(when, { level = 0.92, time = 0.45 } = {}) {
+    if (!this.ready) return;
+    const t = Math.max(when ?? this.currentTime, 0);
+    this.node.port.postMessage({
+      type: 'damp',
       frame: Math.max(0, Math.round(t * this.ctx.sampleRate)),
       level,
       time,
@@ -5419,12 +5620,18 @@ function auditionStart() {
 async function playChordNow(chord, voicing, { duration, fraction } = {}) {
   if (!(await ensureAudio())) return;
   const dur = duration ?? barDuration(state.timeSig, state.bpm);
-  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, auditionStart(), dur, {
+  const frac = fraction ?? previewFraction();
+  const when = auditionStart();
+  sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, when, dur, {
     rhythm: state.rhythm,
     tuning: tuning(),
     velocity: 1,
-    previewFraction: fraction ?? previewFraction(),
+    previewFraction: frac,
   });
+  // An audition is a question, not a performance: it has to end on its own.
+  // Left alone the strings ring for the preset's full decay — nine seconds on
+  // the piano — and the only way to stop them is to play something else.
+  engine.damp(when + dur * frac);
 }
 
 async function previewDegree(degree) {
@@ -5453,6 +5660,7 @@ async function playModeScale(idx) {
       layer: true,
     });
   });
+  engine.damp(t0 + steps.length * 0.26 + 0.5, { level: 0.85, time: 0.6 });
 }
 
 async function playModeVamp(idx) {
@@ -5471,6 +5679,7 @@ async function playModeVamp(idx) {
       velocity: 1,
     });
   });
+  engine.damp(t0 + info.vampDegrees.length * dur);
 }
 
 async function togglePlay() {
@@ -5539,9 +5748,11 @@ function addHalfBar(barIdx) {
 }
 
 function applyDegrees(degrees, seventh, mode = null) {
-  // A suggestion carries the mode it belongs in. Applying it without switching
-  // would silently produce different chords from the ones it is named for.
-  if (mode && MODE_IDS.includes(mode)) state.modeIdx = MODE_IDS.indexOf(mode);
+  // A suggestion carries the mode it belongs in, and applying it without
+  // switching would produce different chords from the ones it is named for.
+  // A locked key overrides that: the user has already said what the song is.
+  const target = suggestionMode(mode);
+  if (MODE_IDS.includes(target)) state.modeIdx = MODE_IDS.indexOf(target);
   const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
   const nextBars = makeBars(size);
@@ -5676,6 +5887,13 @@ function renderCircle() {
     return { x: 140 + r * Math.sin(a), y: 140 - r * Math.cos(a) };
   };
 
+  // Which degree of the key each pitch class is, keyed by pitch class so both
+  // rings of the wheel can look themselves up.
+  const gradeAt = new Map();
+  diatonicChords(state.rootPc, modeId(), 3).forEach((chord, d) => {
+    gradeAt.set(chord.root, { numeral: chord.numeral, chord, fn: degreeFunction(d, modeId()) });
+  });
+
   CIRCLE.forEach((note, i) => {
     const hue = i * 30;
     const isRoot = note === state.rootPc;
@@ -5703,6 +5921,26 @@ function renderCircle() {
       isRootMinor || isDiaMinor ? 'oklch(0.97 0.003 250)' : 'oklch(0.65 0.006 250 / 0.55)'
     };`;
     labels.append(outer, inner);
+
+    // Grade markers. Every wedge that belongs to the key gets its roman
+    // numeral, so the whole chord set of the tone is readable straight off the
+    // wheel — and it re-labels itself the moment the root moves, which is the
+    // point: the same shape on the circle means a different degree in a
+    // different key. They ride inside the note label rather than being placed
+    // separately, which keeps them off the rim and stops them colliding with
+    // the wedge borders.
+    const grade = gradeAt.get(note);
+    if (grade) {
+      const g = el('i', `grade fn-${grade.fn.toLowerCase()}`, grade.numeral);
+      g.title = `${grade.chord.symbol} — ${functionLabel(grade.fn)}`;
+      outer.appendChild(g);
+    }
+    const gradeMinor = gradeAt.get(minorNote);
+    if (gradeMinor) {
+      const g = el('i', `grade fn-${gradeMinor.fn.toLowerCase()}`, gradeMinor.numeral);
+      g.title = `${gradeMinor.chord.symbol} — ${functionLabel(gradeMinor.fn)}`;
+      inner.appendChild(g);
+    }
   });
 
   $('wheelOuter').style.background = `conic-gradient(from -15deg, ${outerStops.join(', ')})`;
@@ -5720,7 +5958,10 @@ function renderCircle() {
 
   // The chord/note choice only means anything while locked, so it appears with
   // the mode it belongs to instead of sitting there inert.
-  $('exploreModeRow').hidden = !state.rootLocked;
+  // The chord/note choice governs every note button on this screen, not just
+  // the wheel, so it is always available rather than appearing only once the
+  // key is locked.
+  $('exploreModeRow').hidden = false;
   const modeBtns = $('exploreModeBtns');
   modeBtns.replaceChildren();
   for (const [id, label] of [['chord', 'Chord'], ['note', 'Note']]) {
@@ -5738,23 +5979,47 @@ function renderCircle() {
   renderSecondaryDominants(posAt);
   renderExplore();
 
+  // The scale strip: every degree of the key, labelled with its roman numeral
+  // so the grades of the tone are visible here as well as on the wheel. It
+  // obeys the same Chord/Note switch as the wheel — one setting for every note
+  // button on the screen, rather than two rules to remember.
   const strip = $('scaleStrip');
   strip.replaceChildren();
+  const keyChords = diatonicChords(state.rootPc, modeId(), state.chordSize);
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
-    const b = el('button', i === 0 ? 'tonic' : '', noteName(pc, preferFlats()));
-    b.title = `Scale degree ${i + 1}`;
-    // Scale degrees are for jamming: they layer over whatever is sounding
-    // instead of cutting it, and each one is placed on a free string so a run
-    // rings like a real player moving across the neck.
+    const chord = keyChords[i];
+    const b = el('button', i === 0 ? 'tonic' : '');
+    b.append(
+      el('span', 'strip-note', noteName(pc, preferFlats())),
+      el('span', 'strip-grade', chord.numeral)
+    );
+    b.title =
+      state.exploreMode === 'chord'
+        ? `${chord.symbol} — degree ${i + 1} (${chord.numeral})`
+        : `${noteName(pc, preferFlats())} — degree ${i + 1}`;
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
+      if (state.exploreMode === 'chord') {
+        const v = resolveVoicing(chord, 'root', { tuning: tuning() });
+        if (v) {
+          const when = auditionStart();
+          engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
+          engine.damp(when + exploreRingSeconds());
+          return;
+        }
+      }
+      // Single notes are for jamming: they layer over whatever is sounding
+      // instead of cutting it, and each is placed on a free string so a run
+      // rings like a real player moving across the neck.
+      const when = engine.currentTime + 0.02;
       engine.pluckNote({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
         tuning: tuning(),
-        when: engine.currentTime + 0.02,
+        when,
         velocity: 0.85,
         layer: true,
       });
+      engine.damp(when + exploreRingSeconds() + 0.8, { level: 0.8, time: 0.7 });
     };
     strip.appendChild(b);
   });
@@ -5850,6 +6115,7 @@ function renderSecondaryDominants(posAt) {
           velocity: 1,
         });
       });
+      engine.damp(t0 + 2 * dur);
     };
     row.appendChild(b);
   }
@@ -5916,12 +6182,22 @@ async function playExplore() {
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) { engine.strumOnce({ midi: v.midi, when, velocity: 0.9 }); return; }
+    if (v) {
+      engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
+      engine.damp(when + exploreRingSeconds());
+      return;
+    }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
   engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
+  engine.damp(when + exploreRingSeconds());
+}
+
+/** How long a tapped wedge rings before it is faded out. */
+function exploreRingSeconds() {
+  return Math.max(1.2, barDuration(state.timeSig, state.bpm) * previewFraction());
 }
 
 function renderTone() {
@@ -6803,7 +7079,7 @@ function startQuiz() {
  * degrees or full specs, so a template can call for an altered dominant.
  */
 function chordsForSuggestion(degrees, seventh, mode) {
-  const modeName = mode && MODE_IDS.includes(mode) ? mode : modeId();
+  const modeName = suggestionMode(mode);
   const size = sizeFromLegacy(seventh, 3);
   return degrees.map((entry) => chordForSpec(state.rootPc, modeName, toSpec(entry, size)));
 }
@@ -6818,7 +7094,29 @@ function chordNamesFor(degrees, seventh, mode) {
   return chordsForSuggestion(degrees, seventh, mode).map((c) => c.symbol).join(' ');
 }
 
+/**
+ * The mode a suggestion should be read and played in.
+ *
+ * Templates carry the mode they belong to, which is right when browsing freely
+ * — a Mixolydian riff is not the same idea in Ionian. But once the key is
+ * locked the user has said what the song is, and a suggestion that silently
+ * changes the mode out from under them is no longer a suggestion in their song.
+ * Locking therefore wins: everything in Assist is shown, auditioned and applied
+ * in the locked key.
+ */
+function suggestionMode(templateMode) {
+  if (state.rootLocked) return modeId();
+  return templateMode && MODE_IDS.includes(templateMode) ? templateMode : modeId();
+}
+
 function renderAssist() {
+  const keyName = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
+  $('assistKeyName').textContent = keyName;
+  $('assistKeyLock').textContent = state.rootLocked
+    ? '🔒 locked — suggestions stay in this key'
+    : 'unlocked — a suggestion may bring its own mode';
+  $('assistKeyBanner').classList.toggle('locked', state.rootLocked);
+
   const moodRow = $('moodRow');
   moodRow.replaceChildren();
   for (const m of MOODS) {
@@ -6896,9 +7194,26 @@ function renderAssist() {
     // current key, so what is promised is what is heard.
     const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
     const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
-    const meta = el('span', 'template-meta', `${MODE_NAMES[MODE_IDS.indexOf(t.mode)]} · ${t.degrees.length} bars`);
+    // Name the mode it will actually be heard in, which is the locked one when
+    // the key is locked — not the mode the template was written in.
+    const shownMode = suggestionMode(t.mode);
+    const recast = state.rootLocked && shownMode !== t.mode;
+    const meta = el(
+      'span',
+      'template-meta',
+      `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars`
+    );
 
     card.append(head, numerals, names, el('p', '', t.blurb), meta);
+
+    // Songs built on this progression. A roman numeral means little until you
+    // recognise something you already know inside it, so where the source names
+    // examples they are shown rather than kept in a data file.
+    if (t.songs && t.songs.length) {
+      const songs = el('ul', 'song-list');
+      for (const s of t.songs) songs.appendChild(el('li', '', s));
+      card.append(el('span', 'micro-label', 'HEARD IN'), songs);
+    }
 
     // Tapping the card auditions the progression without replacing the timeline.
     card.onclick = (e) => {
@@ -6934,6 +7249,7 @@ async function previewProgression(t) {
       velocity: 1,
     });
   });
+  engine.damp(t0 + chords.length * dur);
   toast(`Previewing ${t.label} — tap Apply to keep it.`);
 }
 
