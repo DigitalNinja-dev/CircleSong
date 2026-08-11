@@ -40,7 +40,6 @@ const MODULES = [
   'src/content.js',
   'src/audio/impulse.js',
   'src/audio/drums.js',
-  'src/audio/recorder.js',
   'src/audio/engine.js',
   'src/sequencer.js',
   'src/app.js',

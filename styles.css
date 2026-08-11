@@ -723,12 +723,3 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   white-space: nowrap;
 }
 .project-meta { font: 400 9px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
-#recordStatus { align-self: center; }
-.chip.recording, .chip.filled-c.recording {
-  background: oklch(0.6 0.22 25);
-  border-color: oklch(0.6 0.22 25);
-  color: oklch(0.99 0 0);
-  animation: rec-pulse 1.2s ease-in-out infinite;
-}
-@keyframes rec-pulse { 50% { opacity: 0.6; } }
-#recordDownloads a { text-decoration: none; }

@@ -37,7 +37,6 @@ import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
 import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
-import { Recorder, compressedFormat } from './audio/recorder.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
@@ -100,8 +99,6 @@ const state = {
   projectTitle: 'Untitled Song',
   /** Which saved project this song came from, so Save overwrites it. */
   projectId: null,
-  /** Live Recorder while capturing audio, else null. */
-  recorder: null,
   bpm: 96,
   timeSig: '4/4',
   metronome: true,
@@ -1908,10 +1905,6 @@ function renderSongs() {
   $('songsCurrent').textContent =
     `${state.projectTitle} · ${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]} · ${state.bpm} BPM · ${secs} loop${secs === 1 ? '' : 's'} · ${filled} bars written`;
 
-  const fmt = compressedFormat();
-  $('exportAudioHint').textContent = fmt
-    ? `Plays the song once and captures it. You get a WAV (lossless, opens anywhere) and ${fmt.label}. Browsers cannot encode MP3 — convert the WAV if you need one.`
-    : 'Plays the song once and captures it as a WAV. This browser offers no compressed recording format.';
 
   $('saveProjectBtn').disabled = !storageAvailable();
 
@@ -1972,67 +1965,6 @@ function doSaveProject(asNew = false) {
   state.projectId = result.id;
   renderSongs();
   toast(`Saved “${state.projectTitle}”.`);
-}
-
-/**
- * Record the song to audio.
- *
- * Captured from the live output rather than rendered separately, so the file
- * is exactly what was heard — the same limiter, the same reverb tail. That
- * means it runs in real time: one pass through the loop.
- */
-async function toggleRecording() {
-  const btn = $('recordBtn');
-  const status = $('recordStatus');
-
-  if (state.recorder) {
-    const rec = state.recorder;
-    state.recorder = null;
-    if (sequencer.playing) togglePlay();
-    // Let the tail ring out rather than chopping the last chord.
-    status.textContent = 'finishing…';
-    await new Promise((r) => setTimeout(r, 900));
-    const result = await rec.stop();
-    btn.textContent = '● Record the loop';
-    btn.classList.remove('recording');
-    status.textContent = result.seconds
-      ? `captured ${result.seconds.toFixed(1)}s`
-      : 'nothing captured';
-    showDownloads(result);
-    return;
-  }
-
-  if (!(await ensureAudio())) return;
-  if (!bars().some((b) => b.slots.some(Boolean)) && !state.metronome && !state.drumsOn) {
-    toast('Nothing to record — add some chords first.');
-    return;
-  }
-
-  const rec = new Recorder(engine.ctx, engine.safety);
-  await rec.start({ compressed: true, wav: true });
-  state.recorder = rec;
-  $('recordDownloads').hidden = true;
-  btn.textContent = '■ Stop and save';
-  btn.classList.add('recording');
-  status.textContent = 'recording…';
-  if (!sequencer.playing) togglePlay();
-}
-
-function showDownloads(result) {
-  const row = $('recordDownloads');
-  row.replaceChildren();
-  const stem = (state.projectTitle || 'circlesong').replace(/[^\w-]+/g, '_') || 'circlesong';
-
-  const add = (blob, ext, label) => {
-    if (!blob || !blob.size) return;
-    const a = el('a', 'chip small filled-a', `${label} · ${(blob.size / 1024 / 1024).toFixed(1)} MB`);
-    a.href = URL.createObjectURL(blob);
-    a.download = `${stem}.${ext}`;
-    row.appendChild(a);
-  };
-  add(result.wav, 'wav', 'Download WAV');
-  if (result.compressed && result.ext) add(result.compressed, result.ext, `Download ${result.ext.toUpperCase()}`);
-  row.hidden = !row.children.length;
 }
 
 function renderLearn() {
@@ -2510,7 +2442,6 @@ function wire() {
     render();
     toast('New song started.');
   };
-  $('recordBtn').onclick = toggleRecording;
   $('exportBtn2').onclick = exportSong;
   $('importInput2').onchange = importSong;
 
