@@ -25,7 +25,7 @@ function store() {
   }
 }
 
-export function isAvailable() {
+export function storageAvailable() {
   return store() !== null;
 }
 

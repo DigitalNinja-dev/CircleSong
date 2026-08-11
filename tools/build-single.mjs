@@ -73,6 +73,27 @@ const MODULES = [
   if (uncached.length) {
     throw new Error(`build: these modules are not precached in sw.js: ${uncached.join(', ')}`);
   }
+
+  // Renamed imports cannot survive bundling. The modules are concatenated into
+  // one scope and the import lines are simply deleted, so `import { a as b }`
+  // leaves every use of `b` undefined. Real ESM handles it, which is the
+  // problem: it works in the dev server and throws only in the shipped single
+  // file — and a throw during render takes the whole UI down with it.
+  const aliased = [];
+  for (const rel of found) {
+    const src = read(rel);
+    for (const m of src.matchAll(/^import\s*\{([^}]*)\}\s*from[^;]*;/gms)) {
+      for (const part of m[1].split(',')) {
+        const named = part.match(/(\S+)\s+as\s+(\S+)/);
+        if (named) aliased.push(`${rel}: ${named[1]} as ${named[2]}`);
+      }
+    }
+  }
+  if (aliased.length) {
+    throw new Error(
+      `build: renamed imports do not survive bundling — rename the export instead:\n  ${aliased.join('\n  ')}`
+    );
+  }
 }
 
 // Stamp the service worker's cache name with a hash of everything it precaches.

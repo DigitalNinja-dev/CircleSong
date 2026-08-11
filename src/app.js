@@ -36,7 +36,7 @@ import {
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
-import { listProjects, saveProject, loadProject, deleteProject, isAvailable as storageAvailable } from './projects.js';
+import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
 import { Recorder, compressedFormat } from './audio/recorder.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';

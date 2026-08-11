@@ -116,7 +116,7 @@ a { color: var(--a); }
 .row.gap-xs { gap: 5px; }
 .grow { flex: 1; min-width: 0; }
 .scroll-x { overflow-x: auto; padding-bottom: 2px; }
-.spacer { flex: 1; }
+.spacer { flex: 1; min-height: calc(62px + env(safe-area-inset-bottom)); }
 .mt { margin-top: 18px; }
 .mt-s { margin-top: 10px; }
 .block { display: block; width: 100%; }
@@ -407,8 +407,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .variant-card .chip { background: var(--c); border-color: var(--c); color: var(--ink); border-radius: 7px; padding: 5px 10px; font-size: 10px; }
 
 /* ---------- tab bar ---------- */
+/* Fixed, not sticky. Sticky only pins once the page has been scrolled, so on
+   a screen where the content is barely taller than the viewport the nav sat
+   just below the fold on load and looked like it was missing. A bottom nav has
+   to be there before you go looking for it. */
 .tabbar {
-  position: sticky; bottom: 0; z-index: 20; display: flex;
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px;
+  z-index: 20; display: flex;
   background: var(--bar); backdrop-filter: blur(8px);
   border-top: 1px solid oklch(0.65 0.2 135 / 0.28);
   padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
@@ -3636,7 +3642,7 @@ function store() {
   }
 }
 
-function isAvailable() {
+function storageAvailable() {
   return store() !== null;
 }
 
