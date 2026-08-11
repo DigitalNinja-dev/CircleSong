@@ -103,14 +103,21 @@ export const PRESETS = {
   piano: {
     label: 'Grand Piano',
     string: {
-      decay: 9.0, brightness: 0.5, pickPos: 0.125, hardness: 0.45,
+      // A struck string, not a plucked one. The hammer is soft and the strike
+      // sits an eighth of the way along, which is what kills the odd partials
+      // a pick would leave in. Brightness is low because a piano's energy is in
+      // its fundamental and low partials — pushing the top end is the fastest
+      // way to make it read as a guitar again.
+      decay: 11.0, brightness: 0.34, pickPos: 0.125, hardness: 0.3,
       pickupMix: 0, hammer: 1, stiffness: 0.55,
     },
     body: 'piano',
-    bodyMix: 0.7,
+    bodyMix: 0.86,
     drive: 0,
-    tone: { low: 1.5, mid: -1, midFreq: 600, high: 1.5 },
-    reverb: 0.24,
+    // Weight underneath, a scooped middle, and no presence peak. A guitar's
+    // voice lives in the mids; a piano's lives at both ends.
+    tone: { low: 4, mid: -3.5, midFreq: 900, high: 0.5 },
+    reverb: 0.3,
     gain: 0.42,
     // Undamped neighbours ring in sympathy, as on a real piano — but gently.
     // A long decay leaves very little headroom before the coupled loop stops
@@ -521,7 +528,11 @@ export class AudioEngine {
     // piano.
     const keys = this.isKeyboard;
     if (keys) {
-      spread = Math.min(spread, 0.006);
+      // Ten fingers land together. Even six milliseconds of spread reads as a
+      // strum, and a strum is the single loudest cue that says "guitar" — so a
+      // keyboard preset gets essentially none, unless the pattern asked for a
+      // deliberate roll.
+      spread = Math.min(spread, 0.0015);
       direction = 'D';
     }
 

@@ -395,6 +395,36 @@
       <div class="stack" id="templateList"></div>
     </section>
 
+    <!-- /08 SONGS -->
+    <section class="panel" id="tab-songs" hidden>
+      <h2>/08 SONGS</h2>
+      <div class="card flat">
+        <span class="micro-label">CURRENT SONG</span>
+        <p id="songsCurrent" class="mono-strong"></p>
+        <div class="row wrap gap-xs mt-s">
+          <button id="saveProjectBtn" class="chip small filled-a">Save</button>
+          <button id="saveAsProjectBtn" class="chip small">Save as new</button>
+          <button id="newProjectBtn" class="chip small">New song</button>
+        </div>
+      </div>
+
+      <h3>// EXPORT_AUDIO</h3>
+      <p class="hint block" id="exportAudioHint"></p>
+      <div class="row wrap gap-xs">
+        <button id="recordBtn" class="chip small filled-c">● Record the loop</button>
+        <span id="recordStatus" class="micro-label"></span>
+      </div>
+      <div class="row wrap gap-xs mt-s" id="recordDownloads" hidden></div>
+
+      <h3>// SAVED_PROJECTS</h3>
+      <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
+      <div class="stack" id="projectList"></div>
+      <div class="row gap-s mt">
+        <button id="exportBtn2" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
+      </div>
+    </section>
+
     <div class="spacer"></div>
 
     <footer class="byline">CircleSong — by Nicolas Jean Pierre Figueroa</footer>

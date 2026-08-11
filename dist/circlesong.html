@@ -716,6 +716,36 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .template-body { padding: 0 12px 12px; }
 .template-body p { margin: 6px 0 0; font: 400 11px/1.5 var(--sans); color: oklch(0.66 0.008 250); }
 
+/* ---------------------------------------------- songs / project library */
+.project-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+.project-row.active { border-color: var(--a); }
+.project-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.project-title {
+  font: 500 12px var(--sans);
+  color: oklch(0.92 0.006 250);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-meta { font: 400 9px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
+#recordStatus { align-self: center; }
+.chip.recording, .chip.filled-c.recording {
+  background: oklch(0.6 0.22 25);
+  border-color: oklch(0.6 0.22 25);
+  color: oklch(0.99 0 0);
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-pulse { 50% { opacity: 0.6; } }
+#recordDownloads a { text-decoration: none; }
+
 </style>
 </head>
 <body>
@@ -1091,6 +1121,36 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       <input id="templateSearch" class="search-input" type="search" placeholder="Search name, numerals, or a song…" aria-label="Search progressions">
       <p id="templateCount" class="micro-label"></p>
       <div class="stack" id="templateList"></div>
+    </section>
+
+    <!-- /08 SONGS -->
+    <section class="panel" id="tab-songs" hidden>
+      <h2>/08 SONGS</h2>
+      <div class="card flat">
+        <span class="micro-label">CURRENT SONG</span>
+        <p id="songsCurrent" class="mono-strong"></p>
+        <div class="row wrap gap-xs mt-s">
+          <button id="saveProjectBtn" class="chip small filled-a">Save</button>
+          <button id="saveAsProjectBtn" class="chip small">Save as new</button>
+          <button id="newProjectBtn" class="chip small">New song</button>
+        </div>
+      </div>
+
+      <h3>// EXPORT_AUDIO</h3>
+      <p class="hint block" id="exportAudioHint"></p>
+      <div class="row wrap gap-xs">
+        <button id="recordBtn" class="chip small filled-c">● Record the loop</button>
+        <span id="recordStatus" class="micro-label"></span>
+      </div>
+      <div class="row wrap gap-xs mt-s" id="recordDownloads" hidden></div>
+
+      <h3>// SAVED_PROJECTS</h3>
+      <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
+      <div class="stack" id="projectList"></div>
+      <div class="row gap-s mt">
+        <button id="exportBtn2" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
+      </div>
     </section>
 
     <div class="spacer"></div>
@@ -2067,6 +2127,11 @@ const RHYTHMS = [
   { id: 'travis', label: 'Travis Picking', tag: 'arp' },
   { id: 'arpUp', label: 'Rising Arpeggio', tag: 'arp' },
   { id: 'wholeNote', label: 'Let Ring', tag: 'sustain' },
+  { id: 'keysBlock', label: 'Block Chords', tag: 'keys' },
+  { id: 'keysBallad', label: 'Ballad Left Hand', tag: 'keys' },
+  { id: 'keysAlberti', label: 'Alberti Bass', tag: 'keys' },
+  { id: 'keysBroken', label: 'Broken Chord', tag: 'keys' },
+  { id: 'keysComp', label: 'Comping Stabs', tag: 'keys' },
 ];
 
 const d = (t, vel = 0.85, extra = {}) => ({ t, dir: 'D', vel, mute: 0, spread: 0.024, ...extra });
@@ -2309,6 +2374,78 @@ const RHYTHM_PATTERNS = {
   wholeNote: {
     kind: 'strum',
     hits: [d(0, 0.95, { spread: 0.05 })],
+  },
+
+  // --- keyboard patterns ---
+  //
+  // A piano has no pick crossing the strings, so none of the patterns above
+  // describe one: an upstroke is not a thing a pianist can do, and a strum
+  // spread is the one cue that most says "guitar". These work in parts instead
+  // — bass note, upper voices, or the whole chord struck together — which is
+  // how a keyboard player actually divides a chord up.
+  keysBlock: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'all', vel: 1.0 },
+      { t: 0.25, part: 'all', vel: 0.78 },
+      { t: 0.5, part: 'all', vel: 0.9 },
+      { t: 0.75, part: 'all', vel: 0.76 },
+    ],
+  },
+
+  // The ballad shape: root in the left hand, chord answering above it.
+  keysBallad: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'bass', vel: 0.95 },
+      { t: 0.125, part: 'upper', vel: 0.72, roll: 0.02 },
+      { t: 0.5, part: 'bass', vel: 0.8 },
+      { t: 0.625, part: 'upper', vel: 0.68, roll: 0.02 },
+    ],
+  },
+
+  // Alberti bass: low, high, middle, high. Two centuries of keyboard music.
+  keysAlberti: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'bass', vel: 0.9 },
+      { t: 0.125, part: 0, vel: 0.68 },
+      { t: 0.25, part: 1, vel: 0.7 },
+      { t: 0.375, part: 0, vel: 0.66 },
+      { t: 0.5, part: 'bass', vel: 0.85 },
+      { t: 0.625, part: 0, vel: 0.68 },
+      { t: 0.75, part: 1, vel: 0.7 },
+      { t: 0.875, part: 0, vel: 0.66 },
+    ],
+  },
+
+  // Flowing broken chord, up and back down.
+  keysBroken: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'bass', vel: 0.92 },
+      { t: 0.125, part: 2, vel: 0.7 },
+      { t: 0.25, part: 1, vel: 0.72 },
+      { t: 0.375, part: 0, vel: 0.78 },
+      { t: 0.5, part: 1, vel: 0.7 },
+      { t: 0.625, part: 2, vel: 0.68 },
+      { t: 0.75, part: 'bass', vel: 0.8 },
+      { t: 0.875, part: 2, vel: 0.66 },
+    ],
+  },
+
+  // Off-the-beat chord stabs over a rooted downbeat — pop and soul comping.
+  keysComp: {
+    kind: 'keys',
+    swing: 0.15,
+    hits: [
+      { t: 0, part: 'bass', vel: 0.9 },
+      { t: 0.1875, part: 'upper', vel: 0.85 },
+      { t: 0.375, part: 'upper', vel: 0.7 },
+      { t: 0.5, part: 'bass', vel: 0.78 },
+      { t: 0.6875, part: 'upper', vel: 0.82 },
+      { t: 0.875, part: 'upper', vel: 0.72 },
+    ],
   },
 };
 
@@ -3471,6 +3608,145 @@ function capitalise(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/* ===== src/projects.js ===== */
+// Saved projects, kept in localStorage.
+//
+// The app already knows how to turn a song into JSON and back — that is what
+// export and import do. This reuses exactly that shape rather than inventing a
+// second one, so a saved project and an exported file are the same thing and
+// neither can drift from the other.
+//
+// Storage is deliberately dumb: an index of metadata under one key, and each
+// song under its own. That keeps listing cheap when there are many songs, and
+// means one corrupt project cannot take the rest of the library with it.
+
+const INDEX_KEY = 'circlesong.projects';
+const SONG_PREFIX = 'circlesong.song.';
+
+/** localStorage can be absent or blocked; the app must still run. */
+function store() {
+  try {
+    const s = window.localStorage;
+    const probe = '__circlesong_probe__';
+    s.setItem(probe, '1');
+    s.removeItem(probe);
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function isAvailable() {
+  return store() !== null;
+}
+
+function readIndex(s) {
+  try {
+    const raw = s.getItem(INDEX_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeIndex(s, list) {
+  s.setItem(INDEX_KEY, JSON.stringify(list));
+}
+
+/** Saved projects, most recently saved first. */
+function listProjects() {
+  const s = store();
+  if (!s) return [];
+  return readIndex(s).slice().sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+}
+
+/**
+ * Save a song, replacing any project with the same id.
+ *
+ * @param {object} data  the same JSON shape `exportSong` produces
+ * @param {string|null} id  an existing project to overwrite, or null for a new one
+ * @returns {{id:string}|{error:string}}
+ */
+function saveProject(data, id = null) {
+  const s = store();
+  if (!s) return { error: 'This browser will not let the app store anything locally.' };
+
+  const projectId = id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const entry = {
+    id: projectId,
+    title: data.title || 'Untitled Song',
+    bpm: data.bpm,
+    key: data.keyName || '',
+    bars: data.barTotal || 0,
+    sections: (data.sections || []).length,
+    savedAt: Date.now(),
+  };
+
+  try {
+    s.setItem(SONG_PREFIX + projectId, JSON.stringify(data));
+  } catch {
+    // Quota is the realistic failure here, and it needs to say so plainly
+    // rather than looking like the save silently worked.
+    return { error: 'No room left in this browser\'s storage. Delete a project and try again.' };
+  }
+
+  const list = readIndex(s).filter((p) => p.id !== projectId);
+  list.push(entry);
+  writeIndex(s, list);
+  return { id: projectId, entry };
+}
+
+/** The full song JSON for a project, or null. */
+function loadProject(id) {
+  const s = store();
+  if (!s) return null;
+  try {
+    const raw = s.getItem(SONG_PREFIX + id);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function deleteProject(id) {
+  const s = store();
+  if (!s) return;
+  s.removeItem(SONG_PREFIX + id);
+  writeIndex(s, readIndex(s).filter((p) => p.id !== id));
+}
+
+function renameProject(id, title) {
+  const s = store();
+  if (!s) return;
+  const list = readIndex(s);
+  const entry = list.find((p) => p.id === id);
+  if (!entry) return;
+  entry.title = title;
+  writeIndex(s, list);
+  const song = loadProject(id);
+  if (song) {
+    song.title = title;
+    try {
+      s.setItem(SONG_PREFIX + id, JSON.stringify(song));
+    } catch {
+      /* the index rename still stands */
+    }
+  }
+}
+
+/** Rough footprint of the library, for showing how full storage is. */
+function storageUsed() {
+  const s = store();
+  if (!s) return 0;
+  let bytes = 0;
+  for (const p of readIndex(s)) {
+    const raw = s.getItem(SONG_PREFIX + p.id);
+    if (raw) bytes += raw.length;
+  }
+  return bytes;
+}
+
 /* ===== src/content.js ===== */
 // Editorial content: harmonic-function copy, mode lessons, and the rule-based
 // songwriting suggestions. Ported from the CircleSong design prototype.
@@ -4490,6 +4766,186 @@ class DrumKit {
   }
 }
 
+/* ===== src/audio/recorder.js ===== */
+// Recording the song to an audio file.
+//
+// A note on formats, because the obvious ask is "MP3" and browsers cannot do
+// it. No browser exposes an MP3 encoder — producing one means shipping a
+// LAME build (hundreds of kilobytes of JS, and a patent history) into an app
+// whose whole point is that it is one file that works offline. So this offers
+// what the platform actually has:
+//
+//   WAV  — written here from raw samples. Lossless, universal, opens in every
+//          DAW and converts to MP3 anywhere. Big, but exact.
+//   MP4 / WebM — whatever MediaRecorder supports. Safari gives AAC in an MP4
+//          container (a normal .m4a), Chrome and Firefox give Opus in WebM.
+//          Small, and fine for sharing.
+//
+// Both are captured from the live output in one pass, so what is written is
+// exactly what was heard — the same limiter, the same reverb tail.
+
+/** Container/codec options in the order we would rather have them. */
+const COMPRESSED_TYPES = [
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4',
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/ogg;codecs=opus',
+];
+
+/** The best compressed format this browser can write, or null. */
+function compressedFormat() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  for (const mimeType of COMPRESSED_TYPES) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeType)) {
+      const ext = mimeType.startsWith('audio/mp4') ? 'm4a' : mimeType.startsWith('audio/ogg') ? 'ogg' : 'webm';
+      return { mimeType, ext, label: ext === 'm4a' ? 'MP4 audio (.m4a)' : `${ext.toUpperCase()} audio` };
+    }
+  }
+  return null;
+}
+
+/**
+ * Capture the engine's output while something plays it.
+ *
+ * The caller starts playback and calls `stop()` when it has finished; this
+ * only listens. Both formats come off the same pass so they can never differ.
+ */
+class Recorder {
+  /**
+   * @param {AudioContext} ctx
+   * @param {AudioNode} source  the node to tap — the very end of the chain
+   */
+  constructor(ctx, source) {
+    this.ctx = ctx;
+    this.source = source;
+    this.recording = false;
+    this._chunks = [];
+    this._pcm = [[], []];
+    this._frames = 0;
+  }
+
+  async start({ compressed = true, wav = true } = {}) {
+    if (this.recording) return;
+    this.recording = true;
+    this._chunks = [];
+    this._pcm = [[], []];
+    this._frames = 0;
+    this._wantWav = wav;
+
+    // Raw samples for the WAV. A ScriptProcessor is deprecated but it is the
+    // one tap that works without shipping another worklet, and it only has to
+    // copy what is already flowing past.
+    if (wav) {
+      const size = 4096;
+      this._tap = this.ctx.createScriptProcessor(size, 2, 2);
+      this._tap.onaudioprocess = (e) => {
+        if (!this.recording) return;
+        const inp = e.inputBuffer;
+        this._pcm[0].push(new Float32Array(inp.getChannelData(0)));
+        this._pcm[1].push(new Float32Array(inp.getChannelData(inp.numberOfChannels > 1 ? 1 : 0)));
+        this._frames += inp.length;
+        // A ScriptProcessor must have somewhere to send its output or some
+        // browsers stop calling it, so it feeds a silent gain.
+      };
+      this._sink = this.ctx.createGain();
+      this._sink.gain.value = 0;
+      this.source.connect(this._tap);
+      this._tap.connect(this._sink);
+      this._sink.connect(this.ctx.destination);
+    }
+
+    const fmt = compressed ? compressedFormat() : null;
+    if (fmt) {
+      this._dest = this.ctx.createMediaStreamDestination();
+      this.source.connect(this._dest);
+      this._rec = new MediaRecorder(this._dest.stream, { mimeType: fmt.mimeType });
+      this._fmt = fmt;
+      this._rec.ondataavailable = (e) => { if (e.data && e.data.size) this._chunks.push(e.data); };
+      this._rec.start(250);
+    }
+  }
+
+  /** @returns {{wav: Blob|null, compressed: Blob|null, ext: string|null, seconds: number}} */
+  async stop() {
+    if (!this.recording) return { wav: null, compressed: null, ext: null, seconds: 0 };
+    this.recording = false;
+
+    let compressed = null;
+    if (this._rec) {
+      await new Promise((resolve) => {
+        this._rec.onstop = resolve;
+        this._rec.stop();
+      });
+      compressed = new Blob(this._chunks, { type: this._fmt.mimeType });
+      this.source.disconnect(this._dest);
+      this._dest = null;
+      this._rec = null;
+    }
+
+    let wav = null;
+    const seconds = this._frames / this.ctx.sampleRate;
+    if (this._tap) {
+      this.source.disconnect(this._tap);
+      this._tap.onaudioprocess = null;
+      this._tap.disconnect();
+      this._sink.disconnect();
+      this._tap = null;
+      this._sink = null;
+    }
+    if (this._wantWav && this._frames) wav = encodeWav(this._pcm, this._frames, this.ctx.sampleRate);
+    this._pcm = [[], []];
+    this._chunks = [];
+
+    return { wav, compressed, ext: this._fmt ? this._fmt.ext : null, seconds };
+  }
+}
+
+/** Interleave float chunks into a 16-bit stereo WAV. */
+function encodeWav(pcm, frames, sampleRate) {
+  const channels = 2;
+  const bytes = 44 + frames * channels * 2;
+  const buf = new ArrayBuffer(bytes);
+  const view = new DataView(buf);
+
+  const ascii = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  ascii(0, 'RIFF');
+  view.setUint32(4, bytes - 8, true);
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
+  view.setUint32(16, 16, true);          // PCM header size
+  view.setUint16(20, 1, true);           // format: PCM
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * channels * 2, true); // byte rate
+  view.setUint16(32, channels * 2, true);              // block align
+  view.setUint16(34, 16, true);                        // bits per sample
+  ascii(36, 'data');
+  view.setUint32(40, frames * channels * 2, true);
+
+  let offset = 44;
+  const write = (v) => {
+    // Clamp before scaling: the limiter should have handled this, but a sample
+    // that slipped past would wrap around into a loud click rather than clip.
+    const s = Math.max(-1, Math.min(1, v));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  };
+
+  for (let c = 0; c < pcm[0].length; c++) {
+    const l = pcm[0][c];
+    const r = pcm[1][c];
+    for (let i = 0; i < l.length; i++) {
+      write(l[i]);
+      write(r[i]);
+    }
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
 /* ===== src/audio/engine.js ===== */
 /**
  * Audio engine: owns the AudioContext, the string worklet, and the post chain.
@@ -4586,14 +5042,21 @@ const PRESETS = {
   piano: {
     label: 'Grand Piano',
     string: {
-      decay: 9.0, brightness: 0.5, pickPos: 0.125, hardness: 0.45,
+      // A struck string, not a plucked one. The hammer is soft and the strike
+      // sits an eighth of the way along, which is what kills the odd partials
+      // a pick would leave in. Brightness is low because a piano's energy is in
+      // its fundamental and low partials — pushing the top end is the fastest
+      // way to make it read as a guitar again.
+      decay: 11.0, brightness: 0.34, pickPos: 0.125, hardness: 0.3,
       pickupMix: 0, hammer: 1, stiffness: 0.55,
     },
     body: 'piano',
-    bodyMix: 0.7,
+    bodyMix: 0.86,
     drive: 0,
-    tone: { low: 1.5, mid: -1, midFreq: 600, high: 1.5 },
-    reverb: 0.24,
+    // Weight underneath, a scooped middle, and no presence peak. A guitar's
+    // voice lives in the mids; a piano's lives at both ends.
+    tone: { low: 4, mid: -3.5, midFreq: 900, high: 0.5 },
+    reverb: 0.3,
     gain: 0.42,
     // Undamped neighbours ring in sympathy, as on a real piano — but gently.
     // A long decay leaves very little headroom before the coupled loop stops
@@ -5004,7 +5467,11 @@ class AudioEngine {
     // piano.
     const keys = this.isKeyboard;
     if (keys) {
-      spread = Math.min(spread, 0.006);
+      // Ten fingers land together. Even six milliseconds of spread reads as a
+      // strum, and a strum is the single loudest cue that says "guitar" — so a
+      // keyboard preset gets essentially none, unless the pattern asked for a
+      // deliberate roll.
+      spread = Math.min(spread, 0.0015);
       direction = 'D';
     }
 
@@ -5328,6 +5795,49 @@ class Sequencer {
     // rather than squeezed.
     const fraction = st.previewFraction ?? 1;
 
+    if (pattern.kind === 'keys') {
+      // Keyboard patterns divide the chord into parts rather than strokes:
+      // the bass note under the left hand, the voices above it, the whole
+      // thing struck at once, or a single voice counted down from the top.
+      const sounding = [];
+      for (let s = 0; s < 6; s++) if (midi[s] !== null) sounding.push(s);
+      if (!sounding.length) return;
+
+      for (const hit of pattern.hits) {
+        if (hit.t >= fraction) continue;
+        const t = swingTime(hit.t, pattern.swing || 0);
+        const when = startTime + t * duration;
+        if (when < startTime - 0.001 || when >= startTime + duration) continue;
+        const vel = hit.vel * (st.velocity ?? 1);
+
+        if (hit.part === 'bass') {
+          const s = sounding[0];
+          this.engine.pluck({ string: s, midi: midi[s], when, velocity: vel });
+          continue;
+        }
+        if (hit.part === 'upper' || hit.part === 'all') {
+          const from = hit.part === 'upper' && sounding.length > 1 ? 1 : 0;
+          const notes = new Array(6).fill(null);
+          for (let k = from; k < sounding.length; k++) notes[sounding[k]] = midi[sounding[k]];
+          // `roll` is the only spread a pianist has — the deliberate one, as in
+          // a rolled ballad chord. Otherwise the notes land together.
+          this.engine.strum({
+            midi: notes,
+            when,
+            direction: 'D',
+            velocity: vel,
+            spread: hit.roll ?? 0.0015,
+          });
+          continue;
+        }
+        // A number counts down from the top voice.
+        const s = sounding[Math.max(0, sounding.length - 1 - hit.part)];
+        if (s === undefined) continue;
+        this.engine.pluck({ string: s, midi: midi[s], when, velocity: vel });
+      }
+      return;
+    }
+
     if (pattern.kind === 'arp') {
       // Map symbolic picks onto whichever strings this voicing actually uses.
       const sounding = [];
@@ -5410,6 +5920,8 @@ class Sequencer {
 
 
 
+
+
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -5433,6 +5945,7 @@ const TABS = [
   { id: 'timeline', label: 'Timeline', glyph: 'bars' },
   { id: 'assist', label: 'Assist', glyph: 'spark' },
   { id: 'learn', label: 'Learn', glyph: 'book' },
+  { id: 'songs', label: 'Songs', glyph: 'disc' },
 ];
 
 const params = new URLSearchParams(location.search);
@@ -5440,6 +5953,10 @@ if (params.get('theme') === 'mono') document.documentElement.dataset.accent = 'm
 
 const state = {
   projectTitle: 'Untitled Song',
+  /** Which saved project this song came from, so Save overwrites it. */
+  projectId: null,
+  /** Live Recorder while capturing audio, else null. */
+  recorder: null,
   bpm: 96,
   timeSig: '4/4',
   metronome: true,
@@ -5941,6 +6458,7 @@ function render() {
   renderTimeline();
   renderLearn();
   renderAssist();
+  renderSongs();
   renderTabs();
 }
 
@@ -5974,6 +6492,7 @@ function glyph(kind, active) {
       linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
       linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
+    disc: `width:15px;height:15px;border-radius:50%;border:2px solid ${col};box-shadow:inset 0 0 0 3px ${col === 'var(--a)' ? 'transparent' : 'transparent'},0 0 0 0 ${col};position:relative;background:radial-gradient(circle,${col} 0 2px,transparent 2px);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
   return i;
@@ -6364,6 +6883,19 @@ function renderTone() {
       state.tone = id;
       engine.clearStringOverrides();
       if (await ensureAudio()) engine.setPreset(id);
+      // Switching to a keyboard while a strum pattern is loaded would keep
+      // playing guitar figures on a piano, which is the thing that makes it
+      // sound wrong. Move to a keyboard pattern, and back again on the way out
+      // — but never override a choice the user made within the right family.
+      const wantsKeys = !!PRESETS[id].isKeyboard;
+      const onKeys = KEYBOARD_RHYTHMS.includes(state.rhythm);
+      if (wantsKeys && !onKeys) {
+        state.rhythm = 'keysBallad';
+        state.rhythmFamily = 'Keyboard';
+      } else if (!wantsKeys && onKeys) {
+        state.rhythm = 'straight8';
+        state.rhythmFamily = 'All';
+      }
       renderTone();
       previewDegree(state.activeDegree);
     };
@@ -6450,7 +6982,11 @@ const RHYTHM_FAMILIES = [
   { label: 'Latin & Syncopated', tags: ['syncop'] },
   { label: 'Other Meters', tags: ['3/4', '6/8'] },
   { label: 'Fingerstyle', tags: ['arp', 'sustain'] },
+  { label: 'Keyboard', tags: ['keys'] },
 ];
+
+/** Rhythm ids written for a keyboard rather than a picked instrument. */
+const KEYBOARD_RHYTHMS = RHYTHMS.filter((r) => r.tag === 'keys').map((r) => r.id);
 
 function renderRhythms() {
   const sel = $('rhythmFamilySelect');
@@ -7212,6 +7748,148 @@ async function previewSlot(barIdx, slotIdx) {
   await playChordNow(slot.chord, slot.voicing);
 }
 
+/**
+ * The song library and audio export.
+ *
+ * Saving reuses the exact JSON that export writes, so a saved project and an
+ * exported file are the same thing — there is no second format to keep in step.
+ */
+function renderSongs() {
+  const secs = state.sections.length;
+  const filled = state.sections.reduce(
+    (n, sec) => n + sec.bars.filter((b) => b.slots.some(Boolean)).length,
+    0
+  );
+  $('songsCurrent').textContent =
+    `${state.projectTitle} · ${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]} · ${state.bpm} BPM · ${secs} loop${secs === 1 ? '' : 's'} · ${filled} bars written`;
+
+  const fmt = compressedFormat();
+  $('exportAudioHint').textContent = fmt
+    ? `Plays the song once and captures it. You get a WAV (lossless, opens anywhere) and ${fmt.label}. Browsers cannot encode MP3 — convert the WAV if you need one.`
+    : 'Plays the song once and captures it as a WAV. This browser offers no compressed recording format.';
+
+  $('saveProjectBtn').disabled = !storageAvailable();
+
+  const list = $('projectList');
+  list.replaceChildren();
+  const projects = listProjects();
+  $('projectsEmpty').hidden = projects.length > 0;
+
+  for (const p of projects) {
+    const row = el('div', `project-row${state.projectId === p.id ? ' active' : ''}`);
+    const info = el('div', 'project-info');
+    info.append(
+      el('span', 'project-title', p.title),
+      el('span', 'project-meta', `${p.key || ''} · ${p.bpm || '?'} BPM · ${p.sections || 1} loop${p.sections === 1 ? '' : 's'} · ${timeAgo(p.savedAt)}`)
+    );
+    const actions = el('div', 'row gap-xs');
+    const open = el('button', 'chip small', 'Open');
+    open.onclick = () => openProject(p.id);
+    const del = el('button', 'chip small', 'Delete');
+    del.onclick = () => {
+      if (!confirm(`Delete “${p.title}”? This cannot be undone.`)) return;
+      deleteProject(p.id);
+      if (state.projectId === p.id) state.projectId = null;
+      renderSongs();
+      toast('Project deleted.');
+    };
+    actions.append(open, del);
+    row.append(info, actions);
+    list.appendChild(row);
+  }
+}
+
+function timeAgo(ts) {
+  if (!ts) return 'saved';
+  const secs = Math.max(0, (Date.now() - ts) / 1000);
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function openProject(id) {
+  const data = loadProject(id);
+  if (!data) { toast('That project could not be read.', true); return; }
+  applySongData(data);
+  state.projectId = id;
+  render();
+  toast(`Opened “${state.projectTitle}”.`);
+}
+
+function doSaveProject(asNew = false) {
+  if (!storageAvailable()) {
+    toast('This browser will not let the app save locally.', true);
+    return;
+  }
+  const result = saveProject(songData(), asNew ? null : state.projectId);
+  if (result.error) { toast(result.error, true); return; }
+  state.projectId = result.id;
+  renderSongs();
+  toast(`Saved “${state.projectTitle}”.`);
+}
+
+/**
+ * Record the song to audio.
+ *
+ * Captured from the live output rather than rendered separately, so the file
+ * is exactly what was heard — the same limiter, the same reverb tail. That
+ * means it runs in real time: one pass through the loop.
+ */
+async function toggleRecording() {
+  const btn = $('recordBtn');
+  const status = $('recordStatus');
+
+  if (state.recorder) {
+    const rec = state.recorder;
+    state.recorder = null;
+    if (sequencer.playing) togglePlay();
+    // Let the tail ring out rather than chopping the last chord.
+    status.textContent = 'finishing…';
+    await new Promise((r) => setTimeout(r, 900));
+    const result = await rec.stop();
+    btn.textContent = '● Record the loop';
+    btn.classList.remove('recording');
+    status.textContent = result.seconds
+      ? `captured ${result.seconds.toFixed(1)}s`
+      : 'nothing captured';
+    showDownloads(result);
+    return;
+  }
+
+  if (!(await ensureAudio())) return;
+  if (!bars().some((b) => b.slots.some(Boolean)) && !state.metronome && !state.drumsOn) {
+    toast('Nothing to record — add some chords first.');
+    return;
+  }
+
+  const rec = new Recorder(engine.ctx, engine.safety);
+  await rec.start({ compressed: true, wav: true });
+  state.recorder = rec;
+  $('recordDownloads').hidden = true;
+  btn.textContent = '■ Stop and save';
+  btn.classList.add('recording');
+  status.textContent = 'recording…';
+  if (!sequencer.playing) togglePlay();
+}
+
+function showDownloads(result) {
+  const row = $('recordDownloads');
+  row.replaceChildren();
+  const stem = (state.projectTitle || 'circlesong').replace(/[^\w-]+/g, '_') || 'circlesong';
+
+  const add = (blob, ext, label) => {
+    if (!blob || !blob.size) return;
+    const a = el('a', 'chip small filled-a', `${label} · ${(blob.size / 1024 / 1024).toFixed(1)} MB`);
+    a.href = URL.createObjectURL(blob);
+    a.download = `${stem}.${ext}`;
+    row.appendChild(a);
+  };
+  add(result.wav, 'wav', 'Download WAV');
+  if (result.compressed && result.ext) add(result.compressed, result.ext, `Download ${result.ext.toUpperCase()}`);
+  row.hidden = !row.children.length;
+}
+
 function renderLearn() {
   const row = $('learnModeRow');
   row.replaceChildren();
@@ -7674,6 +8352,23 @@ function wire() {
     else reresolveAll();
     renderTimeline();
   };
+  // --- songs, saving, audio export ---
+  $('saveProjectBtn').onclick = () => doSaveProject(false);
+  $('saveAsProjectBtn').onclick = () => doSaveProject(true);
+  $('newProjectBtn').onclick = () => {
+    if (!confirm('Start a new song? Anything unsaved will be lost.')) return;
+    state.projectId = null;
+    state.projectTitle = 'Untitled Song';
+    state.degreeSpec = {};
+    state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }];
+    state.activeSection = 0;
+    render();
+    toast('New song started.');
+  };
+  $('recordBtn').onclick = toggleRecording;
+  $('exportBtn2').onclick = exportSong;
+  $('importInput2').onchange = importSong;
+
   $('pickerCloseBtn').onclick = closePicker;
   $('pickerResetBtn').onclick = () => {
     // Hand the slot back to its degree, so it follows the Compose builder again.
@@ -7834,8 +8529,9 @@ function wire() {
 
 // ---------------------------------------------------------------- save/load
 
-function exportSong() {
-  const data = {
+/** The song as plain JSON — the one shape used by export, save and load. */
+function songData() {
+  return {
     format: 'circlesong.v3',
     title: state.projectTitle,
     bpm: state.bpm,
@@ -7857,7 +8553,15 @@ function exportSong() {
         b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, override: !!s.override, voicingMode: s.voicingMode } : null))
       ),
     })),
+    // Denormalised for the project list, which should not have to rebuild a
+    // song just to show a row.
+    keyName: `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`,
+    barTotal: state.sections.reduce((n, sec) => n + sec.barCount, 0),
   };
+}
+
+function exportSong() {
+  const data = songData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -7877,6 +8581,22 @@ function importSong(e) {
       if (!String(data.format || '').startsWith('circlesong.v')) {
         throw new Error('Unrecognised file format');
       }
+      applySongData(data);
+      state.projectId = null;
+      render();
+      toast(`Loaded "${state.projectTitle}".`);
+    } catch (err) {
+      toast(`Could not read that file — ${err.message}`, true);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/** Load a song object into state. Shared by file import and the song library. */
+function applySongData(data) {
+  {
+    {
       state.projectTitle = data.title || 'Untitled Song';
       state.bpm = Number(data.bpm) || 96;
       state.timeSig = TIME_SIGS.includes(data.timeSig) ? data.timeSig : '4/4';
@@ -7936,14 +8656,8 @@ function importSong(e) {
       state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
 
       if (engine.ready) engine.setPreset(state.tone);
-      render();
-      toast(`Loaded "${state.projectTitle}".`);
-    } catch (err) {
-      toast(`Import failed: ${err.message}`, true);
     }
-    e.target.value = '';
-  };
-  reader.readAsText(file);
+  }
 }
 
 // --------------------------------------------------------------------- boot

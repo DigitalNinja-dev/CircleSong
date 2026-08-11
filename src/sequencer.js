@@ -225,6 +225,49 @@ export class Sequencer {
     // rather than squeezed.
     const fraction = st.previewFraction ?? 1;
 
+    if (pattern.kind === 'keys') {
+      // Keyboard patterns divide the chord into parts rather than strokes:
+      // the bass note under the left hand, the voices above it, the whole
+      // thing struck at once, or a single voice counted down from the top.
+      const sounding = [];
+      for (let s = 0; s < 6; s++) if (midi[s] !== null) sounding.push(s);
+      if (!sounding.length) return;
+
+      for (const hit of pattern.hits) {
+        if (hit.t >= fraction) continue;
+        const t = swingTime(hit.t, pattern.swing || 0);
+        const when = startTime + t * duration;
+        if (when < startTime - 0.001 || when >= startTime + duration) continue;
+        const vel = hit.vel * (st.velocity ?? 1);
+
+        if (hit.part === 'bass') {
+          const s = sounding[0];
+          this.engine.pluck({ string: s, midi: midi[s], when, velocity: vel });
+          continue;
+        }
+        if (hit.part === 'upper' || hit.part === 'all') {
+          const from = hit.part === 'upper' && sounding.length > 1 ? 1 : 0;
+          const notes = new Array(6).fill(null);
+          for (let k = from; k < sounding.length; k++) notes[sounding[k]] = midi[sounding[k]];
+          // `roll` is the only spread a pianist has — the deliberate one, as in
+          // a rolled ballad chord. Otherwise the notes land together.
+          this.engine.strum({
+            midi: notes,
+            when,
+            direction: 'D',
+            velocity: vel,
+            spread: hit.roll ?? 0.0015,
+          });
+          continue;
+        }
+        // A number counts down from the top voice.
+        const s = sounding[Math.max(0, sounding.length - 1 - hit.part)];
+        if (s === undefined) continue;
+        this.engine.pluck({ string: s, midi: midi[s], when, velocity: vel });
+      }
+      return;
+    }
+
     if (pattern.kind === 'arp') {
       // Map symbolic picks onto whichever strings this voicing actually uses.
       const sounding = [];

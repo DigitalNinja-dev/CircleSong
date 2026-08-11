@@ -36,6 +36,8 @@ import {
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
+import { listProjects, saveProject, loadProject, deleteProject, isAvailable as storageAvailable } from './projects.js';
+import { Recorder, compressedFormat } from './audio/recorder.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
@@ -88,6 +90,7 @@ const TABS = [
   { id: 'timeline', label: 'Timeline', glyph: 'bars' },
   { id: 'assist', label: 'Assist', glyph: 'spark' },
   { id: 'learn', label: 'Learn', glyph: 'book' },
+  { id: 'songs', label: 'Songs', glyph: 'disc' },
 ];
 
 const params = new URLSearchParams(location.search);
@@ -95,6 +98,10 @@ if (params.get('theme') === 'mono') document.documentElement.dataset.accent = 'm
 
 const state = {
   projectTitle: 'Untitled Song',
+  /** Which saved project this song came from, so Save overwrites it. */
+  projectId: null,
+  /** Live Recorder while capturing audio, else null. */
+  recorder: null,
   bpm: 96,
   timeSig: '4/4',
   metronome: true,
@@ -596,6 +603,7 @@ function render() {
   renderTimeline();
   renderLearn();
   renderAssist();
+  renderSongs();
   renderTabs();
 }
 
@@ -629,6 +637,7 @@ function glyph(kind, active) {
       linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
       linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
+    disc: `width:15px;height:15px;border-radius:50%;border:2px solid ${col};box-shadow:inset 0 0 0 3px ${col === 'var(--a)' ? 'transparent' : 'transparent'},0 0 0 0 ${col};position:relative;background:radial-gradient(circle,${col} 0 2px,transparent 2px);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
   return i;
@@ -1019,6 +1028,19 @@ function renderTone() {
       state.tone = id;
       engine.clearStringOverrides();
       if (await ensureAudio()) engine.setPreset(id);
+      // Switching to a keyboard while a strum pattern is loaded would keep
+      // playing guitar figures on a piano, which is the thing that makes it
+      // sound wrong. Move to a keyboard pattern, and back again on the way out
+      // — but never override a choice the user made within the right family.
+      const wantsKeys = !!PRESETS[id].isKeyboard;
+      const onKeys = KEYBOARD_RHYTHMS.includes(state.rhythm);
+      if (wantsKeys && !onKeys) {
+        state.rhythm = 'keysBallad';
+        state.rhythmFamily = 'Keyboard';
+      } else if (!wantsKeys && onKeys) {
+        state.rhythm = 'straight8';
+        state.rhythmFamily = 'All';
+      }
       renderTone();
       previewDegree(state.activeDegree);
     };
@@ -1105,7 +1127,11 @@ const RHYTHM_FAMILIES = [
   { label: 'Latin & Syncopated', tags: ['syncop'] },
   { label: 'Other Meters', tags: ['3/4', '6/8'] },
   { label: 'Fingerstyle', tags: ['arp', 'sustain'] },
+  { label: 'Keyboard', tags: ['keys'] },
 ];
+
+/** Rhythm ids written for a keyboard rather than a picked instrument. */
+const KEYBOARD_RHYTHMS = RHYTHMS.filter((r) => r.tag === 'keys').map((r) => r.id);
 
 function renderRhythms() {
   const sel = $('rhythmFamilySelect');
@@ -1867,6 +1893,148 @@ async function previewSlot(barIdx, slotIdx) {
   await playChordNow(slot.chord, slot.voicing);
 }
 
+/**
+ * The song library and audio export.
+ *
+ * Saving reuses the exact JSON that export writes, so a saved project and an
+ * exported file are the same thing — there is no second format to keep in step.
+ */
+function renderSongs() {
+  const secs = state.sections.length;
+  const filled = state.sections.reduce(
+    (n, sec) => n + sec.bars.filter((b) => b.slots.some(Boolean)).length,
+    0
+  );
+  $('songsCurrent').textContent =
+    `${state.projectTitle} · ${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]} · ${state.bpm} BPM · ${secs} loop${secs === 1 ? '' : 's'} · ${filled} bars written`;
+
+  const fmt = compressedFormat();
+  $('exportAudioHint').textContent = fmt
+    ? `Plays the song once and captures it. You get a WAV (lossless, opens anywhere) and ${fmt.label}. Browsers cannot encode MP3 — convert the WAV if you need one.`
+    : 'Plays the song once and captures it as a WAV. This browser offers no compressed recording format.';
+
+  $('saveProjectBtn').disabled = !storageAvailable();
+
+  const list = $('projectList');
+  list.replaceChildren();
+  const projects = listProjects();
+  $('projectsEmpty').hidden = projects.length > 0;
+
+  for (const p of projects) {
+    const row = el('div', `project-row${state.projectId === p.id ? ' active' : ''}`);
+    const info = el('div', 'project-info');
+    info.append(
+      el('span', 'project-title', p.title),
+      el('span', 'project-meta', `${p.key || ''} · ${p.bpm || '?'} BPM · ${p.sections || 1} loop${p.sections === 1 ? '' : 's'} · ${timeAgo(p.savedAt)}`)
+    );
+    const actions = el('div', 'row gap-xs');
+    const open = el('button', 'chip small', 'Open');
+    open.onclick = () => openProject(p.id);
+    const del = el('button', 'chip small', 'Delete');
+    del.onclick = () => {
+      if (!confirm(`Delete “${p.title}”? This cannot be undone.`)) return;
+      deleteProject(p.id);
+      if (state.projectId === p.id) state.projectId = null;
+      renderSongs();
+      toast('Project deleted.');
+    };
+    actions.append(open, del);
+    row.append(info, actions);
+    list.appendChild(row);
+  }
+}
+
+function timeAgo(ts) {
+  if (!ts) return 'saved';
+  const secs = Math.max(0, (Date.now() - ts) / 1000);
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function openProject(id) {
+  const data = loadProject(id);
+  if (!data) { toast('That project could not be read.', true); return; }
+  applySongData(data);
+  state.projectId = id;
+  render();
+  toast(`Opened “${state.projectTitle}”.`);
+}
+
+function doSaveProject(asNew = false) {
+  if (!storageAvailable()) {
+    toast('This browser will not let the app save locally.', true);
+    return;
+  }
+  const result = saveProject(songData(), asNew ? null : state.projectId);
+  if (result.error) { toast(result.error, true); return; }
+  state.projectId = result.id;
+  renderSongs();
+  toast(`Saved “${state.projectTitle}”.`);
+}
+
+/**
+ * Record the song to audio.
+ *
+ * Captured from the live output rather than rendered separately, so the file
+ * is exactly what was heard — the same limiter, the same reverb tail. That
+ * means it runs in real time: one pass through the loop.
+ */
+async function toggleRecording() {
+  const btn = $('recordBtn');
+  const status = $('recordStatus');
+
+  if (state.recorder) {
+    const rec = state.recorder;
+    state.recorder = null;
+    if (sequencer.playing) togglePlay();
+    // Let the tail ring out rather than chopping the last chord.
+    status.textContent = 'finishing…';
+    await new Promise((r) => setTimeout(r, 900));
+    const result = await rec.stop();
+    btn.textContent = '● Record the loop';
+    btn.classList.remove('recording');
+    status.textContent = result.seconds
+      ? `captured ${result.seconds.toFixed(1)}s`
+      : 'nothing captured';
+    showDownloads(result);
+    return;
+  }
+
+  if (!(await ensureAudio())) return;
+  if (!bars().some((b) => b.slots.some(Boolean)) && !state.metronome && !state.drumsOn) {
+    toast('Nothing to record — add some chords first.');
+    return;
+  }
+
+  const rec = new Recorder(engine.ctx, engine.safety);
+  await rec.start({ compressed: true, wav: true });
+  state.recorder = rec;
+  $('recordDownloads').hidden = true;
+  btn.textContent = '■ Stop and save';
+  btn.classList.add('recording');
+  status.textContent = 'recording…';
+  if (!sequencer.playing) togglePlay();
+}
+
+function showDownloads(result) {
+  const row = $('recordDownloads');
+  row.replaceChildren();
+  const stem = (state.projectTitle || 'circlesong').replace(/[^\w-]+/g, '_') || 'circlesong';
+
+  const add = (blob, ext, label) => {
+    if (!blob || !blob.size) return;
+    const a = el('a', 'chip small filled-a', `${label} · ${(blob.size / 1024 / 1024).toFixed(1)} MB`);
+    a.href = URL.createObjectURL(blob);
+    a.download = `${stem}.${ext}`;
+    row.appendChild(a);
+  };
+  add(result.wav, 'wav', 'Download WAV');
+  if (result.compressed && result.ext) add(result.compressed, result.ext, `Download ${result.ext.toUpperCase()}`);
+  row.hidden = !row.children.length;
+}
+
 function renderLearn() {
   const row = $('learnModeRow');
   row.replaceChildren();
@@ -2329,6 +2497,23 @@ function wire() {
     else reresolveAll();
     renderTimeline();
   };
+  // --- songs, saving, audio export ---
+  $('saveProjectBtn').onclick = () => doSaveProject(false);
+  $('saveAsProjectBtn').onclick = () => doSaveProject(true);
+  $('newProjectBtn').onclick = () => {
+    if (!confirm('Start a new song? Anything unsaved will be lost.')) return;
+    state.projectId = null;
+    state.projectTitle = 'Untitled Song';
+    state.degreeSpec = {};
+    state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }];
+    state.activeSection = 0;
+    render();
+    toast('New song started.');
+  };
+  $('recordBtn').onclick = toggleRecording;
+  $('exportBtn2').onclick = exportSong;
+  $('importInput2').onchange = importSong;
+
   $('pickerCloseBtn').onclick = closePicker;
   $('pickerResetBtn').onclick = () => {
     // Hand the slot back to its degree, so it follows the Compose builder again.
@@ -2489,8 +2674,9 @@ function wire() {
 
 // ---------------------------------------------------------------- save/load
 
-function exportSong() {
-  const data = {
+/** The song as plain JSON — the one shape used by export, save and load. */
+function songData() {
+  return {
     format: 'circlesong.v3',
     title: state.projectTitle,
     bpm: state.bpm,
@@ -2512,7 +2698,15 @@ function exportSong() {
         b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, override: !!s.override, voicingMode: s.voicingMode } : null))
       ),
     })),
+    // Denormalised for the project list, which should not have to rebuild a
+    // song just to show a row.
+    keyName: `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`,
+    barTotal: state.sections.reduce((n, sec) => n + sec.barCount, 0),
   };
+}
+
+function exportSong() {
+  const data = songData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2532,6 +2726,22 @@ function importSong(e) {
       if (!String(data.format || '').startsWith('circlesong.v')) {
         throw new Error('Unrecognised file format');
       }
+      applySongData(data);
+      state.projectId = null;
+      render();
+      toast(`Loaded "${state.projectTitle}".`);
+    } catch (err) {
+      toast(`Could not read that file — ${err.message}`, true);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/** Load a song object into state. Shared by file import and the song library. */
+function applySongData(data) {
+  {
+    {
       state.projectTitle = data.title || 'Untitled Song';
       state.bpm = Number(data.bpm) || 96;
       state.timeSig = TIME_SIGS.includes(data.timeSig) ? data.timeSig : '4/4';
@@ -2591,14 +2801,8 @@ function importSong(e) {
       state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
 
       if (engine.ready) engine.setPreset(state.tone);
-      render();
-      toast(`Loaded "${state.projectTitle}".`);
-    } catch (err) {
-      toast(`Import failed: ${err.message}`, true);
     }
-    e.target.value = '';
-  };
-  reader.readAsText(file);
+  }
 }
 
 // --------------------------------------------------------------------- boot
