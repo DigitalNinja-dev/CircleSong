@@ -6535,13 +6535,10 @@ function renderCircle() {
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
       if (state.exploreMode === 'chord') {
+        // Chords here play with the selected rhythm too, so the strip and the
+        // wheel and the chord grid all sound like the same instrument.
         const v = resolveVoicing(chord, 'root', { tuning: tuning() });
-        if (v) {
-          const when = auditionStart();
-          engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
-          engine.damp(when + exploreRingSeconds());
-          return;
-        }
+        if (v) { await playChordNow(chord, v); return; }
       }
       // Single notes are for jamming: they layer over whatever is sounding
       // instead of cutting it, and each is placed on a free string so a run
@@ -6710,27 +6707,25 @@ function renderExplore() {
 /**
  * Sound the current explore selection.
  *
- * Exploring the wheel is a question — "what does this one sound like?" — so it
- * answers with a single strum and stops. Running the whole rhythm pattern here
- * meant one tap kept strumming for a full bar, which read as a note that would
- * not stop.
+ * A tapped chord uses the selected rhythm, the same as every other chord
+ * audition. It used to be a bare single strum, which meant locking the key
+ * silently changed how chords were played — tap a wedge unlocked and you heard
+ * your feel, tap it locked and you heard a plain downstroke. That was a
+ * workaround for taps that strummed for a whole bar and would not stop, which
+ * the audition fade now handles properly.
  */
 async function playExplore() {
   const target = exploreTarget();
   if (!target || !(await ensureAudio())) return;
-  const when = auditionStart();
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) {
-      engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
-      engine.damp(when + exploreRingSeconds());
-      return;
-    }
+    if (v) { await playChordNow(target.chord, v); return; }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
+  const when = auditionStart();
   engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
   engine.damp(when + exploreRingSeconds());
 }
