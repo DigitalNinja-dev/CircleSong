@@ -784,65 +784,150 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .byline a:hover { color: var(--a); }
 
 /* ------------------------------------------------------------- tuner (/09) */
-.tuner-readout {
-  margin: 16px 0;
-  padding: 16px 14px;
-  background: var(--raised);
-  border: 1px solid var(--border);
-  text-align: center;
-}
-.tuner-note { display: block; font: 600 42px var(--display); color: oklch(0.96 0.006 250); line-height: 1.1; }
-.tuner-freq { display: block; margin-top: 2px; font: 400 11px var(--mono); color: var(--dim); }
+.tuner-head { display: flex; align-items: baseline; justify-content: space-between; }
+.tuner-a4 { font: 500 10px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
 
-.tuner-meter { margin: 14px 0 8px; }
-.tuner-scale { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.tuner-scale .tick { font: 400 9px var(--mono); color: var(--dimmer); }
-.tuner-scale .tick.centre { color: var(--a); }
-.tuner-track {
+/* Pill row: instrument, tuning, auto. */
+.tuner-pills { display: flex; gap: 6px; margin: 12px 0 14px; }
+.pill-select { position: relative; flex: 1 1 0; min-width: 0; }
+.pill-select select {
+  width: 100%;
+  appearance: none; -webkit-appearance: none;
+  padding: 8px 20px 8px 12px;
+  border: 1px solid var(--a);
+  border-radius: 999px;
+  background: oklch(0.65 0.2 135 / 0.12);
+  color: var(--a);
+  font: 600 10px var(--mono);
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.pill-select select:focus { outline: none; box-shadow: 0 0 0 2px oklch(0.65 0.2 135 / 0.3); }
+.pill-caret { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 9px; color: var(--a); }
+.pill {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  font: 600 10px var(--mono);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+.pill.on { border-color: var(--a); color: var(--a); background: oklch(0.65 0.2 135 / 0.12); }
+
+/* The dial. */
+.tuner-dial-wrap {
   position: relative;
-  height: 26px;
-  background: oklch(0.15 0.011 250);
-  border: 1px solid var(--border);
-  overflow: hidden;
+  padding: 14px 0 54px;
+  border: 1px solid oklch(0.65 0.2 135 / 0.35);
+  background:
+    radial-gradient(circle at 50% 42%, oklch(0.65 0.2 135 / 0.07), transparent 62%),
+    oklch(0.13 0.012 250);
 }
-/* The ±4-cent window the lock waits inside — drawn so "in tune" is a place on
-   the meter rather than a number to interpret. */
-.tuner-zone {
-  position: absolute; top: 0; bottom: 0; left: 46%; width: 8%;
-  background: oklch(0.65 0.2 135 / 0.16);
-  border-left: 1px solid oklch(0.65 0.2 135 / 0.35);
-  border-right: 1px solid oklch(0.65 0.2 135 / 0.35);
-}
-.tuner-needle {
-  position: absolute; top: 2px; bottom: 2px; left: 50%; width: 3px;
-  margin-left: -1.5px; background: oklch(0.75 0.01 250);
-  transition: left 90ms linear, background 120ms linear;
-}
-.tuner-needle.flat, .tuner-needle.sharp { background: oklch(0.8 0.17 60); }
-.tuner-needle.locked { background: var(--a); box-shadow: 0 0 10px var(--a); }
+.tuner-dial { display: block; width: 100%; max-width: 300px; margin: 0 auto; }
 
-.tuner-cents { display: block; font: 500 12px var(--mono); color: oklch(0.75 0.008 250); }
-.tuner-state { display: block; margin-top: 4px; font: 600 11px var(--mono); letter-spacing: 0.08em; min-height: 14px; }
-.tuner-state.locked { color: var(--a); }
-.tuner-state.flat, .tuner-state.sharp { color: oklch(0.8 0.17 60); }
+.dial-tick { stroke: oklch(0.45 0.03 160); stroke-width: 1.4; }
+.dial-tick.major { stroke: oklch(0.62 0.08 160); stroke-width: 2; }
+.dial-tick.centre { stroke: var(--a); stroke-width: 2.6; }
+.dial-track {
+  fill: none;
+  stroke: url(#tunerArcGrad);
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.dial-arc {
+  fill: none;
+  stroke: oklch(0.85 0.19 140);
+  stroke-width: 9;
+  stroke-linecap: round;
+  filter: url(#tunerGlow);
+}
+.dial-arc.flat, .dial-arc.sharp { stroke: oklch(0.85 0.17 85); }
+.dial-pointer { fill: oklch(0.85 0.19 140); filter: url(#tunerGlow); }
+.dial-pointer.flat, .dial-pointer.sharp { fill: oklch(0.85 0.17 85); }
 
-.tuner-strings { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+/* Readout sits inside the ring. */
+.tuner-centre {
+  position: absolute; left: 0; right: 0; top: 44%;
+  transform: translateY(-50%);
+  text-align: center; pointer-events: none;
+}
+.tuner-note {
+  display: block;
+  font: 700 56px var(--display);
+  line-height: 1;
+  color: oklch(0.92 0.19 140);
+  text-shadow: 0 0 18px oklch(0.65 0.2 135 / 0.75), 0 0 46px oklch(0.65 0.2 135 / 0.4);
+}
+.tuner-dial-wrap[data-state='flat'] .tuner-note,
+.tuner-dial-wrap[data-state='sharp'] .tuner-note {
+  color: oklch(0.9 0.16 85);
+  text-shadow: 0 0 18px oklch(0.8 0.17 85 / 0.6);
+}
+.tuner-dial-wrap[data-state='idle'] .tuner-note { color: oklch(0.7 0.02 200); text-shadow: none; }
+.tuner-cents { display: block; margin-top: 4px; font: 600 20px var(--display); color: oklch(0.88 0.14 140); }
+.tuner-dial-wrap[data-state='idle'] .tuner-cents { color: var(--dim); font-size: 12px; }
+
+.tuner-stats {
+  position: absolute; left: 12px; right: 12px; bottom: 14px;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.tuner-stats .stat { display: flex; flex-direction: column; gap: 2px; }
+.tuner-stats .stat.mid { align-items: center; justify-content: flex-end; }
+.tuner-stats .stat.right { align-items: flex-end; }
+.stat-key { font: 400 9px var(--mono); color: var(--dim); }
+.stat-val { font: 600 11px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+.tuner-dial-wrap[data-state='flat'] #tunerState,
+.tuner-dial-wrap[data-state='sharp'] #tunerState { color: oklch(0.85 0.17 85); }
+.tuner-dial-wrap[data-state='idle'] #tunerState,
+.tuner-dial-wrap[data-state='idle'] .stat-val { color: var(--dim); }
+
+/* Strings. */
+.tuner-strings { display: flex; gap: 6px; margin-top: 12px; }
 .tuner-string {
-  flex: 1 1 58px;
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 9px 4px;
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 2px;
   border: 1px solid var(--border);
-  background: oklch(0.18 0.011 250);
+  border-radius: 8px;
+  background: oklch(0.17 0.011 250);
   color: oklch(0.9 0.006 250);
   cursor: pointer; font: inherit;
 }
 .tuner-string:hover { border-color: var(--a); }
-.tuner-string .ts-name { font: 600 13px var(--display); }
-.tuner-string .ts-index { font: 400 9px var(--mono); color: var(--dim); }
-.tuner-string.pinned { border-color: var(--c); }
-.tuner-string.live { background: oklch(0.26 0.04 90); }
-.tuner-string.locked { background: var(--a); border-color: var(--a); color: var(--ink); }
-.tuner-string.locked .ts-index { color: oklch(0.25 0.02 250); }
+.tuner-string .ts-name { font: 700 15px var(--display); }
+.tuner-string .ts-index { font: 400 8px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
+.tuner-string.pinned { border-color: var(--a); color: var(--a); }
+.tuner-string.pinned .ts-index { color: oklch(0.65 0.12 140); }
+.tuner-string.live { border-color: oklch(0.8 0.17 85); }
+.tuner-string.locked {
+  border-color: var(--a);
+  background: oklch(0.65 0.2 135 / 0.18);
+  box-shadow: 0 0 14px oklch(0.65 0.2 135 / 0.45);
+  color: var(--a);
+}
+
+/* Listen. */
+.tuner-listen {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  width: 100%; margin-top: 14px; padding: 15px;
+  border: 1px solid var(--a); border-radius: 10px;
+  background: var(--a); color: var(--ink);
+  font: 700 13px var(--mono); letter-spacing: 0.09em;
+  cursor: pointer;
+}
+.tuner-listen .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); }
+.tuner-listen.on { background: oklch(0.62 0.22 25); border-color: oklch(0.62 0.22 25); color: oklch(0.99 0 0); }
+.tuner-listen.on .dot { background: oklch(0.99 0 0); animation: rec-pulse 1.2s ease-in-out infinite; }
+.tuner-listen[disabled] { opacity: 0.4; cursor: not-allowed; background: transparent; color: var(--dim); border-color: var(--border); }
+@keyframes rec-pulse { 50% { opacity: 0.35; } }
+
+.tuner-mic-note { margin: 8px 0 0; font: 400 10px/1.5 var(--sans); color: var(--dim); text-align: center; }
+.tuner-err { margin: 8px 0 0; font: 400 11px/1.55 var(--sans); color: oklch(0.8 0.13 75); }
 
 </style>
 </head>
@@ -1230,45 +1315,59 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
     <!-- /09 TUNER -->
     <section class="panel" id="tab-tuner" hidden>
-      <h2>/09 TUNER</h2>
-      <div class="row gap-xs">
-        <span class="micro-label">INSTRUMENT</span>
-        <select id="tunerInstrument" class="select grow" aria-label="Instrument"></select>
-      </div>
-      <div class="row gap-xs mt-s">
-        <span class="micro-label">TUNING</span>
-        <select id="tunerTuning" class="select grow" aria-label="Tuning"></select>
+      <div class="tuner-head">
+        <h2>/09 TUNER</h2>
+        <span class="tuner-a4" id="tunerA4Label">A4 = 440 Hz</span>
       </div>
 
-      <div class="tuner-readout">
-        <span id="tunerNote" class="tuner-note">—</span>
-        <span id="tunerFreq" class="tuner-freq"></span>
-        <div class="tuner-meter">
-          <div class="tuner-scale">
-            <span class="tick far">-50</span><span class="tick">-25</span>
-            <span class="tick centre">0</span>
-            <span class="tick">+25</span><span class="tick far">+50</span>
-          </div>
-          <div class="tuner-track">
-            <div class="tuner-zone"></div>
-            <div class="tuner-needle" id="tunerNeedle"></div>
-          </div>
+      <div class="tuner-pills">
+        <div class="pill-select">
+          <select id="tunerInstrument" aria-label="Instrument"></select>
+          <span class="pill-caret">▾</span>
         </div>
-        <span id="tunerCents" class="tuner-cents"></span>
-        <span id="tunerState" class="tuner-state"></span>
+        <div class="pill-select">
+          <select id="tunerTuning" aria-label="Tuning"></select>
+          <span class="pill-caret">▾</span>
+        </div>
+        <button id="tunerAutoBtn" class="pill" aria-pressed="true">AUTO</button>
       </div>
 
-      <span class="micro-label">STRINGS — TAP TO HEAR, OR TO TUNE ONE ONLY</span>
+      <div class="tuner-dial-wrap">
+        <svg id="tunerDial" class="tuner-dial" viewBox="8 6 224 212" role="img" aria-label="Tuning meter">
+          <defs>
+            <linearGradient id="tunerArcGrad" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="var(--d)"></stop>
+              <stop offset="45%" stop-color="var(--d)"></stop>
+              <stop offset="100%" stop-color="var(--a)"></stop>
+            </linearGradient>
+            <filter id="tunerGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3.2" result="b"></feGaussianBlur>
+              <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+          <g id="tunerTicks"></g>
+          <path id="tunerTrack" class="dial-track"></path>
+          <path id="tunerArc" class="dial-arc"></path>
+          <g id="tunerPointer"></g>
+        </svg>
+        <div class="tuner-centre">
+          <span id="tunerNote" class="tuner-note">—</span>
+          <span id="tunerCents" class="tuner-cents"></span>
+        </div>
+        <div class="tuner-stats">
+          <div class="stat"><span class="stat-key">Signal:</span><span id="tunerSignal" class="stat-val">—</span></div>
+          <div class="stat mid"><span id="tunerFreq" class="stat-val">Freq: —</span></div>
+          <div class="stat right"><span class="stat-key">Status:</span><span id="tunerState" class="stat-val">—</span></div>
+        </div>
+      </div>
+
       <div id="tunerStrings" class="tuner-strings"></div>
 
-      <div class="row between mt">
-        <div>
-          <span class="setting-name">Listen</span>
-          <span class="setting-note" id="tunerMicNote">Uses the microphone. Nothing is recorded or sent anywhere.</span>
-        </div>
-        <button id="tunerMicBtn" class="chip toggle solid" aria-pressed="false">Off</button>
-      </div>
-      <p id="tunerError" class="body-copy tight" hidden></p>
+      <button id="tunerMicBtn" class="tuner-listen" aria-pressed="false">
+        <span class="dot"></span><span id="tunerMicLabel">START LISTENING</span>
+      </button>
+      <p id="tunerMicNote" class="tuner-mic-note"></p>
+      <p id="tunerError" class="tuner-err" hidden></p>
 
       <div class="row gap-xs mt-s">
         <span class="micro-label">REFERENCE A4</span>
@@ -8169,11 +8268,49 @@ async function previewSlot(barIdx, slotIdx) {
  * those voices sit outside the reach of `cut`, a reference tone cannot be
  * silenced by anything else that happens.
  */
+// The dial sweeps 270 degrees, ±50 cents, with the gap at the bottom.
+const DIAL = { cx: 120, cy: 120, r: 96, sweep: 135 };
+
+/** Point on the dial for a cents value. */
+function dialPoint(cents, radius) {
+  const a = ((cents / 50) * DIAL.sweep - 90) * (Math.PI / 180);
+  return { x: DIAL.cx + radius * Math.cos(a), y: DIAL.cy + radius * Math.sin(a) };
+}
+
+/** Arc path between two cents positions. */
+function dialArc(from, to, radius) {
+  const a = dialPoint(from, radius);
+  const b = dialPoint(to, radius);
+  const large = Math.abs(to - from) / 50 * DIAL.sweep > 180 ? 1 : 0;
+  const sweep = to >= from ? 1 : 0;
+  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${radius} ${radius} 0 ${large} ${sweep} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Tick marks around the dial — drawn once, they never change. */
+function buildDialTicks() {
+  const g = $('tunerTicks');
+  if (g.childNodes.length) return;
+  for (let c = -50; c <= 50; c += 2.5) {
+    const major = Math.abs(c % 10) < 0.01;
+    const outer = dialPoint(c, DIAL.r + 13);
+    const inner = dialPoint(c, DIAL.r + (major ? 4 : 8));
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', outer.x.toFixed(2));
+    line.setAttribute('y1', outer.y.toFixed(2));
+    line.setAttribute('x2', inner.x.toFixed(2));
+    line.setAttribute('y2', inner.y.toFixed(2));
+    line.setAttribute('class', `dial-tick${major ? ' major' : ''}${Math.abs(c) < 0.01 ? ' centre' : ''}`);
+    g.appendChild(line);
+  }
+}
+
 function renderTuner() {
   const instSel = $('tunerInstrument');
   if (!instSel.options.length) {
     for (const inst of INSTRUMENTS) {
-      const o = el('option', '', inst.label);
+      const o = el('option', '', inst.label.toUpperCase());
       o.value = inst.id;
       instSel.appendChild(o);
     }
@@ -8184,30 +8321,43 @@ function renderTuner() {
   const tunSel = $('tunerTuning');
   tunSel.replaceChildren();
   for (const t of inst.tunings) {
-    const o = el('option', '', t.label);
+    // The pill is narrow, so it carries the tuning's name without the spelling.
+    const o = el('option', '', t.label.split('—')[0].trim().toUpperCase());
     o.value = t.id;
+    o.title = t.label;
     tunSel.appendChild(o);
   }
   const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
   tunSel.value = tuning.id;
 
-  // Strings. Tapping one sounds its reference pitch and pins the tuner to it;
-  // tapping the pinned one again hands it back to auto-detect.
+  $('tunerA4Label').textContent = `A4 = ${state.tunerA4} Hz`;
+
+  const autoBtn = $('tunerAutoBtn');
+  const auto = state.tunerTarget === null;
+  autoBtn.setAttribute('aria-pressed', String(auto));
+  autoBtn.classList.toggle('on', auto);
+  autoBtn.textContent = auto ? 'AUTO' : midiLabel(state.tunerTarget);
+
+  buildDialTicks();
+  $('tunerTrack').setAttribute('d', dialArc(-50, 50, DIAL.r));
+
+  // Strings.
   const strings = $('tunerStrings');
   strings.replaceChildren();
   const reading = state.tunerReading;
-  const chromatic = tuning.notes.length > 12;
-  if (chromatic) {
-    strings.appendChild(el('p', 'body-copy tight', 'Chromatic: play any note and it will name it.'));
+  if (tuning.notes.length > 12) {
+    strings.appendChild(el('p', 'tuner-mic-note', 'Chromatic — play any note and it will be named.'));
   } else {
+    const count = tuning.notes.length;
     tuning.notes.forEach((midi, i) => {
       const pinned = state.tunerTarget === midi;
       const live = reading && reading.midi === midi && reading.state !== 'off';
       const b = el('button', `tuner-string${pinned ? ' pinned' : ''}${live ? ' live' : ''}${live && reading.state === 'locked' ? ' locked' : ''}`);
       b.append(
         el('span', 'ts-name', midiLabel(midi)),
-        el('span', 'ts-index', `${i + 1}`)
+        el('span', 'ts-index', `STR ${count - i}`)
       );
+      b.dataset.midi = String(midi);
       b.onclick = async () => {
         state.tunerTarget = pinned ? null : midi;
         if (tuner) tuner.setTarget(state.tunerTarget);
@@ -8218,7 +8368,6 @@ function renderTuner() {
     });
   }
 
-  // A4 reference.
   const a4Row = $('tunerA4Row');
   a4Row.replaceChildren();
   for (const hz of [432, 436, 438, 440, 442, 444]) {
@@ -8234,14 +8383,15 @@ function renderTuner() {
   const blocked = micBlockedByHost();
   const btn = $('tunerMicBtn');
   btn.setAttribute('aria-pressed', String(state.tunerOn));
-  btn.textContent = state.tunerOn ? 'On' : 'Off';
+  btn.classList.toggle('on', state.tunerOn);
   btn.disabled = blocked;
+  $('tunerMicLabel').textContent = state.tunerOn ? 'STOP LISTENING' : 'START LISTENING';
   $('tunerMicNote').textContent = blocked
-    ? 'Unavailable here — the page CircleSong is embedded in withholds the microphone.'
+    ? 'Listening is unavailable here — the page CircleSong is embedded in withholds the microphone.'
     : 'Uses the microphone. Nothing is recorded or sent anywhere.';
   if (blocked && !state.tunerError) {
     state.tunerError =
-      'Listening needs CircleSong to be open at its own address. Tap a string above to hear its exact pitch and tune by ear — that works anywhere.';
+      'Open CircleSong at its own address to listen. Tap a string to hear its exact pitch and tune by ear — that works anywhere.';
   }
 
   const err = $('tunerError');
@@ -8251,37 +8401,60 @@ function renderTuner() {
   renderTunerReadout();
 }
 
-/** The needle and the numbers. Kept apart so it can update without a re-render. */
+/** The dial and the numbers. Separate so it can update without a re-render. */
 function renderTunerReadout() {
   const r = state.tunerReading;
   const note = $('tunerNote');
-  const freq = $('tunerFreq');
   const cents = $('tunerCents');
   const stateEl = $('tunerState');
-  const needle = $('tunerNeedle');
+  const arc = $('tunerArc');
+  const pointer = $('tunerPointer');
+  const wrap = document.querySelector('.tuner-dial-wrap');
 
-  if (!r || r.state === 'off' || r.midi === null) {
-    note.textContent = state.tunerOn ? '—' : (state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—');
-    freq.textContent = state.tunerOn ? 'listening…' : 'Turn Listen on, then play a string.';
-    cents.textContent = '';
-    stateEl.textContent = '';
-    stateEl.className = 'tuner-state';
-    needle.style.left = '50%';
-    needle.className = 'tuner-needle';
+  const idle = !r || r.state === 'off' || r.midi === null;
+  const st = idle ? 'idle' : r.state;
+
+  for (const b of document.querySelectorAll('#tunerStrings .tuner-string')) {
+    const midi = Number(b.dataset.midi);
+    const live = !idle && r.midi === midi;
+    b.classList.toggle('live', live && r.state !== 'locked');
+    b.classList.toggle('locked', live && r.state === 'locked');
+  }
+  wrap.dataset.state = st;
+  arc.setAttribute('class', `dial-arc ${st}`);
+
+  if (idle) {
+    note.textContent = state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—';
+    cents.textContent = state.tunerOn ? 'listening' : '';
+    $('tunerFreq').textContent = 'Freq: —';
+    $('tunerSignal').textContent = state.tunerOn ? `${Math.round((r && r.level ? r.level : 0) * 400)}%` : '—';
+    stateEl.textContent = state.tunerOn ? 'WAITING' : 'OFF';
+    arc.setAttribute('d', '');
+    pointer.replaceChildren();
     return;
   }
 
-  note.textContent = midiLabel(r.midi);
-  freq.textContent = r.freq ? `${r.freq.toFixed(1)} Hz` : '';
   const c = Math.max(-50, Math.min(50, r.cents));
-  cents.textContent = `${c > 0 ? '+' : ''}${c.toFixed(1)} cents`;
-  needle.style.left = `${50 + c}%`;
-  needle.className = `tuner-needle ${r.state}`;
-  stateEl.className = `tuner-state ${r.state}`;
-  stateEl.textContent =
-    r.state === 'locked' ? 'IN TUNE'
-      : r.state === 'flat' ? 'FLAT — tighten'
-        : 'SHARP — loosen';
+  note.textContent = midiLabel(r.midi);
+  cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
+  $('tunerFreq').textContent = `Freq: ${r.freq.toFixed(1)}Hz`;
+  $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
+  stateEl.textContent = r.state === 'locked' ? 'LOCKED' : r.state === 'flat' ? 'FLAT' : 'SHARP';
+
+  // Fill from dead centre out to wherever the note actually is, so the arc
+  // itself shows how far off it is rather than only the pointer.
+  arc.setAttribute('d', Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r) : dialArc(0, c, DIAL.r));
+
+  pointer.replaceChildren();
+  const tip = dialPoint(c, DIAL.r + 16);
+  const base = dialPoint(c, DIAL.r - 14);
+  const left = dialPoint(c - 2.2, DIAL.r - 6);
+  const right = dialPoint(c + 2.2, DIAL.r - 6);
+  const tri = document.createElementNS(SVG_NS, 'polygon');
+  tri.setAttribute('points',
+    `${tip.x.toFixed(2)},${tip.y.toFixed(2)} ${right.x.toFixed(2)},${right.y.toFixed(2)} ${base.x.toFixed(2)},${base.y.toFixed(2)} ${left.x.toFixed(2)},${left.y.toFixed(2)}`);
+  tri.setAttribute('class', `dial-pointer ${r.state}`);
+  pointer.appendChild(tri);
 }
 
 /**
@@ -8915,6 +9088,12 @@ function wire() {
     renderTuner();
   };
   $('tunerMicBtn').onclick = toggleTuner;
+  $('tunerAutoBtn').onclick = () => {
+    // Back to following whichever string is nearest.
+    state.tunerTarget = null;
+    if (tuner) tuner.setTarget(null);
+    renderTuner();
+  };
 
   // --- songs, saving, audio export ---
   $('saveProjectBtn').onclick = () => doSaveProject(false);

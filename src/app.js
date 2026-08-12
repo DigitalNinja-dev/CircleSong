@@ -1922,11 +1922,49 @@ async function previewSlot(barIdx, slotIdx) {
  * those voices sit outside the reach of `cut`, a reference tone cannot be
  * silenced by anything else that happens.
  */
+// The dial sweeps 270 degrees, ±50 cents, with the gap at the bottom.
+const DIAL = { cx: 120, cy: 120, r: 96, sweep: 135 };
+
+/** Point on the dial for a cents value. */
+function dialPoint(cents, radius) {
+  const a = ((cents / 50) * DIAL.sweep - 90) * (Math.PI / 180);
+  return { x: DIAL.cx + radius * Math.cos(a), y: DIAL.cy + radius * Math.sin(a) };
+}
+
+/** Arc path between two cents positions. */
+function dialArc(from, to, radius) {
+  const a = dialPoint(from, radius);
+  const b = dialPoint(to, radius);
+  const large = Math.abs(to - from) / 50 * DIAL.sweep > 180 ? 1 : 0;
+  const sweep = to >= from ? 1 : 0;
+  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${radius} ${radius} 0 ${large} ${sweep} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Tick marks around the dial — drawn once, they never change. */
+function buildDialTicks() {
+  const g = $('tunerTicks');
+  if (g.childNodes.length) return;
+  for (let c = -50; c <= 50; c += 2.5) {
+    const major = Math.abs(c % 10) < 0.01;
+    const outer = dialPoint(c, DIAL.r + 13);
+    const inner = dialPoint(c, DIAL.r + (major ? 4 : 8));
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', outer.x.toFixed(2));
+    line.setAttribute('y1', outer.y.toFixed(2));
+    line.setAttribute('x2', inner.x.toFixed(2));
+    line.setAttribute('y2', inner.y.toFixed(2));
+    line.setAttribute('class', `dial-tick${major ? ' major' : ''}${Math.abs(c) < 0.01 ? ' centre' : ''}`);
+    g.appendChild(line);
+  }
+}
+
 function renderTuner() {
   const instSel = $('tunerInstrument');
   if (!instSel.options.length) {
     for (const inst of INSTRUMENTS) {
-      const o = el('option', '', inst.label);
+      const o = el('option', '', inst.label.toUpperCase());
       o.value = inst.id;
       instSel.appendChild(o);
     }
@@ -1937,30 +1975,43 @@ function renderTuner() {
   const tunSel = $('tunerTuning');
   tunSel.replaceChildren();
   for (const t of inst.tunings) {
-    const o = el('option', '', t.label);
+    // The pill is narrow, so it carries the tuning's name without the spelling.
+    const o = el('option', '', t.label.split('—')[0].trim().toUpperCase());
     o.value = t.id;
+    o.title = t.label;
     tunSel.appendChild(o);
   }
   const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
   tunSel.value = tuning.id;
 
-  // Strings. Tapping one sounds its reference pitch and pins the tuner to it;
-  // tapping the pinned one again hands it back to auto-detect.
+  $('tunerA4Label').textContent = `A4 = ${state.tunerA4} Hz`;
+
+  const autoBtn = $('tunerAutoBtn');
+  const auto = state.tunerTarget === null;
+  autoBtn.setAttribute('aria-pressed', String(auto));
+  autoBtn.classList.toggle('on', auto);
+  autoBtn.textContent = auto ? 'AUTO' : midiLabel(state.tunerTarget);
+
+  buildDialTicks();
+  $('tunerTrack').setAttribute('d', dialArc(-50, 50, DIAL.r));
+
+  // Strings.
   const strings = $('tunerStrings');
   strings.replaceChildren();
   const reading = state.tunerReading;
-  const chromatic = tuning.notes.length > 12;
-  if (chromatic) {
-    strings.appendChild(el('p', 'body-copy tight', 'Chromatic: play any note and it will name it.'));
+  if (tuning.notes.length > 12) {
+    strings.appendChild(el('p', 'tuner-mic-note', 'Chromatic — play any note and it will be named.'));
   } else {
+    const count = tuning.notes.length;
     tuning.notes.forEach((midi, i) => {
       const pinned = state.tunerTarget === midi;
       const live = reading && reading.midi === midi && reading.state !== 'off';
       const b = el('button', `tuner-string${pinned ? ' pinned' : ''}${live ? ' live' : ''}${live && reading.state === 'locked' ? ' locked' : ''}`);
       b.append(
         el('span', 'ts-name', midiLabel(midi)),
-        el('span', 'ts-index', `${i + 1}`)
+        el('span', 'ts-index', `STR ${count - i}`)
       );
+      b.dataset.midi = String(midi);
       b.onclick = async () => {
         state.tunerTarget = pinned ? null : midi;
         if (tuner) tuner.setTarget(state.tunerTarget);
@@ -1971,7 +2022,6 @@ function renderTuner() {
     });
   }
 
-  // A4 reference.
   const a4Row = $('tunerA4Row');
   a4Row.replaceChildren();
   for (const hz of [432, 436, 438, 440, 442, 444]) {
@@ -1987,14 +2037,15 @@ function renderTuner() {
   const blocked = micBlockedByHost();
   const btn = $('tunerMicBtn');
   btn.setAttribute('aria-pressed', String(state.tunerOn));
-  btn.textContent = state.tunerOn ? 'On' : 'Off';
+  btn.classList.toggle('on', state.tunerOn);
   btn.disabled = blocked;
+  $('tunerMicLabel').textContent = state.tunerOn ? 'STOP LISTENING' : 'START LISTENING';
   $('tunerMicNote').textContent = blocked
-    ? 'Unavailable here — the page CircleSong is embedded in withholds the microphone.'
+    ? 'Listening is unavailable here — the page CircleSong is embedded in withholds the microphone.'
     : 'Uses the microphone. Nothing is recorded or sent anywhere.';
   if (blocked && !state.tunerError) {
     state.tunerError =
-      'Listening needs CircleSong to be open at its own address. Tap a string above to hear its exact pitch and tune by ear — that works anywhere.';
+      'Open CircleSong at its own address to listen. Tap a string to hear its exact pitch and tune by ear — that works anywhere.';
   }
 
   const err = $('tunerError');
@@ -2004,37 +2055,60 @@ function renderTuner() {
   renderTunerReadout();
 }
 
-/** The needle and the numbers. Kept apart so it can update without a re-render. */
+/** The dial and the numbers. Separate so it can update without a re-render. */
 function renderTunerReadout() {
   const r = state.tunerReading;
   const note = $('tunerNote');
-  const freq = $('tunerFreq');
   const cents = $('tunerCents');
   const stateEl = $('tunerState');
-  const needle = $('tunerNeedle');
+  const arc = $('tunerArc');
+  const pointer = $('tunerPointer');
+  const wrap = document.querySelector('.tuner-dial-wrap');
 
-  if (!r || r.state === 'off' || r.midi === null) {
-    note.textContent = state.tunerOn ? '—' : (state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—');
-    freq.textContent = state.tunerOn ? 'listening…' : 'Turn Listen on, then play a string.';
-    cents.textContent = '';
-    stateEl.textContent = '';
-    stateEl.className = 'tuner-state';
-    needle.style.left = '50%';
-    needle.className = 'tuner-needle';
+  const idle = !r || r.state === 'off' || r.midi === null;
+  const st = idle ? 'idle' : r.state;
+
+  for (const b of document.querySelectorAll('#tunerStrings .tuner-string')) {
+    const midi = Number(b.dataset.midi);
+    const live = !idle && r.midi === midi;
+    b.classList.toggle('live', live && r.state !== 'locked');
+    b.classList.toggle('locked', live && r.state === 'locked');
+  }
+  wrap.dataset.state = st;
+  arc.setAttribute('class', `dial-arc ${st}`);
+
+  if (idle) {
+    note.textContent = state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—';
+    cents.textContent = state.tunerOn ? 'listening' : '';
+    $('tunerFreq').textContent = 'Freq: —';
+    $('tunerSignal').textContent = state.tunerOn ? `${Math.round((r && r.level ? r.level : 0) * 400)}%` : '—';
+    stateEl.textContent = state.tunerOn ? 'WAITING' : 'OFF';
+    arc.setAttribute('d', '');
+    pointer.replaceChildren();
     return;
   }
 
-  note.textContent = midiLabel(r.midi);
-  freq.textContent = r.freq ? `${r.freq.toFixed(1)} Hz` : '';
   const c = Math.max(-50, Math.min(50, r.cents));
-  cents.textContent = `${c > 0 ? '+' : ''}${c.toFixed(1)} cents`;
-  needle.style.left = `${50 + c}%`;
-  needle.className = `tuner-needle ${r.state}`;
-  stateEl.className = `tuner-state ${r.state}`;
-  stateEl.textContent =
-    r.state === 'locked' ? 'IN TUNE'
-      : r.state === 'flat' ? 'FLAT — tighten'
-        : 'SHARP — loosen';
+  note.textContent = midiLabel(r.midi);
+  cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
+  $('tunerFreq').textContent = `Freq: ${r.freq.toFixed(1)}Hz`;
+  $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
+  stateEl.textContent = r.state === 'locked' ? 'LOCKED' : r.state === 'flat' ? 'FLAT' : 'SHARP';
+
+  // Fill from dead centre out to wherever the note actually is, so the arc
+  // itself shows how far off it is rather than only the pointer.
+  arc.setAttribute('d', Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r) : dialArc(0, c, DIAL.r));
+
+  pointer.replaceChildren();
+  const tip = dialPoint(c, DIAL.r + 16);
+  const base = dialPoint(c, DIAL.r - 14);
+  const left = dialPoint(c - 2.2, DIAL.r - 6);
+  const right = dialPoint(c + 2.2, DIAL.r - 6);
+  const tri = document.createElementNS(SVG_NS, 'polygon');
+  tri.setAttribute('points',
+    `${tip.x.toFixed(2)},${tip.y.toFixed(2)} ${right.x.toFixed(2)},${right.y.toFixed(2)} ${base.x.toFixed(2)},${base.y.toFixed(2)} ${left.x.toFixed(2)},${left.y.toFixed(2)}`);
+  tri.setAttribute('class', `dial-pointer ${r.state}`);
+  pointer.appendChild(tri);
 }
 
 /**
@@ -2668,6 +2742,12 @@ function wire() {
     renderTuner();
   };
   $('tunerMicBtn').onclick = toggleTuner;
+  $('tunerAutoBtn').onclick = () => {
+    // Back to following whichever string is nearest.
+    state.tunerTarget = null;
+    if (tuner) tuner.setTarget(null);
+    renderTuner();
+  };
 
   // --- songs, saving, audio export ---
   $('saveProjectBtn').onclick = () => doSaveProject(false);

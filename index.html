@@ -422,45 +422,59 @@
 
     <!-- /09 TUNER -->
     <section class="panel" id="tab-tuner" hidden>
-      <h2>/09 TUNER</h2>
-      <div class="row gap-xs">
-        <span class="micro-label">INSTRUMENT</span>
-        <select id="tunerInstrument" class="select grow" aria-label="Instrument"></select>
-      </div>
-      <div class="row gap-xs mt-s">
-        <span class="micro-label">TUNING</span>
-        <select id="tunerTuning" class="select grow" aria-label="Tuning"></select>
+      <div class="tuner-head">
+        <h2>/09 TUNER</h2>
+        <span class="tuner-a4" id="tunerA4Label">A4 = 440 Hz</span>
       </div>
 
-      <div class="tuner-readout">
-        <span id="tunerNote" class="tuner-note">—</span>
-        <span id="tunerFreq" class="tuner-freq"></span>
-        <div class="tuner-meter">
-          <div class="tuner-scale">
-            <span class="tick far">-50</span><span class="tick">-25</span>
-            <span class="tick centre">0</span>
-            <span class="tick">+25</span><span class="tick far">+50</span>
-          </div>
-          <div class="tuner-track">
-            <div class="tuner-zone"></div>
-            <div class="tuner-needle" id="tunerNeedle"></div>
-          </div>
+      <div class="tuner-pills">
+        <div class="pill-select">
+          <select id="tunerInstrument" aria-label="Instrument"></select>
+          <span class="pill-caret">▾</span>
         </div>
-        <span id="tunerCents" class="tuner-cents"></span>
-        <span id="tunerState" class="tuner-state"></span>
+        <div class="pill-select">
+          <select id="tunerTuning" aria-label="Tuning"></select>
+          <span class="pill-caret">▾</span>
+        </div>
+        <button id="tunerAutoBtn" class="pill" aria-pressed="true">AUTO</button>
       </div>
 
-      <span class="micro-label">STRINGS — TAP TO HEAR, OR TO TUNE ONE ONLY</span>
+      <div class="tuner-dial-wrap">
+        <svg id="tunerDial" class="tuner-dial" viewBox="8 6 224 212" role="img" aria-label="Tuning meter">
+          <defs>
+            <linearGradient id="tunerArcGrad" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="var(--d)"></stop>
+              <stop offset="45%" stop-color="var(--d)"></stop>
+              <stop offset="100%" stop-color="var(--a)"></stop>
+            </linearGradient>
+            <filter id="tunerGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3.2" result="b"></feGaussianBlur>
+              <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+          <g id="tunerTicks"></g>
+          <path id="tunerTrack" class="dial-track"></path>
+          <path id="tunerArc" class="dial-arc"></path>
+          <g id="tunerPointer"></g>
+        </svg>
+        <div class="tuner-centre">
+          <span id="tunerNote" class="tuner-note">—</span>
+          <span id="tunerCents" class="tuner-cents"></span>
+        </div>
+        <div class="tuner-stats">
+          <div class="stat"><span class="stat-key">Signal:</span><span id="tunerSignal" class="stat-val">—</span></div>
+          <div class="stat mid"><span id="tunerFreq" class="stat-val">Freq: —</span></div>
+          <div class="stat right"><span class="stat-key">Status:</span><span id="tunerState" class="stat-val">—</span></div>
+        </div>
+      </div>
+
       <div id="tunerStrings" class="tuner-strings"></div>
 
-      <div class="row between mt">
-        <div>
-          <span class="setting-name">Listen</span>
-          <span class="setting-note" id="tunerMicNote">Uses the microphone. Nothing is recorded or sent anywhere.</span>
-        </div>
-        <button id="tunerMicBtn" class="chip toggle solid" aria-pressed="false">Off</button>
-      </div>
-      <p id="tunerError" class="body-copy tight" hidden></p>
+      <button id="tunerMicBtn" class="tuner-listen" aria-pressed="false">
+        <span class="dot"></span><span id="tunerMicLabel">START LISTENING</span>
+      </button>
+      <p id="tunerMicNote" class="tuner-mic-note"></p>
+      <p id="tunerError" class="tuner-err" hidden></p>
 
       <div class="row gap-xs mt-s">
         <span class="micro-label">REFERENCE A4</span>
