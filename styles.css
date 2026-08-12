@@ -745,3 +745,149 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .source-link:hover { background: var(--a); color: var(--ink); }
 .byline a { color: var(--dim); text-decoration: underline; }
 .byline a:hover { color: var(--a); }
+
+/* ------------------------------------------------------------- tuner (/09) */
+.tuner-head { display: flex; align-items: baseline; justify-content: space-between; }
+.tuner-a4 { font: 500 10px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
+
+/* Pill row: instrument, tuning, auto. */
+.tuner-pills { display: flex; gap: 6px; margin: 12px 0 14px; }
+.pill-select { position: relative; flex: 1 1 0; min-width: 0; }
+.pill-select select {
+  width: 100%;
+  appearance: none; -webkit-appearance: none;
+  padding: 8px 20px 8px 12px;
+  border: 1px solid var(--a);
+  border-radius: 999px;
+  background: oklch(0.65 0.2 135 / 0.12);
+  color: var(--a);
+  font: 600 10px var(--mono);
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.pill-select select:focus { outline: none; box-shadow: 0 0 0 2px oklch(0.65 0.2 135 / 0.3); }
+.pill-caret { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 9px; color: var(--a); }
+.pill {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  font: 600 10px var(--mono);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+.pill.on { border-color: var(--a); color: var(--a); background: oklch(0.65 0.2 135 / 0.12); }
+
+/* The dial. */
+.tuner-dial-wrap {
+  position: relative;
+  padding: 14px 0 54px;
+  border: 1px solid oklch(0.65 0.2 135 / 0.35);
+  background:
+    radial-gradient(circle at 50% 42%, oklch(0.65 0.2 135 / 0.07), transparent 62%),
+    oklch(0.13 0.012 250);
+}
+.tuner-dial { display: block; width: 100%; max-width: 300px; margin: 0 auto; }
+
+.dial-tick { stroke: oklch(0.45 0.03 160); stroke-width: 1.4; }
+.dial-tick.major { stroke: oklch(0.62 0.08 160); stroke-width: 2; }
+.dial-tick.centre { stroke: var(--a); stroke-width: 2.6; }
+.dial-track {
+  fill: none;
+  stroke: url(#tunerArcGrad);
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.dial-arc {
+  fill: none;
+  stroke: oklch(0.85 0.19 140);
+  stroke-width: 9;
+  stroke-linecap: round;
+  filter: url(#tunerGlow);
+}
+.dial-arc.flat, .dial-arc.sharp { stroke: oklch(0.85 0.17 85); }
+.dial-pointer { fill: oklch(0.85 0.19 140); filter: url(#tunerGlow); }
+.dial-pointer.flat, .dial-pointer.sharp { fill: oklch(0.85 0.17 85); }
+
+/* Readout sits inside the ring. */
+.tuner-centre {
+  position: absolute; left: 0; right: 0; top: 44%;
+  transform: translateY(-50%);
+  text-align: center; pointer-events: none;
+}
+.tuner-note {
+  display: block;
+  font: 700 56px var(--display);
+  line-height: 1;
+  color: oklch(0.92 0.19 140);
+  text-shadow: 0 0 18px oklch(0.65 0.2 135 / 0.75), 0 0 46px oklch(0.65 0.2 135 / 0.4);
+}
+.tuner-dial-wrap[data-state='flat'] .tuner-note,
+.tuner-dial-wrap[data-state='sharp'] .tuner-note {
+  color: oklch(0.9 0.16 85);
+  text-shadow: 0 0 18px oklch(0.8 0.17 85 / 0.6);
+}
+.tuner-dial-wrap[data-state='idle'] .tuner-note { color: oklch(0.7 0.02 200); text-shadow: none; }
+.tuner-cents { display: block; margin-top: 4px; font: 600 20px var(--display); color: oklch(0.88 0.14 140); }
+.tuner-dial-wrap[data-state='idle'] .tuner-cents { color: var(--dim); font-size: 12px; }
+
+.tuner-stats {
+  position: absolute; left: 12px; right: 12px; bottom: 14px;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.tuner-stats .stat { display: flex; flex-direction: column; gap: 2px; }
+.tuner-stats .stat.mid { align-items: center; justify-content: flex-end; }
+.tuner-stats .stat.right { align-items: flex-end; }
+.stat-key { font: 400 9px var(--mono); color: var(--dim); }
+.stat-val { font: 600 11px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+.tuner-dial-wrap[data-state='flat'] #tunerState,
+.tuner-dial-wrap[data-state='sharp'] #tunerState { color: oklch(0.85 0.17 85); }
+.tuner-dial-wrap[data-state='idle'] #tunerState,
+.tuner-dial-wrap[data-state='idle'] .stat-val { color: var(--dim); }
+
+/* Strings. */
+.tuner-strings { display: flex; gap: 6px; margin-top: 12px; }
+.tuner-string {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: oklch(0.17 0.011 250);
+  color: oklch(0.9 0.006 250);
+  cursor: pointer; font: inherit;
+}
+.tuner-string:hover { border-color: var(--a); }
+.tuner-string .ts-name { font: 700 15px var(--display); }
+.tuner-string .ts-index { font: 400 8px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
+.tuner-string.pinned { border-color: var(--a); color: var(--a); }
+.tuner-string.pinned .ts-index { color: oklch(0.65 0.12 140); }
+.tuner-string.live { border-color: oklch(0.8 0.17 85); }
+.tuner-string.locked {
+  border-color: var(--a);
+  background: oklch(0.65 0.2 135 / 0.18);
+  box-shadow: 0 0 14px oklch(0.65 0.2 135 / 0.45);
+  color: var(--a);
+}
+
+/* Listen. */
+.tuner-listen {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  width: 100%; margin-top: 14px; padding: 15px;
+  border: 1px solid var(--a); border-radius: 10px;
+  background: var(--a); color: var(--ink);
+  font: 700 13px var(--mono); letter-spacing: 0.09em;
+  cursor: pointer;
+}
+.tuner-listen .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); }
+.tuner-listen.on { background: oklch(0.62 0.22 25); border-color: oklch(0.62 0.22 25); color: oklch(0.99 0 0); }
+.tuner-listen.on .dot { background: oklch(0.99 0 0); animation: rec-pulse 1.2s ease-in-out infinite; }
+.tuner-listen[disabled] { opacity: 0.4; cursor: not-allowed; background: transparent; color: var(--dim); border-color: var(--border); }
+@keyframes rec-pulse { 50% { opacity: 0.35; } }
+
+.tuner-mic-note { margin: 8px 0 0; font: 400 10px/1.5 var(--sans); color: var(--dim); text-align: center; }
+.tuner-err { margin: 8px 0 0; font: 400 11px/1.55 var(--sans); color: oklch(0.8 0.13 75); }

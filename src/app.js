@@ -55,6 +55,7 @@ import {
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
+import { Tuner, INSTRUMENTS, INSTRUMENT_BY_ID, findTuning, midiLabel } from './tuner.js';
 import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
@@ -102,6 +103,7 @@ const TONE_COLOR = {
 
 const TABS = [
   { id: 'circle', label: 'Circle', glyph: 'circle' },
+  { id: 'tuner', label: 'Tuner', glyph: 'fork' },
   { id: 'tone', label: 'Tone', glyph: 'square' },
   { id: 'drums', label: 'Drums', glyph: 'grid' },
   { id: 'compose', label: 'Compose', glyph: 'diamond' },
@@ -190,6 +192,15 @@ const state = {
   /** Which family of strum/rhythm feels is being browsed. */
   rhythmFamily: 'All',
   showAbout: false,
+  // --- tuner ---
+  tunerInstrument: 'guitar',
+  tunerTuning: 'standard',
+  tunerA4: 440,
+  /** A string chosen by hand, or null to follow whichever is nearest. */
+  tunerTarget: null,
+  tunerOn: false,
+  tunerReading: null,
+  tunerError: '',
   /** Draw the secondary-dominant arrows on the wheel. */
   showSecDom: false,
 
@@ -229,6 +240,8 @@ function setBars(nextBars, count) {
 }
 
 const engine = new AudioEngine();
+/** Created on first use — the tuner holds a microphone, so never eagerly. */
+let tuner = null;
 const sequencer = new Sequencer(engine, () => ({
   bars: bars(),
   bpm: state.bpm,
@@ -620,6 +633,7 @@ function render() {
   renderLearn();
   renderAssist();
   renderSongs();
+  renderTuner();
   renderTabs();
 }
 
@@ -631,7 +645,13 @@ function renderTabs() {
     const b = el('button', active ? 'active' : '');
     b.appendChild(glyph(t.glyph, active));
     b.appendChild(el('span', '', t.label));
-    b.onclick = () => { state.activeTab = t.id; render(); };
+    b.onclick = () => {
+      // Holding a microphone open on a screen you have navigated away from is
+      // both a battery drain and a thing users are right to distrust.
+      if (state.activeTab === 'tuner' && t.id !== 'tuner' && state.tunerOn) stopTuner();
+      state.activeTab = t.id;
+      render();
+    };
     bar.appendChild(b);
   }
   for (const t of TABS) {
@@ -653,6 +673,7 @@ function glyph(kind, active) {
       linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
       linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
+    fork: `width:12px;height:15px;border:2px solid ${col};border-top:none;border-radius:0 0 6px 6px;`,
     disc: `width:15px;height:15px;border-radius:50%;border:2px solid ${col};box-shadow:inset 0 0 0 3px ${col === 'var(--a)' ? 'transparent' : 'transparent'},0 0 0 0 ${col};position:relative;background:radial-gradient(circle,${col} 0 2px,transparent 2px);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
@@ -818,38 +839,17 @@ function renderCircle() {
       el('span', 'strip-note', noteName(pc, preferFlats())),
       el('span', 'strip-grade', chord.numeral)
     );
-    b.title =
-      state.exploreMode === 'chord'
-        ? `${chord.symbol} — degree ${i + 1} (${chord.numeral})`
-        : `${noteName(pc, preferFlats())} — degree ${i + 1}`;
+    b.title = `${noteName(pc, preferFlats())} — degree ${i + 1} of the key (${chord.numeral})`;
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
-      if (state.exploreMode === 'chord') {
-        const v = resolveVoicing(chord, 'root', { tuning: tuning() });
-        if (v) {
-          const when = auditionStart();
-          engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
-          engine.damp(when + exploreRingSeconds());
-          return;
-        }
-      }
-      // Single notes are for jamming: they layer over whatever is sounding
-      // instead of cutting it, and each is placed on a free string so a run
-      // rings like a real player moving across the neck.
-      //
-      // Crucially they never touch anything else. A global damp here would fade
-      // the loop and every other note still ringing, which makes it impossible
-      // to try a melody over a playing progression — so the note releases only
-      // the one string it was given.
-      const when = engine.currentTime + 0.02;
-      const string = engine.pluckNote({
+      // Always one note, whatever the wheel's Chord/Note switch says. This
+      // strip is for working out a line over a progression, and it plays on
+      // voices of its own: nothing that silences a chord reaches it, no chord
+      // can steal its voice, and stopping the transport leaves it ringing.
+      engine.pluckMelody({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
-        tuning: tuning(),
-        when,
         velocity: 0.85,
-        layer: true,
       });
-      if (string >= 0) engine.release(string, when + 2.2, 0.85, 0.8);
     };
     strip.appendChild(b);
   });
@@ -1000,27 +1000,25 @@ function renderExplore() {
 /**
  * Sound the current explore selection.
  *
- * Exploring the wheel is a question — "what does this one sound like?" — so it
- * answers with a single strum and stops. Running the whole rhythm pattern here
- * meant one tap kept strumming for a full bar, which read as a note that would
- * not stop.
+ * A tapped chord uses the selected rhythm, the same as every other chord
+ * audition. It used to be a bare single strum, which meant locking the key
+ * silently changed how chords were played — tap a wedge unlocked and you heard
+ * your feel, tap it locked and you heard a plain downstroke. That was a
+ * workaround for taps that strummed for a whole bar and would not stop, which
+ * the audition fade now handles properly.
  */
 async function playExplore() {
   const target = exploreTarget();
   if (!target || !(await ensureAudio())) return;
-  const when = auditionStart();
 
   if (state.exploreMode === 'chord') {
     const v = resolveVoicing(target.chord, 'root', { tuning: tuning() });
-    if (v) {
-      engine.strumOnce({ midi: v.midi, when, velocity: 0.9 });
-      engine.damp(when + exploreRingSeconds());
-      return;
-    }
+    if (v) { await playChordNow(target.chord, v); return; }
     // No playable shape in this tuning — fall through to the single note
     // rather than going silent.
   }
 
+  const when = auditionStart();
   engine.pluckNote({ midi: 60 + target.note, tuning: tuning(), when, velocity: 0.85 });
   engine.damp(when + exploreRingSeconds());
 }
@@ -1915,6 +1913,285 @@ async function previewSlot(barIdx, slotIdx) {
  * Saving reuses the exact JSON that export writes, so a saved project and an
  * exported file are the same thing — there is no second format to keep in step.
  */
+/**
+ * The tuner panel.
+ *
+ * The detector lives in src/tuner.js; this is the face of it. Reference pitches
+ * are played on the melody voices rather than a synthesised sine, so the note
+ * you match against is the instrument the rest of the app uses — and, because
+ * those voices sit outside the reach of `cut`, a reference tone cannot be
+ * silenced by anything else that happens.
+ */
+// The dial sweeps 270 degrees, ±50 cents, with the gap at the bottom.
+const DIAL = { cx: 120, cy: 120, r: 96, sweep: 135 };
+
+/** Point on the dial for a cents value. */
+function dialPoint(cents, radius) {
+  const a = ((cents / 50) * DIAL.sweep - 90) * (Math.PI / 180);
+  return { x: DIAL.cx + radius * Math.cos(a), y: DIAL.cy + radius * Math.sin(a) };
+}
+
+/** Arc path between two cents positions. */
+function dialArc(from, to, radius) {
+  const a = dialPoint(from, radius);
+  const b = dialPoint(to, radius);
+  const large = Math.abs(to - from) / 50 * DIAL.sweep > 180 ? 1 : 0;
+  const sweep = to >= from ? 1 : 0;
+  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${radius} ${radius} 0 ${large} ${sweep} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Tick marks around the dial — drawn once, they never change. */
+function buildDialTicks() {
+  const g = $('tunerTicks');
+  if (g.childNodes.length) return;
+  for (let c = -50; c <= 50; c += 2.5) {
+    const major = Math.abs(c % 10) < 0.01;
+    const outer = dialPoint(c, DIAL.r + 13);
+    const inner = dialPoint(c, DIAL.r + (major ? 4 : 8));
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', outer.x.toFixed(2));
+    line.setAttribute('y1', outer.y.toFixed(2));
+    line.setAttribute('x2', inner.x.toFixed(2));
+    line.setAttribute('y2', inner.y.toFixed(2));
+    line.setAttribute('class', `dial-tick${major ? ' major' : ''}${Math.abs(c) < 0.01 ? ' centre' : ''}`);
+    g.appendChild(line);
+  }
+}
+
+function renderTuner() {
+  const instSel = $('tunerInstrument');
+  if (!instSel.options.length) {
+    for (const inst of INSTRUMENTS) {
+      const o = el('option', '', inst.label.toUpperCase());
+      o.value = inst.id;
+      instSel.appendChild(o);
+    }
+  }
+  instSel.value = state.tunerInstrument;
+
+  const inst = INSTRUMENT_BY_ID[state.tunerInstrument] || INSTRUMENTS[0];
+  const tunSel = $('tunerTuning');
+  tunSel.replaceChildren();
+  for (const t of inst.tunings) {
+    // The pill is narrow, so it carries the tuning's name without the spelling.
+    const o = el('option', '', t.label.split('—')[0].trim().toUpperCase());
+    o.value = t.id;
+    o.title = t.label;
+    tunSel.appendChild(o);
+  }
+  const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
+  tunSel.value = tuning.id;
+
+  $('tunerA4Label').textContent = `A4 = ${state.tunerA4} Hz`;
+
+  const autoBtn = $('tunerAutoBtn');
+  const auto = state.tunerTarget === null;
+  autoBtn.setAttribute('aria-pressed', String(auto));
+  autoBtn.classList.toggle('on', auto);
+  autoBtn.textContent = auto ? 'AUTO' : midiLabel(state.tunerTarget);
+
+  buildDialTicks();
+  $('tunerTrack').setAttribute('d', dialArc(-50, 50, DIAL.r));
+
+  // Strings.
+  const strings = $('tunerStrings');
+  strings.replaceChildren();
+  const reading = state.tunerReading;
+  if (tuning.notes.length > 12) {
+    strings.appendChild(el('p', 'tuner-mic-note', 'Chromatic — play any note and it will be named.'));
+  } else {
+    const count = tuning.notes.length;
+    tuning.notes.forEach((midi, i) => {
+      const pinned = state.tunerTarget === midi;
+      const live = reading && reading.midi === midi && reading.state !== 'off';
+      const b = el('button', `tuner-string${pinned ? ' pinned' : ''}${live ? ' live' : ''}${live && reading.state === 'locked' ? ' locked' : ''}`);
+      b.append(
+        el('span', 'ts-name', midiLabel(midi)),
+        el('span', 'ts-index', `STR ${count - i}`)
+      );
+      b.dataset.midi = String(midi);
+      b.onclick = async () => {
+        state.tunerTarget = pinned ? null : midi;
+        if (tuner) tuner.setTarget(state.tunerTarget);
+        renderTuner();
+        if (await ensureAudio()) engine.pluckMelody({ midi, velocity: 0.8 });
+      };
+      strings.appendChild(b);
+    });
+  }
+
+  const a4Row = $('tunerA4Row');
+  a4Row.replaceChildren();
+  for (const hz of [432, 436, 438, 440, 442, 444]) {
+    const b = el('button', `chip small${state.tunerA4 === hz ? ' active' : ''}`, String(hz));
+    b.onclick = () => {
+      state.tunerA4 = hz;
+      if (tuner) { tuner.a4 = hz; tuner.setNotes(tuning.notes, state.tunerTarget); }
+      renderTuner();
+    };
+    a4Row.appendChild(b);
+  }
+
+  const blocked = micBlockedByHost();
+  const btn = $('tunerMicBtn');
+  btn.setAttribute('aria-pressed', String(state.tunerOn));
+  btn.classList.toggle('on', state.tunerOn);
+  btn.disabled = blocked;
+  $('tunerMicLabel').textContent = state.tunerOn ? 'STOP LISTENING' : 'START LISTENING';
+  $('tunerMicNote').textContent = blocked
+    ? 'Listening is unavailable here — the page CircleSong is embedded in withholds the microphone.'
+    : 'Uses the microphone. Nothing is recorded or sent anywhere.';
+  if (blocked && !state.tunerError) {
+    state.tunerError =
+      'Open CircleSong at its own address to listen. Tap a string to hear its exact pitch and tune by ear — that works anywhere.';
+  }
+
+  const err = $('tunerError');
+  err.hidden = !state.tunerError;
+  err.textContent = state.tunerError;
+
+  renderTunerReadout();
+}
+
+/** The dial and the numbers. Separate so it can update without a re-render. */
+function renderTunerReadout() {
+  const r = state.tunerReading;
+  const note = $('tunerNote');
+  const cents = $('tunerCents');
+  const stateEl = $('tunerState');
+  const arc = $('tunerArc');
+  const pointer = $('tunerPointer');
+  const wrap = document.querySelector('.tuner-dial-wrap');
+
+  const idle = !r || r.state === 'off' || r.midi === null;
+  const st = idle ? 'idle' : r.state;
+
+  for (const b of document.querySelectorAll('#tunerStrings .tuner-string')) {
+    const midi = Number(b.dataset.midi);
+    const live = !idle && r.midi === midi;
+    b.classList.toggle('live', live && r.state !== 'locked');
+    b.classList.toggle('locked', live && r.state === 'locked');
+  }
+  wrap.dataset.state = st;
+  arc.setAttribute('class', `dial-arc ${st}`);
+
+  if (idle) {
+    note.textContent = state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—';
+    cents.textContent = state.tunerOn ? 'listening' : '';
+    $('tunerFreq').textContent = 'Freq: —';
+    $('tunerSignal').textContent = state.tunerOn ? `${Math.round((r && r.level ? r.level : 0) * 400)}%` : '—';
+    stateEl.textContent = state.tunerOn ? 'WAITING' : 'OFF';
+    arc.setAttribute('d', '');
+    pointer.replaceChildren();
+    return;
+  }
+
+  const c = Math.max(-50, Math.min(50, r.cents));
+  note.textContent = midiLabel(r.midi);
+  cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
+  $('tunerFreq').textContent = `Freq: ${r.freq.toFixed(1)}Hz`;
+  $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
+  stateEl.textContent = r.state === 'locked' ? 'LOCKED' : r.state === 'flat' ? 'FLAT' : 'SHARP';
+
+  // Fill from dead centre out to wherever the note actually is, so the arc
+  // itself shows how far off it is rather than only the pointer.
+  arc.setAttribute('d', Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r) : dialArc(0, c, DIAL.r));
+
+  pointer.replaceChildren();
+  const tip = dialPoint(c, DIAL.r + 16);
+  const base = dialPoint(c, DIAL.r - 14);
+  const left = dialPoint(c - 2.2, DIAL.r - 6);
+  const right = dialPoint(c + 2.2, DIAL.r - 6);
+  const tri = document.createElementNS(SVG_NS, 'polygon');
+  tri.setAttribute('points',
+    `${tip.x.toFixed(2)},${tip.y.toFixed(2)} ${right.x.toFixed(2)},${right.y.toFixed(2)} ${base.x.toFixed(2)},${base.y.toFixed(2)} ${left.x.toFixed(2)},${left.y.toFixed(2)}`);
+  tri.setAttribute('class', `dial-pointer ${r.state}`);
+  pointer.appendChild(tri);
+}
+
+/**
+ * Whether the page embedding us has withheld the microphone.
+ *
+ * Permissions Policy defaults `microphone` to `self`, so a cross-origin frame
+ * gets nothing unless the host sets allow="microphone" on it. That is a decision
+ * of the embedding page, not of the user, and no amount of asking will change
+ * it — so it is worth detecting before prompting, and worth saying plainly
+ * rather than reporting as a refusal the user could fix in their settings.
+ */
+function micBlockedByHost() {
+  if (window.self === window.top) return false;
+  try {
+    const policy = document.featurePolicy || document.permissionsPolicy;
+    if (policy && typeof policy.allowsFeature === 'function') {
+      return !policy.allowsFeature('microphone');
+    }
+  } catch {
+    /* fall through — we simply do not know */
+  }
+  return false;
+}
+
+/** Start or stop listening. */
+async function toggleTuner() {
+  if (state.tunerOn) {
+    stopTuner();
+    return;
+  }
+  state.tunerError = '';
+  if (!(await ensureAudio())) {
+    state.tunerError = 'Audio could not start, so the tuner cannot listen.';
+    renderTuner();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    state.tunerError = 'This browser does not offer microphone access to the page.';
+    renderTuner();
+    return;
+  }
+  if (micBlockedByHost()) {
+    state.tunerError =
+      'The page CircleSong is embedded in has not granted it the microphone, so it cannot even ask. '
+      + 'Open CircleSong from its own address — the installed app, or the copy served from GitHub — and listening will work. '
+      + 'Meanwhile you can tune by ear: tap a string above to hear its exact pitch.';
+    renderTuner();
+    return;
+  }
+  try {
+    if (!tuner) {
+      tuner = new Tuner(engine.ctx);
+      tuner.onUpdate = (u) => {
+        state.tunerReading = u;
+        renderTunerReadout();
+      };
+    }
+    tuner.a4 = state.tunerA4;
+    const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
+    tuner.setNotes(tuning.notes, state.tunerTarget);
+    await tuner.start();
+    state.tunerOn = true;
+  } catch (e) {
+    // Denied, or blocked by the page's permissions policy — which is what
+    // happens inside a sandboxed iframe that was not granted the microphone.
+    state.tunerOn = false;
+    state.tunerError =
+      e && e.name === 'NotAllowedError'
+        ? 'Microphone access was refused. Allow it for this page in your browser\u2019s site settings, then switch Listen on again. You can tune by ear in the meantime — tap a string above to hear its pitch.'
+        : e && e.name === 'NotFoundError'
+          ? 'No microphone was found on this device. Tap a string above to hear its pitch and tune by ear.'
+          : `The microphone could not be opened — ${e && e.message ? e.message : 'unknown error'}.`;
+  }
+  renderTuner();
+}
+
+function stopTuner() {
+  if (tuner) tuner.stop();
+  state.tunerOn = false;
+  state.tunerReading = null;
+  renderTuner();
+}
+
 function renderSongs() {
   const secs = state.sections.length;
   const filled = state.sections.reduce(
@@ -2448,6 +2725,30 @@ function wire() {
     else reresolveAll();
     renderTimeline();
   };
+  // --- tuner ---
+  $('tunerInstrument').onchange = (e) => {
+    state.tunerInstrument = e.target.value;
+    state.tunerTuning = INSTRUMENT_BY_ID[state.tunerInstrument].tunings[0].id;
+    state.tunerTarget = null;
+    state.tunerReading = null;
+    if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
+    renderTuner();
+  };
+  $('tunerTuning').onchange = (e) => {
+    state.tunerTuning = e.target.value;
+    state.tunerTarget = null;
+    state.tunerReading = null;
+    if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
+    renderTuner();
+  };
+  $('tunerMicBtn').onclick = toggleTuner;
+  $('tunerAutoBtn').onclick = () => {
+    // Back to following whichever string is nearest.
+    state.tunerTarget = null;
+    if (tuner) tuner.setTarget(null);
+    renderTuner();
+  };
+
   // --- songs, saving, audio export ---
   $('saveProjectBtn').onclick = () => doSaveProject(false);
   $('saveAsProjectBtn').onclick = () => doSaveProject(true);
@@ -2755,6 +3056,12 @@ function applySongData(data) {
   }
 }
 
+// The microphone is released whenever the page stops being visible, so it is
+// never held by a tab sitting in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.tunerOn) stopTuner();
+});
+
 // --------------------------------------------------------------------- boot
 
 wire();
@@ -2796,6 +3103,8 @@ window.CircleSong = {
   render,
   /** Re-derive every stored shape — what a key, mode or tuning change runs. */
   reresolveAll,
+  /** The live Tuner, once listening has been switched on. */
+  tunerInstance: () => tuner,
   // Exposed so tests can measure voice leading rather than eyeball it.
   progressionCost,
   voiceLeadCost,

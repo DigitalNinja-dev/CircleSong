@@ -407,17 +407,29 @@ class StringModel {
   }
 }
 
+/**
+ * Voices 0-5 are the instrument: chords and strums live here, and a cut damps
+ * them. Voices 6-9 are for melody — the scale strip, where the whole point is
+ * to try a line over a progression that is already playing. They are separate
+ * so that nothing which silences a chord can silence a melody note, and so the
+ * two can never steal each other's voices.
+ */
+const CHORD_VOICES = 6;
+const MELODY_VOICES = 4;
+const TOTAL_VOICES = CHORD_VOICES + MELODY_VOICES;
+
 class GuitarProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.strings = Array.from({ length: 6 }, (_, i) => new StringModel(sampleRate, i));
+    this.strings = Array.from({ length: TOTAL_VOICES }, (_, i) => new StringModel(sampleRate, i));
     this.queue = [];
     this.coupling = 0.006;
     this.bridgeState = 0;
     /** Previous-sample output per string, so a string never drives itself. */
-    this.last = new Float32Array(6);
-    // Slight stereo spread: low strings left, high strings right.
-    this.pan = [-0.35, -0.22, -0.08, 0.08, 0.22, 0.35];
+    this.last = new Float32Array(TOTAL_VOICES);
+    // Slight stereo spread: low strings left, high strings right. Melody voices
+    // sit wide of the chord, so a line stays audible over it.
+    this.pan = [-0.35, -0.22, -0.08, 0.08, 0.22, 0.35, -0.45, 0.45, -0.28, 0.28];
     this.master = 0.9;
     this.running = true;
 
@@ -475,10 +487,20 @@ class GuitarProcessor extends AudioWorkletProcessor {
 
   applyEvent(ev) {
     if (ev.type === 'cutAll') {
-      for (const s of this.strings) s.release(ev.level, ev.time);
+      // Chord voices only unless told otherwise. A cut is a musical gesture —
+      // "replace what is sounding with this" — and it has no business reaching
+      // a melody note the player is holding over the top.
+      const from = ev.from ?? 0;
+      const to = ev.to ?? CHORD_VOICES;
+      for (let i = from; i < to && i < this.strings.length; i++) {
+        this.strings[i].release(ev.level, ev.time);
+      }
       return;
     }
-    const s = this.strings[ev.string & 5];
+    // Clamp rather than mask. `& 5` silently folded any melody voice back onto
+    // a chord string, which is exactly the bug this pool exists to fix.
+    const idx = Math.max(0, Math.min(TOTAL_VOICES - 1, ev.string | 0));
+    const s = this.strings[idx];
     if (ev.type === 'pluck') s.pluck(ev);
     else s.release(ev.level ?? 0.6, ev.time ?? 0.1);
   }
@@ -500,7 +522,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
       let r = 0;
       let sum = 0;
       let live = 0;
-      for (let k = 0; k < 6; k++) if (this.strings[k].active) live++;
+      for (let k = 0; k < CHORD_VOICES; k++) if (this.strings[k].active) live++;
       const bridge = this.bridgeState;
       // The bridge carries the *sum* of the strings, so a chord drives each
       // string several times harder than a single note does. Left unnormalised
@@ -512,7 +534,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
       // loop stays passive whether one note is sounding or six.
       const c = this.coupling / Math.max(1, live - 1);
 
-      for (let k = 0; k < 6; k++) {
+      for (let k = 0; k < CHORD_VOICES; k++) {
         const st = this.strings[k];
         if (!st.active) {
           this.last[k] = 0;
@@ -530,7 +552,24 @@ class GuitarProcessor extends AudioWorkletProcessor {
         r += v * (1 + p) * 0.5;
       }
 
-      // Bridge admittance: lowpassed sum of all strings.
+      // Melody voices run outside the coupled instrument: no bridge drive in,
+      // no contribution to the bridge out. That is what makes them genuinely
+      // independent rather than merely separately addressable — a chord cannot
+      // push them around, and they cannot destabilise the chord's feedback.
+      for (let k = CHORD_VOICES; k < TOTAL_VOICES; k++) {
+        const st = this.strings[k];
+        if (!st.active) {
+          this.last[k] = 0;
+          continue;
+        }
+        const v = st.tick(0);
+        this.last[k] = v;
+        const p = this.pan[k];
+        l += v * (1 - p) * 0.5;
+        r += v * (1 + p) * 0.5;
+      }
+
+      // Bridge admittance: lowpassed sum of the coupled strings.
       this.bridgeState = this.bridgeState * 0.72 + sum * 0.28;
 
       left[i] = l * this.master;

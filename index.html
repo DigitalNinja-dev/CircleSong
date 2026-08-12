@@ -114,7 +114,7 @@
         <button id="lockBtn" class="lock-btn" aria-pressed="false"></button>
       </div>
       <div id="exploreModeRow" class="row gap-xs mb-s" hidden>
-        <span class="micro-label">TAP PLAYS</span>
+        <span class="micro-label">WHEEL TAP PLAYS</span>
         <div class="row gap-xs grow" id="exploreModeBtns"></div>
       </div>
       <div class="row between mb-s">
@@ -418,6 +418,68 @@
       <input id="templateSearch" class="search-input" type="search" placeholder="Search name, numerals, or a song…" aria-label="Search progressions">
       <p id="templateCount" class="micro-label"></p>
       <div class="stack" id="templateList"></div>
+    </section>
+
+    <!-- /09 TUNER -->
+    <section class="panel" id="tab-tuner" hidden>
+      <div class="tuner-head">
+        <h2>/09 TUNER</h2>
+        <span class="tuner-a4" id="tunerA4Label">A4 = 440 Hz</span>
+      </div>
+
+      <div class="tuner-pills">
+        <div class="pill-select">
+          <select id="tunerInstrument" aria-label="Instrument"></select>
+          <span class="pill-caret">▾</span>
+        </div>
+        <div class="pill-select">
+          <select id="tunerTuning" aria-label="Tuning"></select>
+          <span class="pill-caret">▾</span>
+        </div>
+        <button id="tunerAutoBtn" class="pill" aria-pressed="true">AUTO</button>
+      </div>
+
+      <div class="tuner-dial-wrap">
+        <svg id="tunerDial" class="tuner-dial" viewBox="8 6 224 212" role="img" aria-label="Tuning meter">
+          <defs>
+            <linearGradient id="tunerArcGrad" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="var(--d)"></stop>
+              <stop offset="45%" stop-color="var(--d)"></stop>
+              <stop offset="100%" stop-color="var(--a)"></stop>
+            </linearGradient>
+            <filter id="tunerGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3.2" result="b"></feGaussianBlur>
+              <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+          <g id="tunerTicks"></g>
+          <path id="tunerTrack" class="dial-track"></path>
+          <path id="tunerArc" class="dial-arc"></path>
+          <g id="tunerPointer"></g>
+        </svg>
+        <div class="tuner-centre">
+          <span id="tunerNote" class="tuner-note">—</span>
+          <span id="tunerCents" class="tuner-cents"></span>
+        </div>
+        <div class="tuner-stats">
+          <div class="stat"><span class="stat-key">Signal:</span><span id="tunerSignal" class="stat-val">—</span></div>
+          <div class="stat mid"><span id="tunerFreq" class="stat-val">Freq: —</span></div>
+          <div class="stat right"><span class="stat-key">Status:</span><span id="tunerState" class="stat-val">—</span></div>
+        </div>
+      </div>
+
+      <div id="tunerStrings" class="tuner-strings"></div>
+
+      <button id="tunerMicBtn" class="tuner-listen" aria-pressed="false">
+        <span class="dot"></span><span id="tunerMicLabel">START LISTENING</span>
+      </button>
+      <p id="tunerMicNote" class="tuner-mic-note"></p>
+      <p id="tunerError" class="tuner-err" hidden></p>
+
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">REFERENCE A4</span>
+        <div class="row gap-xs grow" id="tunerA4Row"></div>
+      </div>
     </section>
 
     <!-- /08 SONGS -->

@@ -1,0 +1,60 @@
+# Publish CircleSong to GitHub Pages.
+#
+# The app needs a real https origin of its own for two reasons: a service worker
+# will not install without one, so the PWA cannot go offline, and Permissions
+# Policy defaults `microphone` to `self`, so the tuner cannot listen inside
+# somebody else's cross-origin frame no matter what the user allows.
+#
+# The whole repo is the site — it is a static app with no build step to serve.
+# `npm run build` runs only to regenerate dist/circlesong.html, the single-file
+# copy, and to fail the deploy if the source has drifted from what the build
+# guards expect.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; let a newer commit supersede an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Rebuilds the single-file copy and enforces the build guards: every
+      # module registered, no renamed imports, service-worker cache re-stamped.
+      - name: Build
+        run: npm run build
+
+      - name: Fail if the committed build is stale
+        run: |
+          if ! git diff --quiet -- dist/circlesong.html sw.js; then
+            echo "dist/circlesong.html or sw.js is out of date — run 'npm run build' and commit the result."
+            git diff --stat -- dist/circlesong.html sw.js
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

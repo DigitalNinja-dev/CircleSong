@@ -44,6 +44,10 @@ import { midiToFreq } from '../theory.js';
 
 const WORKLET_URL = new URL('./guitar-processor.js', import.meta.url);
 
+/** Must match the processor: voices 0-5 are chords, 6-9 are melody. */
+const CHORD_VOICES = 6;
+const MELODY_VOICES = 4;
+
 /**
  * Tone presets. `string` params go to the physical model; everything else
  * shapes the instrument body and signal chain around it.
@@ -179,6 +183,12 @@ export class AudioEngine {
      * one before it.
      */
     this._stringFree = new Float64Array(6);
+    /**
+     * The melody pool, voices 6..9 in the worklet. Kept apart from the six
+     * chord strings so a line played on the scale strip is never cut by a
+     * chord, never stolen for one, and never stops when the transport does.
+     */
+    this._melodyFree = new Float64Array(MELODY_VOICES);
   }
 
   /**
@@ -228,6 +238,55 @@ export class AudioEngine {
     this.pluck({ string, midi, when: t, velocity });
     // Assume it is audible for most of its decay; good enough for allocation.
     this._stringFree[string] = t + this.stringParams.decay * 0.55;
+    return string;
+  }
+
+  /**
+   * Play a melody note on its own voice.
+   *
+   * This is the scale strip's generator. It shares the instrument's tone but
+   * none of its plumbing: no bridge coupling, and outside the reach of `cut`
+   * and `damp`, so a note can be held over a progression — which is the entire
+   * point of a strip you use to work out a line.
+   *
+   * A voice that has gone quiet is always preferred; when every one is still
+   * ringing the longest-held is taken, which is what a player running out of
+   * fingers does too.
+   *
+   * @returns {number} the worklet voice used, or -1 when audio is not ready
+   */
+  pluckMelody({ midi, when, velocity = 0.85 }) {
+    if (!this.ready) return -1;
+    const t = when ?? this.currentTime + 0.02;
+
+    let pick = 0;
+    let bestFree = Infinity;
+    for (let i = 0; i < MELODY_VOICES; i++) {
+      if (this._melodyFree[i] <= t) { pick = i; break; }
+      if (this._melodyFree[i] < bestFree) { bestFree = this._melodyFree[i]; pick = i; }
+    }
+
+    const string = CHORD_VOICES + pick;
+    const s = this.stringParams;
+    this.node.port.postMessage({
+      type: 'pluck',
+      frame: Math.max(0, Math.round(t * this.ctx.sampleRate)),
+      string,
+      freq: midiToFreq(midi),
+      velocity,
+      decay: s.decay,
+      brightness: s.brightness,
+      pickPos: s.pickPos,
+      hardness: s.hardness,
+      pickupMix: s.pickupMix ?? 0,
+      pickupPos: s.pickupPos ?? 0.12,
+      hammer: s.hammer ?? 0,
+      stiffness: s.stiffness ?? 0,
+      muteAmount: 0,
+    });
+    // No scheduled release: a melody note ends when it decays or when its voice
+    // is needed again, and nothing else.
+    this._melodyFree[pick] = t + s.decay * 0.55;
     return string;
   }
 
