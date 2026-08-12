@@ -8231,9 +8231,18 @@ function renderTuner() {
     a4Row.appendChild(b);
   }
 
+  const blocked = micBlockedByHost();
   const btn = $('tunerMicBtn');
   btn.setAttribute('aria-pressed', String(state.tunerOn));
   btn.textContent = state.tunerOn ? 'On' : 'Off';
+  btn.disabled = blocked;
+  $('tunerMicNote').textContent = blocked
+    ? 'Unavailable here — the page CircleSong is embedded in withholds the microphone.'
+    : 'Uses the microphone. Nothing is recorded or sent anywhere.';
+  if (blocked && !state.tunerError) {
+    state.tunerError =
+      'Listening needs CircleSong to be open at its own address. Tap a string above to hear its exact pitch and tune by ear — that works anywhere.';
+  }
 
   const err = $('tunerError');
   err.hidden = !state.tunerError;
@@ -8275,6 +8284,28 @@ function renderTunerReadout() {
         : 'SHARP — loosen';
 }
 
+/**
+ * Whether the page embedding us has withheld the microphone.
+ *
+ * Permissions Policy defaults `microphone` to `self`, so a cross-origin frame
+ * gets nothing unless the host sets allow="microphone" on it. That is a decision
+ * of the embedding page, not of the user, and no amount of asking will change
+ * it — so it is worth detecting before prompting, and worth saying plainly
+ * rather than reporting as a refusal the user could fix in their settings.
+ */
+function micBlockedByHost() {
+  if (window.self === window.top) return false;
+  try {
+    const policy = document.featurePolicy || document.permissionsPolicy;
+    if (policy && typeof policy.allowsFeature === 'function') {
+      return !policy.allowsFeature('microphone');
+    }
+  } catch {
+    /* fall through — we simply do not know */
+  }
+  return false;
+}
+
 /** Start or stop listening. */
 async function toggleTuner() {
   if (state.tunerOn) {
@@ -8289,6 +8320,14 @@ async function toggleTuner() {
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     state.tunerError = 'This browser does not offer microphone access to the page.';
+    renderTuner();
+    return;
+  }
+  if (micBlockedByHost()) {
+    state.tunerError =
+      'The page CircleSong is embedded in has not granted it the microphone, so it cannot even ask. '
+      + 'Open CircleSong from its own address — the installed app, or the copy served from GitHub — and listening will work. '
+      + 'Meanwhile you can tune by ear: tap a string above to hear its exact pitch.';
     renderTuner();
     return;
   }
@@ -8311,8 +8350,10 @@ async function toggleTuner() {
     state.tunerOn = false;
     state.tunerError =
       e && e.name === 'NotAllowedError'
-        ? 'Microphone access was refused. Allow it for this page, or open CircleSong in its own tab — an embedded frame is often not permitted to ask.'
-        : `The microphone could not be opened — ${e && e.message ? e.message : 'unknown error'}.`;
+        ? 'Microphone access was refused. Allow it for this page in your browser\u2019s site settings, then switch Listen on again. You can tune by ear in the meantime — tap a string above to hear its pitch.'
+        : e && e.name === 'NotFoundError'
+          ? 'No microphone was found on this device. Tap a string above to hear its pitch and tune by ear.'
+          : `The microphone could not be opened — ${e && e.message ? e.message : 'unknown error'}.`;
   }
   renderTuner();
 }
