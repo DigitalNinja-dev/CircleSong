@@ -783,6 +783,67 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .byline a { color: var(--dim); text-decoration: underline; }
 .byline a:hover { color: var(--a); }
 
+/* ------------------------------------------------------------- tuner (/09) */
+.tuner-readout {
+  margin: 16px 0;
+  padding: 16px 14px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.tuner-note { display: block; font: 600 42px var(--display); color: oklch(0.96 0.006 250); line-height: 1.1; }
+.tuner-freq { display: block; margin-top: 2px; font: 400 11px var(--mono); color: var(--dim); }
+
+.tuner-meter { margin: 14px 0 8px; }
+.tuner-scale { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.tuner-scale .tick { font: 400 9px var(--mono); color: var(--dimmer); }
+.tuner-scale .tick.centre { color: var(--a); }
+.tuner-track {
+  position: relative;
+  height: 26px;
+  background: oklch(0.15 0.011 250);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+/* The ±4-cent window the lock waits inside — drawn so "in tune" is a place on
+   the meter rather than a number to interpret. */
+.tuner-zone {
+  position: absolute; top: 0; bottom: 0; left: 46%; width: 8%;
+  background: oklch(0.65 0.2 135 / 0.16);
+  border-left: 1px solid oklch(0.65 0.2 135 / 0.35);
+  border-right: 1px solid oklch(0.65 0.2 135 / 0.35);
+}
+.tuner-needle {
+  position: absolute; top: 2px; bottom: 2px; left: 50%; width: 3px;
+  margin-left: -1.5px; background: oklch(0.75 0.01 250);
+  transition: left 90ms linear, background 120ms linear;
+}
+.tuner-needle.flat, .tuner-needle.sharp { background: oklch(0.8 0.17 60); }
+.tuner-needle.locked { background: var(--a); box-shadow: 0 0 10px var(--a); }
+
+.tuner-cents { display: block; font: 500 12px var(--mono); color: oklch(0.75 0.008 250); }
+.tuner-state { display: block; margin-top: 4px; font: 600 11px var(--mono); letter-spacing: 0.08em; min-height: 14px; }
+.tuner-state.locked { color: var(--a); }
+.tuner-state.flat, .tuner-state.sharp { color: oklch(0.8 0.17 60); }
+
+.tuner-strings { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tuner-string {
+  flex: 1 1 58px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 9px 4px;
+  border: 1px solid var(--border);
+  background: oklch(0.18 0.011 250);
+  color: oklch(0.9 0.006 250);
+  cursor: pointer; font: inherit;
+}
+.tuner-string:hover { border-color: var(--a); }
+.tuner-string .ts-name { font: 600 13px var(--display); }
+.tuner-string .ts-index { font: 400 9px var(--mono); color: var(--dim); }
+.tuner-string.pinned { border-color: var(--c); }
+.tuner-string.live { background: oklch(0.26 0.04 90); }
+.tuner-string.locked { background: var(--a); border-color: var(--a); color: var(--ink); }
+.tuner-string.locked .ts-index { color: oklch(0.25 0.02 250); }
+
 </style>
 </head>
 <body>
@@ -1165,6 +1226,54 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       <input id="templateSearch" class="search-input" type="search" placeholder="Search name, numerals, or a song…" aria-label="Search progressions">
       <p id="templateCount" class="micro-label"></p>
       <div class="stack" id="templateList"></div>
+    </section>
+
+    <!-- /09 TUNER -->
+    <section class="panel" id="tab-tuner" hidden>
+      <h2>/09 TUNER</h2>
+      <div class="row gap-xs">
+        <span class="micro-label">INSTRUMENT</span>
+        <select id="tunerInstrument" class="select grow" aria-label="Instrument"></select>
+      </div>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">TUNING</span>
+        <select id="tunerTuning" class="select grow" aria-label="Tuning"></select>
+      </div>
+
+      <div class="tuner-readout">
+        <span id="tunerNote" class="tuner-note">—</span>
+        <span id="tunerFreq" class="tuner-freq"></span>
+        <div class="tuner-meter">
+          <div class="tuner-scale">
+            <span class="tick far">-50</span><span class="tick">-25</span>
+            <span class="tick centre">0</span>
+            <span class="tick">+25</span><span class="tick far">+50</span>
+          </div>
+          <div class="tuner-track">
+            <div class="tuner-zone"></div>
+            <div class="tuner-needle" id="tunerNeedle"></div>
+          </div>
+        </div>
+        <span id="tunerCents" class="tuner-cents"></span>
+        <span id="tunerState" class="tuner-state"></span>
+      </div>
+
+      <span class="micro-label">STRINGS — TAP TO HEAR, OR TO TUNE ONE ONLY</span>
+      <div id="tunerStrings" class="tuner-strings"></div>
+
+      <div class="row between mt">
+        <div>
+          <span class="setting-name">Listen</span>
+          <span class="setting-note" id="tunerMicNote">Uses the microphone. Nothing is recorded or sent anywhere.</span>
+        </div>
+        <button id="tunerMicBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
+      <p id="tunerError" class="body-copy tight" hidden></p>
+
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">REFERENCE A4</span>
+        <div class="row gap-xs grow" id="tunerA4Row"></div>
+      </div>
     </section>
 
     <!-- /08 SONGS -->
@@ -3801,6 +3910,375 @@ function storageUsed() {
   return bytes;
 }
 
+/* ===== src/tuner.js ===== */
+// Pitch detection and the tuning tables behind the Tuner tab.
+//
+// Ported from DigitalNinja-dev/Guitar-Tuner, which was scaffolded by AI Studio
+// as a React/Vite/Tailwind app. The scaffolding is dropped — CircleSong has no
+// dependencies and no build step to develop — but the substance is kept: YIN
+// with parabolic interpolation, an RMS noise gate, EMA smoothing, and a
+// hysteresis lock so the readout settles instead of flickering.
+//
+// Three things are done differently from the source, all for the same reason:
+// this runs inside an app that already owns an audio graph.
+//   - It uses CircleSong's AudioContext rather than making a second one. Two
+//     contexts cannot share a clock and iOS limits how many exist at all.
+//   - The microphone is a dead end: source -> analyser and nothing further. A
+//     path to the destination is a phone speaker feeding its own microphone.
+//   - The analysis window is sized from the lowest note being tuned. The source
+//     used a fixed 2048-sample buffer, which cannot resolve anything below
+//     about 47 Hz at 48 kHz — so the bass tunings it offers, down to B0 at
+//     30.9 Hz, could never have been detected.
+
+
+
+const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+
+/** Note name with octave for a MIDI number, e.g. 40 -> "E2". */
+function midiLabel(midi) {
+  return `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+/** How far `freq` is from `target`, in cents. */
+function centsBetween(freq, target) {
+  return 1200 * Math.log2(freq / target);
+}
+
+/**
+ * Instruments and their tunings, as MIDI note numbers low string first.
+ * Straight from the source's tunings table.
+ */
+const INSTRUMENTS = [
+  {
+    id: 'guitar', label: 'Guitar',
+    tunings: [
+      { id: 'standard', label: 'Standard — E A D G B E', notes: [40, 45, 50, 55, 59, 64] },
+      { id: 'dropd', label: 'Drop D — D A D G B E', notes: [38, 45, 50, 55, 59, 64] },
+      { id: 'halfstep', label: 'Half step down — E♭ A♭ D♭ G♭ B♭ E♭', notes: [39, 44, 49, 54, 58, 63] },
+      { id: 'fullstep', label: 'Full step down — D G C F A D', notes: [38, 43, 48, 53, 57, 62] },
+      { id: 'openg', label: 'Open G — D G D G B D', notes: [38, 43, 50, 55, 59, 62] },
+      { id: 'opend', label: 'Open D — D A D F♯ A D', notes: [38, 45, 50, 54, 57, 62] },
+      { id: 'dadgad', label: 'DADGAD — D A D G A D', notes: [38, 45, 50, 55, 57, 62] },
+      { id: 'dropc', label: 'Drop C — C G C F A D', notes: [36, 43, 48, 53, 57, 62] },
+      { id: 'seven', label: '7-string — B E A D G B E', notes: [35, 40, 45, 50, 55, 59, 64] },
+    ],
+  },
+  {
+    id: 'bass', label: 'Bass',
+    tunings: [
+      { id: 'bass4', label: 'Standard 4-string — E A D G', notes: [28, 33, 38, 43] },
+      { id: 'bassdropd', label: 'Drop D — D A D G', notes: [26, 33, 38, 43] },
+      { id: 'basshalf', label: 'Half step down — E♭ A♭ D♭ G♭', notes: [27, 32, 37, 42] },
+      { id: 'bass5', label: 'Standard 5-string — B E A D G', notes: [23, 28, 33, 38, 43] },
+    ],
+  },
+  {
+    id: 'ukulele', label: 'Ukulele',
+    tunings: [
+      { id: 'ukehighg', label: 'Standard high-G — G C E A', notes: [67, 60, 64, 69] },
+      { id: 'ukelowg', label: 'Low-G — G C E A', notes: [55, 60, 64, 69] },
+      { id: 'uked', label: 'D tuning — A D F♯ B', notes: [69, 62, 66, 71] },
+      { id: 'ukebari', label: 'Baritone — D G B E', notes: [50, 55, 59, 64] },
+    ],
+  },
+  {
+    id: 'mandolin', label: 'Mandolin',
+    tunings: [
+      { id: 'mando', label: 'Standard — G D A E', notes: [55, 62, 69, 76] },
+      { id: 'mandoopeng', label: 'Open G — F♯ D A D', notes: [54, 62, 69, 62] },
+    ],
+  },
+  {
+    id: 'banjo', label: 'Banjo',
+    tunings: [
+      { id: 'banjog', label: 'Open G 5-string — g D G B D', notes: [67, 50, 55, 59, 62] },
+      { id: 'banjoc', label: 'Double C — g C G C D', notes: [67, 48, 55, 60, 62] },
+      { id: 'banjosaw', label: 'Sawmill — g D G C D', notes: [67, 50, 55, 60, 62] },
+    ],
+  },
+  {
+    id: 'violin', label: 'Violin',
+    tunings: [{ id: 'violin', label: 'Standard — G D A E', notes: [55, 62, 69, 76] }],
+  },
+  {
+    id: 'cello', label: 'Cello / Viola',
+    tunings: [
+      { id: 'cello', label: 'Cello — C G D A', notes: [36, 43, 50, 57] },
+      { id: 'viola', label: 'Viola — C G D A', notes: [48, 55, 62, 69] },
+    ],
+  },
+  {
+    id: 'chromatic', label: 'Chromatic',
+    tunings: [{
+      id: 'chromatic',
+      label: 'Any note — C1 to B6',
+      notes: Array.from({ length: 61 }, (_, i) => 24 + i),
+    }],
+  },
+];
+
+const INSTRUMENT_BY_ID = Object.fromEntries(INSTRUMENTS.map((i) => [i.id, i]));
+
+function findTuning(instrumentId, tuningId) {
+  const inst = INSTRUMENT_BY_ID[instrumentId] || INSTRUMENTS[0];
+  return inst.tunings.find((t) => t.id === tuningId) || inst.tunings[0];
+}
+
+/**
+ * YIN pitch detection.
+ *
+ * `maxLag` bounds the lowest detectable frequency and dominates the cost — the
+ * difference function is O(maxLag²) — so the caller sizes it from the lowest
+ * note actually being tuned rather than paying for a range nothing will use.
+ *
+ * @returns {{freq:number, clarity:number}} freq is -1 when nothing was found
+ */
+function detectPitch(buf, sampleRate, minLag, maxLag) {
+  const limit = Math.min(maxLag, Math.floor(buf.length / 2) - 1);
+  if (limit <= minLag) return { freq: -1, clarity: 0 };
+
+  const yin = new Float32Array(limit + 1);
+
+  // Difference function.
+  for (let tau = 1; tau <= limit; tau++) {
+    let sum = 0;
+    for (let i = 0; i < limit; i++) {
+      const d = buf[i] - buf[i + tau];
+      sum += d * d;
+    }
+    yin[tau] = sum;
+  }
+
+  // Cumulative mean normalised difference.
+  yin[0] = 1;
+  let running = 0;
+  for (let tau = 1; tau <= limit; tau++) {
+    running += yin[tau];
+    yin[tau] = running === 0 ? 1 : (yin[tau] * tau) / running;
+  }
+
+  // Absolute threshold, then walk down to the local minimum.
+  const THRESHOLD = 0.15;
+  let tauFound = -1;
+  for (let tau = minLag; tau <= limit; tau++) {
+    if (yin[tau] < THRESHOLD) {
+      while (tau + 1 <= limit && yin[tau + 1] < yin[tau]) tau++;
+      tauFound = tau;
+      break;
+    }
+  }
+  // Nothing crossed the threshold: fall back to the best dip available, which
+  // keeps a quiet or breathy note readable instead of dropping it entirely.
+  if (tauFound === -1) {
+    let best = minLag;
+    for (let tau = minLag; tau <= limit; tau++) if (yin[tau] < yin[best]) best = tau;
+    if (yin[best] > 0.5) return { freq: -1, clarity: 0 };
+    tauFound = best;
+  }
+
+  // Parabolic interpolation for sub-hertz precision — without this the readout
+  // quantises to whole samples of lag, which is several cents at pitch.
+  let better = tauFound;
+  if (tauFound > 0 && tauFound < limit) {
+    const s0 = yin[tauFound - 1];
+    const s1 = yin[tauFound];
+    const s2 = yin[tauFound + 1];
+    const denom = 2 * (2 * s1 - s2 - s0);
+    if (denom !== 0) better = tauFound + (s2 - s0) / denom;
+  }
+
+  return { freq: sampleRate / better, clarity: 1 - Math.min(1, yin[tauFound]) };
+}
+
+/** Root-mean-square level of a buffer. */
+function rmsOf(buf) {
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  return Math.sqrt(sum / buf.length);
+}
+
+/**
+ * The tuner: microphone in, a settled reading out.
+ *
+ * Reports through `onUpdate` at roughly 30 Hz. Slower than a render loop on
+ * purpose — YIN is quadratic in the lag range, and the eye cannot use 60
+ * updates a second on a needle anyway.
+ */
+class Tuner {
+  /** @param {AudioContext} ctx  the app's context; the tuner never makes its own */
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.stream = null;
+    this.analyser = null;
+    this.source = null;
+    this.buffer = null;
+    this.running = false;
+    this.timer = null;
+
+    this.a4 = 440;
+    this.noiseGate = 0.008;
+    this.emaAlpha = 0.25;
+    this.lockDelayMs = 150;
+    this.snapCents = 4;
+
+    this.notes = [40, 45, 50, 55, 59, 64];
+    this.targetMidi = null;   // null = follow whichever string is nearest
+    this.onUpdate = null;
+
+    this._smoothCents = 0;
+    this._lockStart = null;
+    this._locked = false;
+  }
+
+  /** Set the notes being tuned to; resizes the analysis window to suit. */
+  setNotes(notes, targetMidi = null) {
+    this.notes = notes.slice().sort((a, b) => a - b);
+    this.targetMidi = targetMidi;
+    this._reset();
+    if (this.running) this._configure();
+  }
+
+  setTarget(midi) {
+    this.targetMidi = midi;
+    this._reset();
+  }
+
+  _reset() {
+    this._smoothCents = 0;
+    this._lockStart = null;
+    this._locked = false;
+  }
+
+  /**
+   * Size the analysis window from the lowest note in play.
+   *
+   * A fixed 2048-sample buffer resolves nothing below ~47 Hz at 48 kHz, so a
+   * 5-string bass low B (30.9 Hz) is simply undetectable with one — the bug
+   * this replaces. The window grows only as far as the instrument needs.
+   */
+  _configure() {
+    const lowest = midiToFreq(this.notes[0], this.a4);
+    const highest = midiToFreq(this.notes[this.notes.length - 1], this.a4);
+    // A fourth of headroom below the lowest string, so a badly flat string is
+    // still found rather than reading as silence.
+    const minFreq = Math.max(24, lowest * 0.75);
+    const maxFreq = Math.min(this.ctx.sampleRate / 4, highest * 2.5);
+
+    this._maxLag = Math.ceil(this.ctx.sampleRate / minFreq);
+    this._minLag = Math.max(2, Math.floor(this.ctx.sampleRate / maxFreq));
+
+    // The buffer must hold two full lags for the difference function.
+    let fftSize = 2048;
+    while (fftSize / 2 <= this._maxLag && fftSize < 32768) fftSize *= 2;
+    if (this.analyser) {
+      this.analyser.fftSize = fftSize;
+      this.buffer = new Float32Array(this.analyser.fftSize);
+    }
+    this._fftSize = fftSize;
+  }
+
+  async start() {
+    if (this.running) return;
+    // Constraints off: the browser's voice processing is tuned for speech and
+    // will happily gate, duck and pitch-shift a held instrument note.
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.smoothingTimeConstant = 0;
+    this.source = this.ctx.createMediaStreamSource(this.stream);
+    // Deliberately terminal: the analyser goes nowhere. Connecting this to the
+    // destination puts the microphone into the speakers.
+    this.source.connect(this.analyser);
+
+    this._configure();
+    this.buffer = new Float32Array(this.analyser.fftSize);
+    this.running = true;
+    this._reset();
+    this.timer = setInterval(() => this._tick(), 33);
+  }
+
+  stop() {
+    this.running = false;
+    clearInterval(this.timer);
+    this.timer = null;
+    if (this.stream) {
+      for (const track of this.stream.getTracks()) track.stop();
+      this.stream = null;
+    }
+    if (this.source) { this.source.disconnect(); this.source = null; }
+    this.analyser = null;
+    this.buffer = null;
+    this._reset();
+    if (this.onUpdate) {
+      this.onUpdate({ state: 'off', freq: null, cents: 0, midi: null, level: 0, clarity: 0 });
+    }
+  }
+
+  /** Nearest note in the current tuning to a detected frequency. */
+  _nearest(freq) {
+    let best = this.notes[0];
+    let bestDist = Infinity;
+    for (const midi of this.notes) {
+      const d = Math.abs(centsBetween(freq, midiToFreq(midi, this.a4)));
+      if (d < bestDist) { bestDist = d; best = midi; }
+    }
+    return best;
+  }
+
+  _tick() {
+    if (!this.running || !this.analyser) return;
+    this.analyser.getFloatTimeDomainData(this.buffer);
+
+    const level = rmsOf(this.buffer);
+    if (level < this.noiseGate) {
+      this._lockStart = null;
+      this._locked = false;
+      this._smoothCents += (0 - this._smoothCents) * 0.15;
+      this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
+      return;
+    }
+
+    const { freq, clarity } = detectPitch(this.buffer, this.ctx.sampleRate, this._minLag, this._maxLag);
+    if (freq <= 0) {
+      this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
+      return;
+    }
+
+    const midi = this.targetMidi ?? this._nearest(freq);
+    const raw = centsBetween(freq, midiToFreq(midi, this.a4));
+    this._smoothCents += (raw - this._smoothCents) * this.emaAlpha;
+
+    // Hysteresis: hold inside the snap zone before calling it in tune, so a
+    // needle passing through does not flash green.
+    let state;
+    const now = performance.now();
+    if (Math.abs(this._smoothCents) <= this.snapCents) {
+      if (this._lockStart === null) this._lockStart = now;
+      if (now - this._lockStart >= this.lockDelayMs) { this._locked = true; state = 'locked'; }
+      else state = this._smoothCents < 0 ? 'flat' : 'sharp';
+    } else {
+      this._lockStart = null;
+      this._locked = false;
+      state = this._smoothCents < 0 ? 'flat' : 'sharp';
+    }
+
+    this._emit({
+      state,
+      freq,
+      cents: this._locked ? 0 : this._smoothCents,
+      midi,
+      level,
+      clarity,
+    });
+  }
+
+  _emit(update) {
+    if (this.onUpdate) this.onUpdate(update);
+  }
+}
+
 /* ===== src/content.js ===== */
 // Editorial content: harmonic-function copy, mode lessons, and the rule-based
 // songwriting suggestions. Ported from the CircleSong design prototype.
@@ -5854,6 +6332,7 @@ class Sequencer {
 
 
 
+
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -5871,6 +6350,7 @@ const TONE_COLOR = {
 
 const TABS = [
   { id: 'circle', label: 'Circle', glyph: 'circle' },
+  { id: 'tuner', label: 'Tuner', glyph: 'fork' },
   { id: 'tone', label: 'Tone', glyph: 'square' },
   { id: 'drums', label: 'Drums', glyph: 'grid' },
   { id: 'compose', label: 'Compose', glyph: 'diamond' },
@@ -5959,6 +6439,15 @@ const state = {
   /** Which family of strum/rhythm feels is being browsed. */
   rhythmFamily: 'All',
   showAbout: false,
+  // --- tuner ---
+  tunerInstrument: 'guitar',
+  tunerTuning: 'standard',
+  tunerA4: 440,
+  /** A string chosen by hand, or null to follow whichever is nearest. */
+  tunerTarget: null,
+  tunerOn: false,
+  tunerReading: null,
+  tunerError: '',
   /** Draw the secondary-dominant arrows on the wheel. */
   showSecDom: false,
 
@@ -5998,6 +6487,8 @@ function setBars(nextBars, count) {
 }
 
 const engine = new AudioEngine();
+/** Created on first use — the tuner holds a microphone, so never eagerly. */
+let tuner = null;
 const sequencer = new Sequencer(engine, () => ({
   bars: bars(),
   bpm: state.bpm,
@@ -6389,6 +6880,7 @@ function render() {
   renderLearn();
   renderAssist();
   renderSongs();
+  renderTuner();
   renderTabs();
 }
 
@@ -6400,7 +6892,13 @@ function renderTabs() {
     const b = el('button', active ? 'active' : '');
     b.appendChild(glyph(t.glyph, active));
     b.appendChild(el('span', '', t.label));
-    b.onclick = () => { state.activeTab = t.id; render(); };
+    b.onclick = () => {
+      // Holding a microphone open on a screen you have navigated away from is
+      // both a battery drain and a thing users are right to distrust.
+      if (state.activeTab === 'tuner' && t.id !== 'tuner' && state.tunerOn) stopTuner();
+      state.activeTab = t.id;
+      render();
+    };
     bar.appendChild(b);
   }
   for (const t of TABS) {
@@ -6422,6 +6920,7 @@ function glyph(kind, active) {
       linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
       linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
+    fork: `width:12px;height:15px;border:2px solid ${col};border-top:none;border-radius:0 0 6px 6px;`,
     disc: `width:15px;height:15px;border-radius:50%;border:2px solid ${col};box-shadow:inset 0 0 0 3px ${col === 'var(--a)' ? 'transparent' : 'transparent'},0 0 0 0 ${col};position:relative;background:radial-gradient(circle,${col} 0 2px,transparent 2px);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
@@ -7661,6 +8160,170 @@ async function previewSlot(barIdx, slotIdx) {
  * Saving reuses the exact JSON that export writes, so a saved project and an
  * exported file are the same thing — there is no second format to keep in step.
  */
+/**
+ * The tuner panel.
+ *
+ * The detector lives in src/tuner.js; this is the face of it. Reference pitches
+ * are played on the melody voices rather than a synthesised sine, so the note
+ * you match against is the instrument the rest of the app uses — and, because
+ * those voices sit outside the reach of `cut`, a reference tone cannot be
+ * silenced by anything else that happens.
+ */
+function renderTuner() {
+  const instSel = $('tunerInstrument');
+  if (!instSel.options.length) {
+    for (const inst of INSTRUMENTS) {
+      const o = el('option', '', inst.label);
+      o.value = inst.id;
+      instSel.appendChild(o);
+    }
+  }
+  instSel.value = state.tunerInstrument;
+
+  const inst = INSTRUMENT_BY_ID[state.tunerInstrument] || INSTRUMENTS[0];
+  const tunSel = $('tunerTuning');
+  tunSel.replaceChildren();
+  for (const t of inst.tunings) {
+    const o = el('option', '', t.label);
+    o.value = t.id;
+    tunSel.appendChild(o);
+  }
+  const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
+  tunSel.value = tuning.id;
+
+  // Strings. Tapping one sounds its reference pitch and pins the tuner to it;
+  // tapping the pinned one again hands it back to auto-detect.
+  const strings = $('tunerStrings');
+  strings.replaceChildren();
+  const reading = state.tunerReading;
+  const chromatic = tuning.notes.length > 12;
+  if (chromatic) {
+    strings.appendChild(el('p', 'body-copy tight', 'Chromatic: play any note and it will name it.'));
+  } else {
+    tuning.notes.forEach((midi, i) => {
+      const pinned = state.tunerTarget === midi;
+      const live = reading && reading.midi === midi && reading.state !== 'off';
+      const b = el('button', `tuner-string${pinned ? ' pinned' : ''}${live ? ' live' : ''}${live && reading.state === 'locked' ? ' locked' : ''}`);
+      b.append(
+        el('span', 'ts-name', midiLabel(midi)),
+        el('span', 'ts-index', `${i + 1}`)
+      );
+      b.onclick = async () => {
+        state.tunerTarget = pinned ? null : midi;
+        if (tuner) tuner.setTarget(state.tunerTarget);
+        renderTuner();
+        if (await ensureAudio()) engine.pluckMelody({ midi, velocity: 0.8 });
+      };
+      strings.appendChild(b);
+    });
+  }
+
+  // A4 reference.
+  const a4Row = $('tunerA4Row');
+  a4Row.replaceChildren();
+  for (const hz of [432, 436, 438, 440, 442, 444]) {
+    const b = el('button', `chip small${state.tunerA4 === hz ? ' active' : ''}`, String(hz));
+    b.onclick = () => {
+      state.tunerA4 = hz;
+      if (tuner) { tuner.a4 = hz; tuner.setNotes(tuning.notes, state.tunerTarget); }
+      renderTuner();
+    };
+    a4Row.appendChild(b);
+  }
+
+  const btn = $('tunerMicBtn');
+  btn.setAttribute('aria-pressed', String(state.tunerOn));
+  btn.textContent = state.tunerOn ? 'On' : 'Off';
+
+  const err = $('tunerError');
+  err.hidden = !state.tunerError;
+  err.textContent = state.tunerError;
+
+  renderTunerReadout();
+}
+
+/** The needle and the numbers. Kept apart so it can update without a re-render. */
+function renderTunerReadout() {
+  const r = state.tunerReading;
+  const note = $('tunerNote');
+  const freq = $('tunerFreq');
+  const cents = $('tunerCents');
+  const stateEl = $('tunerState');
+  const needle = $('tunerNeedle');
+
+  if (!r || r.state === 'off' || r.midi === null) {
+    note.textContent = state.tunerOn ? '—' : (state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—');
+    freq.textContent = state.tunerOn ? 'listening…' : 'Turn Listen on, then play a string.';
+    cents.textContent = '';
+    stateEl.textContent = '';
+    stateEl.className = 'tuner-state';
+    needle.style.left = '50%';
+    needle.className = 'tuner-needle';
+    return;
+  }
+
+  note.textContent = midiLabel(r.midi);
+  freq.textContent = r.freq ? `${r.freq.toFixed(1)} Hz` : '';
+  const c = Math.max(-50, Math.min(50, r.cents));
+  cents.textContent = `${c > 0 ? '+' : ''}${c.toFixed(1)} cents`;
+  needle.style.left = `${50 + c}%`;
+  needle.className = `tuner-needle ${r.state}`;
+  stateEl.className = `tuner-state ${r.state}`;
+  stateEl.textContent =
+    r.state === 'locked' ? 'IN TUNE'
+      : r.state === 'flat' ? 'FLAT — tighten'
+        : 'SHARP — loosen';
+}
+
+/** Start or stop listening. */
+async function toggleTuner() {
+  if (state.tunerOn) {
+    stopTuner();
+    return;
+  }
+  state.tunerError = '';
+  if (!(await ensureAudio())) {
+    state.tunerError = 'Audio could not start, so the tuner cannot listen.';
+    renderTuner();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    state.tunerError = 'This browser does not offer microphone access to the page.';
+    renderTuner();
+    return;
+  }
+  try {
+    if (!tuner) {
+      tuner = new Tuner(engine.ctx);
+      tuner.onUpdate = (u) => {
+        state.tunerReading = u;
+        renderTunerReadout();
+      };
+    }
+    tuner.a4 = state.tunerA4;
+    const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
+    tuner.setNotes(tuning.notes, state.tunerTarget);
+    await tuner.start();
+    state.tunerOn = true;
+  } catch (e) {
+    // Denied, or blocked by the page's permissions policy — which is what
+    // happens inside a sandboxed iframe that was not granted the microphone.
+    state.tunerOn = false;
+    state.tunerError =
+      e && e.name === 'NotAllowedError'
+        ? 'Microphone access was refused. Allow it for this page, or open CircleSong in its own tab — an embedded frame is often not permitted to ask.'
+        : `The microphone could not be opened — ${e && e.message ? e.message : 'unknown error'}.`;
+  }
+  renderTuner();
+}
+
+function stopTuner() {
+  if (tuner) tuner.stop();
+  state.tunerOn = false;
+  state.tunerReading = null;
+  renderTuner();
+}
+
 function renderSongs() {
   const secs = state.sections.length;
   const filled = state.sections.reduce(
@@ -8194,6 +8857,24 @@ function wire() {
     else reresolveAll();
     renderTimeline();
   };
+  // --- tuner ---
+  $('tunerInstrument').onchange = (e) => {
+    state.tunerInstrument = e.target.value;
+    state.tunerTuning = INSTRUMENT_BY_ID[state.tunerInstrument].tunings[0].id;
+    state.tunerTarget = null;
+    state.tunerReading = null;
+    if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
+    renderTuner();
+  };
+  $('tunerTuning').onchange = (e) => {
+    state.tunerTuning = e.target.value;
+    state.tunerTarget = null;
+    state.tunerReading = null;
+    if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
+    renderTuner();
+  };
+  $('tunerMicBtn').onclick = toggleTuner;
+
   // --- songs, saving, audio export ---
   $('saveProjectBtn').onclick = () => doSaveProject(false);
   $('saveAsProjectBtn').onclick = () => doSaveProject(true);
@@ -8501,6 +9182,12 @@ function applySongData(data) {
   }
 }
 
+// The microphone is released whenever the page stops being visible, so it is
+// never held by a tab sitting in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.tunerOn) stopTuner();
+});
+
 // --------------------------------------------------------------------- boot
 
 wire();
@@ -8542,6 +9229,8 @@ window.CircleSong = {
   render,
   /** Re-derive every stored shape — what a key, mode or tuning change runs. */
   reresolveAll,
+  /** The live Tuner, once listening has been switched on. */
+  tunerInstance: () => tuner,
   // Exposed so tests can measure voice leading rather than eyeball it.
   progressionCost,
   voiceLeadCost,

@@ -420,6 +420,54 @@
       <div class="stack" id="templateList"></div>
     </section>
 
+    <!-- /09 TUNER -->
+    <section class="panel" id="tab-tuner" hidden>
+      <h2>/09 TUNER</h2>
+      <div class="row gap-xs">
+        <span class="micro-label">INSTRUMENT</span>
+        <select id="tunerInstrument" class="select grow" aria-label="Instrument"></select>
+      </div>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">TUNING</span>
+        <select id="tunerTuning" class="select grow" aria-label="Tuning"></select>
+      </div>
+
+      <div class="tuner-readout">
+        <span id="tunerNote" class="tuner-note">—</span>
+        <span id="tunerFreq" class="tuner-freq"></span>
+        <div class="tuner-meter">
+          <div class="tuner-scale">
+            <span class="tick far">-50</span><span class="tick">-25</span>
+            <span class="tick centre">0</span>
+            <span class="tick">+25</span><span class="tick far">+50</span>
+          </div>
+          <div class="tuner-track">
+            <div class="tuner-zone"></div>
+            <div class="tuner-needle" id="tunerNeedle"></div>
+          </div>
+        </div>
+        <span id="tunerCents" class="tuner-cents"></span>
+        <span id="tunerState" class="tuner-state"></span>
+      </div>
+
+      <span class="micro-label">STRINGS — TAP TO HEAR, OR TO TUNE ONE ONLY</span>
+      <div id="tunerStrings" class="tuner-strings"></div>
+
+      <div class="row between mt">
+        <div>
+          <span class="setting-name">Listen</span>
+          <span class="setting-note" id="tunerMicNote">Uses the microphone. Nothing is recorded or sent anywhere.</span>
+        </div>
+        <button id="tunerMicBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
+      <p id="tunerError" class="body-copy tight" hidden></p>
+
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">REFERENCE A4</span>
+        <div class="row gap-xs grow" id="tunerA4Row"></div>
+      </div>
+    </section>
+
     <!-- /08 SONGS -->
     <section class="panel" id="tab-songs" hidden>
       <h2>/08 SONGS</h2>

@@ -31,7 +31,7 @@
  * says otherwise — which looks exactly like the new feature not working.
  */
 
-const CACHE = 'circlesong-a68ff542';
+const CACHE = 'circlesong-5afe027d';
 
 const SHELL = [
   './',
@@ -47,6 +47,7 @@ const SHELL = [
   './src/drum-patterns.js',
   './src/harmony.js',
   './src/projects.js',
+  './src/tuner.js',
   './src/content.js',
   './src/sequencer.js',
   './src/audio/engine.js',

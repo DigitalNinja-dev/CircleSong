@@ -745,3 +745,64 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .source-link:hover { background: var(--a); color: var(--ink); }
 .byline a { color: var(--dim); text-decoration: underline; }
 .byline a:hover { color: var(--a); }
+
+/* ------------------------------------------------------------- tuner (/09) */
+.tuner-readout {
+  margin: 16px 0;
+  padding: 16px 14px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.tuner-note { display: block; font: 600 42px var(--display); color: oklch(0.96 0.006 250); line-height: 1.1; }
+.tuner-freq { display: block; margin-top: 2px; font: 400 11px var(--mono); color: var(--dim); }
+
+.tuner-meter { margin: 14px 0 8px; }
+.tuner-scale { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.tuner-scale .tick { font: 400 9px var(--mono); color: var(--dimmer); }
+.tuner-scale .tick.centre { color: var(--a); }
+.tuner-track {
+  position: relative;
+  height: 26px;
+  background: oklch(0.15 0.011 250);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+/* The ±4-cent window the lock waits inside — drawn so "in tune" is a place on
+   the meter rather than a number to interpret. */
+.tuner-zone {
+  position: absolute; top: 0; bottom: 0; left: 46%; width: 8%;
+  background: oklch(0.65 0.2 135 / 0.16);
+  border-left: 1px solid oklch(0.65 0.2 135 / 0.35);
+  border-right: 1px solid oklch(0.65 0.2 135 / 0.35);
+}
+.tuner-needle {
+  position: absolute; top: 2px; bottom: 2px; left: 50%; width: 3px;
+  margin-left: -1.5px; background: oklch(0.75 0.01 250);
+  transition: left 90ms linear, background 120ms linear;
+}
+.tuner-needle.flat, .tuner-needle.sharp { background: oklch(0.8 0.17 60); }
+.tuner-needle.locked { background: var(--a); box-shadow: 0 0 10px var(--a); }
+
+.tuner-cents { display: block; font: 500 12px var(--mono); color: oklch(0.75 0.008 250); }
+.tuner-state { display: block; margin-top: 4px; font: 600 11px var(--mono); letter-spacing: 0.08em; min-height: 14px; }
+.tuner-state.locked { color: var(--a); }
+.tuner-state.flat, .tuner-state.sharp { color: oklch(0.8 0.17 60); }
+
+.tuner-strings { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tuner-string {
+  flex: 1 1 58px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 9px 4px;
+  border: 1px solid var(--border);
+  background: oklch(0.18 0.011 250);
+  color: oklch(0.9 0.006 250);
+  cursor: pointer; font: inherit;
+}
+.tuner-string:hover { border-color: var(--a); }
+.tuner-string .ts-name { font: 600 13px var(--display); }
+.tuner-string .ts-index { font: 400 9px var(--mono); color: var(--dim); }
+.tuner-string.pinned { border-color: var(--c); }
+.tuner-string.live { background: oklch(0.26 0.04 90); }
+.tuner-string.locked { background: var(--a); border-color: var(--a); color: var(--ink); }
+.tuner-string.locked .ts-index { color: oklch(0.25 0.02 250); }

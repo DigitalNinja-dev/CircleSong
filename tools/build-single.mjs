@@ -55,6 +55,7 @@ const MODULES = [
   'src/drum-patterns.js',
   'src/harmony.js',
   'src/projects.js',
+  'src/tuner.js',
   'src/content.js',
   'src/audio/impulse.js',
   'src/audio/drums.js',
