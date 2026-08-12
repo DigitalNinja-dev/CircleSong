@@ -723,3 +723,25 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   white-space: nowrap;
 }
 .project-meta { font: 400 9px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
+
+/* ------------------------------------------------ licence / source offer */
+/* AGPL section 13: anyone using CircleSong over a network is entitled to its
+   source, so the offer has to be reachable from the app itself. */
+.about .licence {
+  margin: 14px 0 8px;
+  font: 400 11px/1.55 var(--sans);
+  color: oklch(0.62 0.008 250);
+}
+.about .licence a { color: var(--a); }
+.source-link {
+  display: inline-block;
+  padding: 7px 12px;
+  border: 1px solid var(--a);
+  color: var(--a);
+  font: 500 11px var(--mono);
+  letter-spacing: 0.03em;
+  text-decoration: none;
+}
+.source-link:hover { background: var(--a); color: var(--ink); }
+.byline a { color: var(--dim); text-decoration: underline; }
+.byline a:hover { color: var(--a); }
