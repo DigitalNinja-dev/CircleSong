@@ -1,4 +1,22 @@
 <!DOCTYPE html>
+<!--
+  CircleSong - Interactive Music Theory & Composition Engine
+  Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+  https://github.com/DigitalNinja-dev/CircleSong
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU Affero General Public License for more details.
+
+  You should have received a copy of the GNU Affero General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -36,7 +54,14 @@
         <span class="version">VERSION 1.0</span>
         <p>CircleSong is a circle-of-fifths powered composition tool for guitar players. It maps the theory behind keys, modes, and chord progressions onto an instrument you already play, so you can build song structures — verses, choruses, bridges — by ear and by understanding, not guesswork.</p>
         <p>Pick a key, hear every diatonic chord and its inversions instantly, sequence them into a loop, and get progression ideas grounded in real theory and well-known songs. The Learn tab and ear trainer build your fluency in modes as you write — so composing and studying happen in the same place.</p>
-        <p class="credit">by Nicolas Jean Pierre Figueroa</p>
+        <p class="credit">by Nicolás Raul Jean-Pierre Figueroa</p>
+        <p class="licence">
+          Copyright &copy; 2026. Free software under the
+          <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU AGPL v3</a>,
+          with no warranty. Section 13 of that licence gives everyone who uses
+          CircleSong over a network the right to its source:
+        </p>
+        <a class="source-link" href="https://github.com/DigitalNinja-dev/CircleSong" target="_blank" rel="noopener noreferrer">Source Code (AGPL v3.0)</a>
         <button id="aboutCloseBtn" class="about-close">CLOSE</button>
       </div>
     </div>
@@ -153,7 +178,11 @@
       </div>
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
-      <div class="stack" id="rhythmList"></div>
+      <div class="row gap-xs mb-s">
+        <span class="micro-label">FEEL</span>
+        <select id="rhythmFamilySelect" class="select grow" aria-label="Rhythm family"></select>
+      </div>
+      <div id="rhythmList"></div>
 
     </section>
 
@@ -240,6 +269,10 @@
             <span class="micro-label">SHAPE</span>
             <div id="inversionRow" class="row wrap gap-xs grow"></div>
           </div>
+          <div class="builder-row">
+            <span class="micro-label"></span>
+            <div id="chordResetRow" class="row wrap gap-xs grow"></div>
+          </div>
           <p id="chordBuilderHint" class="body-copy tight"></p>
           <p id="chordScaleHint" class="scale-hint"></p>
         </div>
@@ -296,7 +329,10 @@
           <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
           <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
           <p id="pickerHint" class="body-copy tight"></p>
-          <button id="pickerClearBtn" class="chip small">Remove chord</button>
+          <div class="row gap-xs">
+            <button id="pickerResetBtn" class="chip small">Follow the key</button>
+            <button id="pickerClearBtn" class="chip small">Remove chord</button>
+          </div>
         </div>
       </div>
 
@@ -374,14 +410,41 @@
       <div class="stack" id="sectionVariants"></div>
 
       <h3>// PROGRESSION_LIBRARY</h3>
-      <p class="hint block">Tap a card to hear it in the current key; Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
-      <div class="chip-row" id="templateFamilyRow"></div>
+      <p class="hint block">Pick a family or search, then tap a progression to open it — you'll hear it in the current key. Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
+      <div class="row gap-xs">
+        <span class="micro-label">FAMILY</span>
+        <select id="templateFamilySelect" class="select grow" aria-label="Progression family"></select>
+      </div>
+      <input id="templateSearch" class="search-input" type="search" placeholder="Search name, numerals, or a song…" aria-label="Search progressions">
+      <p id="templateCount" class="micro-label"></p>
       <div class="stack" id="templateList"></div>
+    </section>
+
+    <!-- /08 SONGS -->
+    <section class="panel" id="tab-songs" hidden>
+      <h2>/08 SONGS</h2>
+      <div class="card flat">
+        <span class="micro-label">CURRENT SONG</span>
+        <p id="songsCurrent" class="mono-strong"></p>
+        <div class="row wrap gap-xs mt-s">
+          <button id="saveProjectBtn" class="chip small filled-a">Save</button>
+          <button id="saveAsProjectBtn" class="chip small">Save as new</button>
+          <button id="newProjectBtn" class="chip small">New song</button>
+        </div>
+      </div>
+
+      <h3>// SAVED_PROJECTS</h3>
+      <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
+      <div class="stack" id="projectList"></div>
+      <div class="row gap-s mt">
+        <button id="exportBtn2" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
+      </div>
     </section>
 
     <div class="spacer"></div>
 
-    <footer class="byline">CircleSong — by Nicolas Jean Pierre Figueroa</footer>
+    <footer class="byline">CircleSong — by Nicolás Raul Jean-Pierre Figueroa · <a href="https://github.com/DigitalNinja-dev/CircleSong" target="_blank" rel="noopener noreferrer">Source Code (AGPL v3.0)</a></footer>
 
     <!-- BOTTOM TAB NAV -->
     <nav class="tabbar" id="tabbar"></nav>

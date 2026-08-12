@@ -1,3 +1,22 @@
+/*
+ * CircleSong - Interactive Music Theory & Composition Engine
+ * Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+ * https://github.com/DigitalNinja-dev/CircleSong
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // CircleSong — application shell.
 //
 // Implements the design prototype as a real app: the design's DCLogic component
@@ -36,6 +55,7 @@ import {
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
 import { RHYTHMS } from './patterns.js';
+import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
@@ -88,6 +108,7 @@ const TABS = [
   { id: 'timeline', label: 'Timeline', glyph: 'bars' },
   { id: 'assist', label: 'Assist', glyph: 'spark' },
   { id: 'learn', label: 'Learn', glyph: 'book' },
+  { id: 'songs', label: 'Songs', glyph: 'disc' },
 ];
 
 const params = new URLSearchParams(location.search);
@@ -95,6 +116,8 @@ if (params.get('theme') === 'mono') document.documentElement.dataset.accent = 'm
 
 const state = {
   projectTitle: 'Untitled Song',
+  /** Which saved project this song came from, so Save overwrites it. */
+  projectId: null,
   bpm: 96,
   timeSig: '4/4',
   metronome: true,
@@ -114,9 +137,14 @@ const state = {
    * `Dm9 – E7♭9 – Am9` in A minor becomes `Gm9 – A7♭9 – Dm9` in D minor without
    * anything being re-entered.
    */
-  chordSize: 3,        // notes in the stack: 3 triad, 4 seventh, 5 ninth, 6 eleventh, 7 thirteenth
-  chordColour: null,   // null = whatever the key gives; otherwise a CHORD_COLOURS id
-  chordAlterations: [],
+  /**
+   * Per-degree variations, keyed by scale degree. A degree with no entry is a
+   * plain diatonic triad. Editing one in Compose changes that chord everywhere
+   * it appears — including in a timeline that is currently playing — which is
+   * what makes trying a 7th or a 9th against the loop a single tap rather than
+   * an edit of every bar.
+   */
+  degreeSpec: {},
 
   tone: 'acoustic',
   rhythm: 'straight8',
@@ -155,6 +183,12 @@ const state = {
   sectionId: null,
   templateId: null,
   templateFamily: 'All',
+  /** Free-text filter over the progression library. */
+  templateSearch: '',
+  /** Which progression is expanded; only one at a time. */
+  templateOpen: null,
+  /** Which family of strum/rhythm feels is being browsed. */
+  rhythmFamily: 'All',
   showAbout: false,
   /** Draw the secondary-dominant arrows on the wheel. */
   showSecDom: false,
@@ -270,13 +304,40 @@ const tuning = () => TUNINGS[state.tuningId].midi;
 const preferFlats = () => keySignaturePrefersFlats(state.rootPc, modeId());
 
 /** The spec the builder controls are currently set to. */
+/** A degree with no variation set: the chord the key gives, as a triad. */
+const DEFAULT_DEGREE_SPEC = { size: 3, colour: null, alterations: [] };
+
+/** The variation currently set for a degree, or the default if none is. */
 function currentSpec(degree = state.activeDegree) {
+  const d = ((degree % 7) + 7) % 7;
+  const v = state.degreeSpec[d] || DEFAULT_DEGREE_SPEC;
   return {
-    degree: degree % 7,
-    size: state.chordSize,
-    colour: state.chordColour,
-    alterations: state.chordAlterations.slice(),
+    degree: d,
+    size: v.size ?? 3,
+    colour: v.colour ?? null,
+    alterations: (v.alterations || []).slice(),
   };
+}
+
+/** True when a degree has been varied away from the plain diatonic triad. */
+function degreeIsVaried(degree) {
+  const v = state.degreeSpec[((degree % 7) + 7) % 7];
+  return !!v && (v.size !== 3 || v.colour || (v.alterations && v.alterations.length));
+}
+
+/**
+ * Change the variation on a degree and push it through the song.
+ *
+ * Timeline slots follow their degree unless they were edited individually, so
+ * re-resolving is what makes the change appear in the bars. Done while the
+ * transport runs, the next scheduled bar picks it up — the loop keeps playing
+ * and the chords simply become sevenths.
+ */
+function setDegreeSpec(degree, patch) {
+  const d = ((degree % 7) + 7) % 7;
+  if (patch === null) delete state.degreeSpec[d];
+  else state.degreeSpec[d] = { ...currentSpec(d), ...patch, degree: d };
+  reresolveAll();
 }
 
 /** The seven degrees of the key, each built to the current recipe. */
@@ -445,13 +506,19 @@ async function togglePlay() {
  * stays a 9th chord when the rest of the timeline is plain triads.
  */
 function slotFromDegree(degree, spec = null, voicingMode = state.voicingMode) {
-  const full = spec ? { ...toSpec(spec, state.chordSize), degree: degree % 7 } : currentSpec(degree);
+  // `spec` present means this slot was set explicitly — by the picker, a
+  // template, or a loaded file — and keeps its own quality. Without one the
+  // slot follows whatever variation its degree currently carries, which is how
+  // a change in Compose reaches the timeline.
+  const full = spec ? { ...toSpec(spec, 3), degree: degree % 7 } : currentSpec(degree);
   const chord = chordForDegree(degree, full);
   const list = voicingList(chord, voicingMode);
   const voicing = list.length ? list[state.voicingIndex % list.length] : null;
   return {
     degree: degree % 7,
     spec: full,
+    /** Set individually, so it ignores its degree's variation. */
+    override: !!spec,
     chord,
     voicing,
     voicingMode,
@@ -491,16 +558,24 @@ function applyDegrees(degrees, seventh, mode = null) {
   if (MODE_IDS.includes(target)) state.modeIdx = MODE_IDS.indexOf(target);
   const defaultSize = sizeFromLegacy(seventh, 3);
   const size = nearestBarSize(degrees.length);
+  // Each degree carries the quality the progression asked for, so the builder
+  // opens on what was just loaded and any bar added by hand matches. The bars
+  // then follow their degree rather than freezing a copy, which is what lets
+  // the loaded progression be varied afterwards from Compose.
+  state.degreeSpec = {};
+  for (const entry of degrees) {
+    const spec = toSpec(entry, defaultSize);
+    state.degreeSpec[spec.degree] = {
+      degree: spec.degree,
+      size: spec.size,
+      colour: spec.colour,
+      alterations: spec.alterations,
+    };
+  }
   const nextBars = makeBars(size);
   degrees.forEach((entry, i) => {
-    const spec = toSpec(entry, defaultSize);
-    nextBars[i] = { slots: [slotFromDegree(spec.degree, spec)] };
+    nextBars[i] = { slots: [slotFromDegree(toSpec(entry, defaultSize).degree)] };
   });
-  // Leave the builder set to the progression's own recipe, so the next chord
-  // added by hand matches what was just loaded instead of reverting to triads.
-  state.chordSize = defaultSize;
-  state.chordColour = null;
-  state.chordAlterations = [];
   setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
@@ -516,7 +591,9 @@ function reresolveAll() {
   for (const sec of state.sections) {
     for (const bar of sec.bars) {
       bar.slots = bar.slots.map((slot) =>
-        slot ? slotFromDegree(slot.degree, slot.spec, slot.voicingMode) : null
+        // A slot that was not edited individually re-reads its degree's current
+        // variation; one that was keeps what it was given.
+        slot ? slotFromDegree(slot.degree, slot.override ? slot.spec : null, slot.voicingMode) : null
       );
     }
   }
@@ -542,6 +619,7 @@ function render() {
   renderTimeline();
   renderLearn();
   renderAssist();
+  renderSongs();
   renderTabs();
 }
 
@@ -575,6 +653,7 @@ function glyph(kind, active) {
       linear-gradient(90deg,${col} 3px,transparent 3px) 0 0/5px 5px,
       linear-gradient(90deg,transparent 3px,${col} 3px) 0 6px/5px 5px;`,
     spark: `width:14px;height:14px;background:${col};clip-path:polygon(50% 0,61% 35%,100% 35%,69% 57%,82% 100%,50% 75%,18% 100%,31% 57%,0 35%,39% 35%);`,
+    disc: `width:15px;height:15px;border-radius:50%;border:2px solid ${col};box-shadow:inset 0 0 0 3px ${col === 'var(--a)' ? 'transparent' : 'transparent'},0 0 0 0 ${col};position:relative;background:radial-gradient(circle,${col} 0 2px,transparent 2px);`,
   };
   i.setAttribute('style', styles[kind] || styles.square);
   return i;
@@ -731,7 +810,7 @@ function renderCircle() {
   // button on the screen, rather than two rules to remember.
   const strip = $('scaleStrip');
   strip.replaceChildren();
-  const keyChords = diatonicChords(state.rootPc, modeId(), state.chordSize);
+  const keyChords = currentChords();
   scalePitchClasses(state.rootPc, modeId()).forEach((pc, i) => {
     const chord = keyChords[i];
     const b = el('button', i === 0 ? 'tonic' : '');
@@ -757,15 +836,20 @@ function renderCircle() {
       // Single notes are for jamming: they layer over whatever is sounding
       // instead of cutting it, and each is placed on a free string so a run
       // rings like a real player moving across the neck.
+      //
+      // Crucially they never touch anything else. A global damp here would fade
+      // the loop and every other note still ringing, which makes it impossible
+      // to try a melody over a playing progression — so the note releases only
+      // the one string it was given.
       const when = engine.currentTime + 0.02;
-      engine.pluckNote({
+      const string = engine.pluckNote({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
         tuning: tuning(),
         when,
         velocity: 0.85,
         layer: true,
       });
-      engine.damp(when + exploreRingSeconds() + 0.8, { level: 0.8, time: 0.7 });
+      if (string >= 0) engine.release(string, when + 2.2, 0.85, 0.8);
     };
     strip.appendChild(b);
   });
@@ -960,6 +1044,19 @@ function renderTone() {
       state.tone = id;
       engine.clearStringOverrides();
       if (await ensureAudio()) engine.setPreset(id);
+      // Switching to a keyboard while a strum pattern is loaded would keep
+      // playing guitar figures on a piano, which is the thing that makes it
+      // sound wrong. Move to a keyboard pattern, and back again on the way out
+      // — but never override a choice the user made within the right family.
+      const wantsKeys = !!PRESETS[id].isKeyboard;
+      const onKeys = KEYBOARD_RHYTHMS.includes(state.rhythm);
+      if (wantsKeys && !onKeys) {
+        state.rhythm = 'keysBallad';
+        state.rhythmFamily = 'Keyboard';
+      } else if (!wantsKeys && onKeys) {
+        state.rhythm = 'straight8';
+        state.rhythmFamily = 'All';
+      }
       renderTone();
       previewDegree(state.activeDegree);
     };
@@ -1027,13 +1124,68 @@ function renderTone() {
   }
   sel.value = state.tuningId;
 
+  renderRhythms();
+}
+
+/**
+ * How the rhythms are grouped for browsing.
+ *
+ * The pattern data tags each rhythm with what it *is*; this says what a player
+ * would go looking for. Eighteen options in one flat column is a scroll rather
+ * than a choice, so they are gathered into a handful of families and laid out
+ * two across — every option still present, in about a third of the height.
+ */
+const RHYTHM_FAMILIES = [
+  { label: 'Strumming', tags: ['strum'] },
+  { label: 'Muted & Percussive', tags: ['percussive'] },
+  { label: 'Offbeat', tags: ['offbeat'] },
+  { label: 'Jazz Comping', tags: ['comp'] },
+  { label: 'Latin & Syncopated', tags: ['syncop'] },
+  { label: 'Other Meters', tags: ['3/4', '6/8'] },
+  { label: 'Fingerstyle', tags: ['arp', 'sustain'] },
+  { label: 'Keyboard', tags: ['keys'] },
+];
+
+/** Rhythm ids written for a keyboard rather than a picked instrument. */
+const KEYBOARD_RHYTHMS = RHYTHMS.filter((r) => r.tag === 'keys').map((r) => r.id);
+
+function renderRhythms() {
+  const sel = $('rhythmFamilySelect');
+  if (!sel.options.length) {
+    const all = el('option', '', `All feels (${RHYTHMS.length})`);
+    all.value = 'All';
+    sel.appendChild(all);
+    for (const f of RHYTHM_FAMILIES) {
+      const n = RHYTHMS.filter((r) => f.tags.includes(r.tag)).length;
+      if (!n) continue;
+      const o = el('option', '', `${f.label} (${n})`);
+      o.value = f.label;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { state.rhythmFamily = sel.value; renderRhythms(); };
+  }
+  sel.value = state.rhythmFamily || 'All';
+
   const list = $('rhythmList');
   list.replaceChildren();
-  for (const r of RHYTHMS) {
-    const b = el('button', `list-btn${state.rhythm === r.id ? ' active' : ''}`);
-    b.append(el('span', '', r.label), el('span', 'tag', r.tag));
-    b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
-    list.appendChild(b);
+  const wanted = RHYTHM_FAMILIES.filter(
+    (f) => (state.rhythmFamily || 'All') === 'All' || f.label === state.rhythmFamily
+  );
+
+  for (const fam of wanted) {
+    const items = RHYTHMS.filter((r) => fam.tags.includes(r.tag));
+    if (!items.length) continue;
+    // The heading is skipped when a single family is selected — the dropdown
+    // already says which one it is.
+    if (wanted.length > 1) list.appendChild(el('span', 'micro-label group-head', fam.label));
+    const grid = el('div', 'rhythm-grid');
+    for (const r of items) {
+      const b = el('button', `rhythm-btn${state.rhythm === r.id ? ' active' : ''}`);
+      b.append(el('span', 'name', r.label), el('span', 'tag', r.tag));
+      b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
+      grid.appendChild(b);
+    }
+    list.appendChild(grid);
   }
 }
 
@@ -1249,15 +1401,17 @@ const CHORD_SIZE_LABELS = [
  * stays learnable.
  */
 function renderChordBuilder() {
+  const spec = currentSpec();
+
   const sizeRow = $('chordSizeRow');
   sizeRow.replaceChildren();
   for (const [size, label, title] of CHORD_SIZE_LABELS) {
-    const b = el('button', `chip small${state.chordSize === size ? ' active' : ''}`, label);
+    const b = el('button', `chip small${spec.size === size ? ' active' : ''}`, label);
     b.title = title;
     b.onclick = () => {
-      state.chordSize = size;
+      setDegreeSpec(state.activeDegree, { size });
       state.voicingIndex = 0;
-      renderCompose();
+      render();
       previewDegree(state.activeDegree);
     };
     sizeRow.appendChild(b);
@@ -1266,42 +1420,65 @@ function renderChordBuilder() {
   const colourRow = $('chordColourRow');
   colourRow.replaceChildren();
   for (const c of CHORD_COLOURS) {
-    const on = state.chordColour === c.id;
+    const on = spec.colour === c.id;
     const b = el('button', `chip small${on ? ' active' : ''}`, c.label);
     b.title = c.hint;
     if (on) { b.style.background = 'var(--b)'; b.style.borderColor = 'var(--b)'; }
     b.onclick = () => {
-      state.chordColour = on ? null : c.id;
+      setDegreeSpec(state.activeDegree, { colour: on ? null : c.id });
       state.voicingIndex = 0;
-      renderCompose();
+      render();
       previewDegree(state.activeDegree);
     };
     colourRow.appendChild(b);
   }
 
   // Alterations only mean something on a chord that has a seventh to alter.
-  const canAlter = state.chordSize >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(state.chordColour);
+  const canAlter = spec.size >= 4 || ['dom', 'm7b5', 'aug', 'sus4', 'sus2'].includes(spec.colour);
   const alterRow = $('chordAlterRow');
   alterRow.replaceChildren();
   for (const a of CHORD_ALTERATIONS) {
-    const on = state.chordAlterations.includes(a.id);
+    const on = spec.alterations.includes(a.id);
     const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
     b.disabled = !canAlter;
     b.title = canAlter ? `Add a ${a.label}` : 'Alterations need a seventh — pick 7 or larger first.';
     if (on) { b.style.background = 'var(--c)'; b.style.borderColor = 'var(--c)'; }
     b.onclick = () => {
-      state.chordAlterations = on
-        ? state.chordAlterations.filter((x) => x !== a.id)
-        : [...state.chordAlterations, a.id];
+      const alterations = on
+        ? spec.alterations.filter((x) => x !== a.id)
+        : [...spec.alterations, a.id];
+      setDegreeSpec(state.activeDegree, { alterations });
       state.voicingIndex = 0;
-      renderCompose();
+      render();
       previewDegree(state.activeDegree);
     };
     alterRow.appendChild(b);
   }
-  if (!canAlter && state.chordAlterations.length) state.chordAlterations = [];
 
-  const spec = currentSpec();
+  // Reset this chord, and reset them all. Trying a variation is only free if
+  // getting back is free too.
+  const varied = degreeIsVaried(state.activeDegree);
+  const anyVaried = Array.from({ length: 7 }, (_, d) => degreeIsVaried(d)).some(Boolean);
+  const resetRow = $('chordResetRow');
+  resetRow.replaceChildren();
+  const one = el('button', 'chip small', 'Reset this chord');
+  one.disabled = !varied;
+  one.onclick = () => {
+    setDegreeSpec(state.activeDegree, null);
+    state.voicingIndex = 0;
+    render();
+    previewDegree(state.activeDegree);
+  };
+  const all = el('button', 'chip small', 'Reset all');
+  all.disabled = !anyVaried;
+  all.onclick = () => {
+    state.degreeSpec = {};
+    reresolveAll();
+    state.voicingIndex = 0;
+    render();
+  };
+  resetRow.append(one, all);
+
   $('chordBuilderHint').textContent = describeSpec(state.rootPc, modeId(), spec);
   const sc = scaleForChord(spec, state.rootPc, modeId());
   const avoid = sc.avoidPc === null ? '' : ` Careful with ${noteName(sc.avoidPc, preferFlats())}.`;
@@ -1664,6 +1841,13 @@ function renderPicker() {
   edit.hidden = !slot;
   if (!slot) return;
   const spec = slot.spec;
+  // Only a slot that has been pinned to its own quality has anything to give
+  // back, so the button says what it does and is otherwise out of the way.
+  const reset = $('pickerResetBtn');
+  reset.disabled = !slot.override;
+  reset.title = slot.override
+    ? 'Drop this bar\'s own setting and follow the chord variation from Compose.'
+    : 'This bar already follows the chord variation set in Compose.';
 
   const sizeRow = $('pickerSizeRow');
   sizeRow.replaceChildren();
@@ -1723,6 +1907,83 @@ async function previewSlot(barIdx, slotIdx) {
   const slot = bars()[barIdx] && bars()[barIdx].slots[slotIdx];
   if (!slot || !slot.voicing || sequencer.playing) return;
   await playChordNow(slot.chord, slot.voicing);
+}
+
+/**
+ * The song library and audio export.
+ *
+ * Saving reuses the exact JSON that export writes, so a saved project and an
+ * exported file are the same thing — there is no second format to keep in step.
+ */
+function renderSongs() {
+  const secs = state.sections.length;
+  const filled = state.sections.reduce(
+    (n, sec) => n + sec.bars.filter((b) => b.slots.some(Boolean)).length,
+    0
+  );
+  $('songsCurrent').textContent =
+    `${state.projectTitle} · ${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]} · ${state.bpm} BPM · ${secs} loop${secs === 1 ? '' : 's'} · ${filled} bars written`;
+
+
+  $('saveProjectBtn').disabled = !storageAvailable();
+
+  const list = $('projectList');
+  list.replaceChildren();
+  const projects = listProjects();
+  $('projectsEmpty').hidden = projects.length > 0;
+
+  for (const p of projects) {
+    const row = el('div', `project-row${state.projectId === p.id ? ' active' : ''}`);
+    const info = el('div', 'project-info');
+    info.append(
+      el('span', 'project-title', p.title),
+      el('span', 'project-meta', `${p.key || ''} · ${p.bpm || '?'} BPM · ${p.sections || 1} loop${p.sections === 1 ? '' : 's'} · ${timeAgo(p.savedAt)}`)
+    );
+    const actions = el('div', 'row gap-xs');
+    const open = el('button', 'chip small', 'Open');
+    open.onclick = () => openProject(p.id);
+    const del = el('button', 'chip small', 'Delete');
+    del.onclick = () => {
+      if (!confirm(`Delete “${p.title}”? This cannot be undone.`)) return;
+      deleteProject(p.id);
+      if (state.projectId === p.id) state.projectId = null;
+      renderSongs();
+      toast('Project deleted.');
+    };
+    actions.append(open, del);
+    row.append(info, actions);
+    list.appendChild(row);
+  }
+}
+
+function timeAgo(ts) {
+  if (!ts) return 'saved';
+  const secs = Math.max(0, (Date.now() - ts) / 1000);
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function openProject(id) {
+  const data = loadProject(id);
+  if (!data) { toast('That project could not be read.', true); return; }
+  applySongData(data);
+  state.projectId = id;
+  render();
+  toast(`Opened “${state.projectTitle}”.`);
+}
+
+function doSaveProject(asNew = false) {
+  if (!storageAvailable()) {
+    toast('This browser will not let the app save locally.', true);
+    return;
+  }
+  const result = saveProject(songData(), asNew ? null : state.projectId);
+  if (result.error) { toast(result.error, true); return; }
+  state.projectId = result.id;
+  renderSongs();
+  toast(`Saved “${state.projectTitle}”.`);
 }
 
 function renderLearn() {
@@ -1907,65 +2168,130 @@ function renderAssist() {
     }
   }
 
-  // --- progression library, grouped by family ---
-  const familyRow = $('templateFamilyRow');
-  familyRow.replaceChildren();
-  const families = ['All', ...TEMPLATE_FAMILIES];
-  for (const fam of families) {
-    const active = (state.templateFamily || 'All') === fam;
-    const b = el('button', `chip${active ? ' active' : ''}`, fam);
-    if (active) { b.style.background = 'var(--a)'; b.style.borderColor = 'var(--a)'; }
-    b.onclick = () => { state.templateFamily = fam; renderAssist(); };
-    familyRow.appendChild(b);
+  renderTemplateLibrary();
+}
+
+/**
+ * The progression library.
+ *
+ * There are now around fifty progressions across eight families, and a flat
+ * column of full-height cards makes that a scroll rather than a choice. Three
+ * things fix it without hiding a single option: a family dropdown, a search
+ * that also looks inside the song lists — "Marley" or "I-V-vi-IV" both find
+ * something — and rows that stay one line until you open one.
+ */
+function renderTemplateLibrary() {
+  const sel = $('templateFamilySelect');
+  if (!sel.options.length) {
+    const all = el('option', '', `All families (${TEMPLATES.length})`);
+    all.value = 'All';
+    sel.appendChild(all);
+    for (const fam of TEMPLATE_FAMILIES) {
+      const n = TEMPLATES.filter((t) => t.family === fam).length;
+      const o = el('option', '', `${fam} (${n})`);
+      o.value = fam;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { state.templateFamily = sel.value; renderAssist(); };
   }
+  sel.value = state.templateFamily || 'All';
+
+  const search = $('templateSearch');
+  if (search.value !== state.templateSearch) search.value = state.templateSearch || '';
+  if (!search.oninput) {
+    search.oninput = () => {
+      state.templateSearch = search.value;
+      renderTemplateLibrary();
+    };
+  }
+
+  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
+  const q = (state.templateSearch || '').trim().toLowerCase();
+  const matches = TEMPLATES.filter((t) => {
+    if (wanted && t.family !== wanted) return false;
+    if (!q) return true;
+    // Search the words a person would actually reach for: the name, the family,
+    // the numerals as displayed, and the songs it is known from.
+    const hay = [
+      t.label,
+      t.family,
+      t.blurb,
+      numeralsFor(t.degrees, t.seventh, t.mode),
+      chordNamesFor(t.degrees, t.seventh, t.mode),
+      ...(t.songs || []),
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+
+  $('templateCount').textContent =
+    `${matches.length} PROGRESSION${matches.length === 1 ? '' : 'S'}${q ? ` MATCHING “${state.templateSearch.trim()}”` : ''}`;
 
   const tpl = $('templateList');
   tpl.replaceChildren();
-  const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
-  for (const t of TEMPLATES) {
-    if (wanted && t.family !== wanted) continue;
-    const card = el('div', `template-card${state.templateId === t.id ? ' active' : ''}`);
+  if (!matches.length) {
+    tpl.appendChild(el('p', 'body-copy', 'Nothing matches that. Try a song name, a chord, or clear the search.'));
+    return;
+  }
 
-    const head = el('div', 'row between');
-    head.append(el('span', 'label', t.label));
-    const apply = el('button', 'chip small filled-a', 'Apply');
-    apply.onclick = () => {
-      state.templateId = t.id;
-      state.moodId = null;
-      applyDegrees(t.degrees, t.seventh, t.mode);
-    };
-    head.appendChild(apply);
+  for (const t of matches) {
+    const open = state.templateOpen === t.id;
+    const card = el('div', `template-card${open ? ' open' : ''}${state.templateId === t.id ? ' active' : ''}`);
 
-    // Both lines are derived from the chords this template will produce in the
-    // current key, so what is promised is what is heard.
-    const numerals = el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode));
-    const names = el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode));
-    // Name the mode it will actually be heard in, which is the locked one when
-    // the key is locked — not the mode the template was written in.
-    const shownMode = suggestionMode(t.mode);
-    const recast = state.rootLocked && shownMode !== t.mode;
-    const meta = el(
-      'span',
-      'template-meta',
-      `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars`
+    // The collapsed row: enough to recognise the progression, nothing more.
+    const head = el('button', 'template-head');
+    head.setAttribute('aria-expanded', String(open));
+    head.append(
+      el('span', 'label', t.label),
+      el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode)),
+      el('span', 'caret', open ? '▾' : '▸')
     );
+    head.onclick = () => {
+      state.templateOpen = open ? null : t.id;
+      renderTemplateLibrary();
+      if (!open) previewProgression(t);
+    };
+    card.appendChild(head);
 
-    card.append(head, numerals, names, el('p', '', t.blurb), meta);
+    if (open) {
+      const body = el('div', 'template-body');
+      body.append(el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode)));
 
-    // Songs built on this progression. A roman numeral means little until you
-    // recognise something you already know inside it, so where the source names
-    // examples they are shown rather than kept in a data file.
-    if (t.songs && t.songs.length) {
-      const songs = el('ul', 'song-list');
-      for (const s of t.songs) songs.appendChild(el('li', '', s));
-      card.append(el('span', 'micro-label', 'HEARD IN'), songs);
+      // Name the mode it will actually be heard in, which is the locked one when
+      // the key is locked — not the mode the template was written in.
+      const shownMode = suggestionMode(t.mode);
+      const recast = state.rootLocked && shownMode !== t.mode;
+      body.append(el('p', '', t.blurb));
+      body.append(
+        el(
+          'span',
+          'template-meta',
+          `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars · ${t.family}`
+        )
+      );
+
+      // Songs built on this progression. A roman numeral means little until you
+      // recognise something you already know inside it, so where the source
+      // names examples they are shown rather than kept in a data file.
+      if (t.songs && t.songs.length) {
+        const songs = el('ul', 'song-list');
+        for (const s of t.songs) songs.appendChild(el('li', '', s));
+        body.append(el('span', 'micro-label', 'HEARD IN'), songs);
+      }
+
+      const actions = el('div', 'row gap-xs mt-s');
+      const hear = el('button', 'chip small', '▶ Hear it');
+      hear.onclick = () => previewProgression(t);
+      const apply = el('button', 'chip small filled-a', 'Apply to timeline');
+      apply.onclick = () => {
+        state.templateId = t.id;
+        state.moodId = null;
+        applyDegrees(t.degrees, t.seventh, t.mode);
+      };
+      actions.append(hear, apply);
+      body.appendChild(actions);
+      card.appendChild(body);
     }
 
-    // Tapping the card auditions the progression without replacing the timeline.
-    card.onclick = (e) => {
-      if (e.target.closest('button')) return;
-      previewProgression(t);
-    };
     tpl.appendChild(card);
   }
 }
@@ -2122,7 +2448,33 @@ function wire() {
     else reresolveAll();
     renderTimeline();
   };
+  // --- songs, saving, audio export ---
+  $('saveProjectBtn').onclick = () => doSaveProject(false);
+  $('saveAsProjectBtn').onclick = () => doSaveProject(true);
+  $('newProjectBtn').onclick = () => {
+    if (!confirm('Start a new song? Anything unsaved will be lost.')) return;
+    state.projectId = null;
+    state.projectTitle = 'Untitled Song';
+    state.degreeSpec = {};
+    state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }];
+    state.activeSection = 0;
+    render();
+    toast('New song started.');
+  };
+  $('exportBtn2').onclick = exportSong;
+  $('importInput2').onchange = importSong;
+
   $('pickerCloseBtn').onclick = closePicker;
+  $('pickerResetBtn').onclick = () => {
+    // Hand the slot back to its degree, so it follows the Compose builder again.
+    if (!state.picker) return;
+    const { barIdx, slotIdx } = state.picker;
+    const slot = bars()[barIdx] && bars()[barIdx].slots[slotIdx];
+    if (!slot) return;
+    bars()[barIdx].slots[slotIdx] = slotFromDegree(slot.degree, null, slot.voicingMode);
+    applySmoothing();
+    renderTimeline();
+  };
   $('pickerClearBtn').onclick = () => {
     if (!state.picker) return;
     const { barIdx, slotIdx } = state.picker;
@@ -2272,8 +2624,9 @@ function wire() {
 
 // ---------------------------------------------------------------- save/load
 
-function exportSong() {
-  const data = {
+/** The song as plain JSON — the one shape used by export, save and load. */
+function songData() {
+  return {
     format: 'circlesong.v3',
     title: state.projectTitle,
     bpm: state.bpm,
@@ -2285,16 +2638,25 @@ function exportSong() {
     tuning: state.tuningId,
     drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
+    degreeSpec: state.degreeSpec,
     sections: state.sections.map((sec) => ({
       name: sec.name,
       barCount: sec.barCount,
       role: sec.role || 'verse',
       smooth: !!sec.smooth,
       bars: sec.bars.map((b) =>
-        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, voicingMode: s.voicingMode } : null))
+        b.slots.map((s) => (s ? { degree: s.degree, spec: s.spec, override: !!s.override, voicingMode: s.voicingMode } : null))
       ),
     })),
+    // Denormalised for the project list, which should not have to rebuild a
+    // song just to show a row.
+    keyName: `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`,
+    barTotal: state.sections.reduce((n, sec) => n + sec.barCount, 0),
   };
+}
+
+function exportSong() {
+  const data = songData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2314,6 +2676,22 @@ function importSong(e) {
       if (!String(data.format || '').startsWith('circlesong.v')) {
         throw new Error('Unrecognised file format');
       }
+      applySongData(data);
+      state.projectId = null;
+      render();
+      toast(`Loaded "${state.projectTitle}".`);
+    } catch (err) {
+      toast(`Could not read that file — ${err.message}`, true);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/** Load a song object into state. Shared by file import and the song library. */
+function applySongData(data) {
+  {
+    {
       state.projectTitle = data.title || 'Untitled Song';
       state.bpm = Number(data.bpm) || 96;
       state.timeSig = TIME_SIGS.includes(data.timeSig) ? data.timeSig : '4/4';
@@ -2322,6 +2700,7 @@ function importSong(e) {
       state.tone = PRESETS[data.tone] ? data.tone : 'acoustic';
       state.rhythm = data.rhythm || 'straight8';
       state.tuningId = TUNINGS[data.tuning] ? data.tuning : 'standard';
+      state.degreeSpec = data.degreeSpec && typeof data.degreeSpec === 'object' ? data.degreeSpec : {};
 
       if (data.drums) {
         state.drumsOn = !!data.drums.on;
@@ -2350,8 +2729,11 @@ function importSong(e) {
               if (!slot) return null;
               // Files written before the chord builder carry a `seventh` flag
               // instead of a spec; both describe the same thing.
-              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
               const vm = VOICING_MODES[slot.voicingMode] ? slot.voicingMode : 'root';
+              // Slots saved before per-degree variations always carried their
+              // own quality, so they are restored as pinned.
+              if (slot.override === false) return slotFromDegree(slot.degree, null, vm);
+              const spec = slot.spec || { degree: slot.degree, size: sizeFromLegacy(slot.seventh) };
               return slotFromDegree(slot.degree, spec, vm);
             }),
           };
@@ -2369,14 +2751,8 @@ function importSong(e) {
       state.activeSection = Math.min(Number(data.activeSection) || 0, state.sections.length - 1);
 
       if (engine.ready) engine.setPreset(state.tone);
-      render();
-      toast(`Loaded "${state.projectTitle}".`);
-    } catch (err) {
-      toast(`Import failed: ${err.message}`, true);
     }
-    e.target.value = '';
-  };
-  reader.readAsText(file);
+  }
 }
 
 // --------------------------------------------------------------------- boot

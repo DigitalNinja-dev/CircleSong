@@ -1,4 +1,22 @@
 #!/usr/bin/env node
+/*
+ * CircleSong - Interactive Music Theory & Composition Engine
+ * Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+ * https://github.com/DigitalNinja-dev/CircleSong
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 /**
  * Builds dist/circlesong.html — the whole app as one self-contained file that
  * runs by double-clicking it, with no server, no network, and no install.
@@ -36,6 +54,7 @@ const MODULES = [
   'src/patterns.js',
   'src/drum-patterns.js',
   'src/harmony.js',
+  'src/projects.js',
   'src/content.js',
   'src/audio/impulse.js',
   'src/audio/drums.js',
@@ -70,6 +89,27 @@ const MODULES = [
   const uncached = found.filter((f) => !sw.includes(`./${f}`));
   if (uncached.length) {
     throw new Error(`build: these modules are not precached in sw.js: ${uncached.join(', ')}`);
+  }
+
+  // Renamed imports cannot survive bundling. The modules are concatenated into
+  // one scope and the import lines are simply deleted, so `import { a as b }`
+  // leaves every use of `b` undefined. Real ESM handles it, which is the
+  // problem: it works in the dev server and throws only in the shipped single
+  // file — and a throw during render takes the whole UI down with it.
+  const aliased = [];
+  for (const rel of found) {
+    const src = read(rel);
+    for (const m of src.matchAll(/^import\s*\{([^}]*)\}\s*from[^;]*;/gms)) {
+      for (const part of m[1].split(',')) {
+        const named = part.match(/(\S+)\s+as\s+(\S+)/);
+        if (named) aliased.push(`${rel}: ${named[1]} as ${named[2]}`);
+      }
+    }
+  }
+  if (aliased.length) {
+    throw new Error(
+      `build: renamed imports do not survive bundling — rename the export instead:\n  ${aliased.join('\n  ')}`
+    );
   }
 }
 
@@ -111,8 +151,15 @@ const stripModuleSyntax = (src) =>
 
 const workletSrc = read('src/audio/guitar-processor.js');
 
+// The AGPL notice at the head of every source file would otherwise appear once
+// per module inside the bundle. One copy is kept, at the top of the generated
+// file and again above the script, which is what the licence actually asks for.
+const LICENCE_HEADER = /^\/\*\n \* CircleSong[\s\S]*?\*\/\n/;
+const licenceNotice = (read('src/theory.js').match(LICENCE_HEADER) || [''])[0].trim();
+if (!licenceNotice) throw new Error('build: the AGPL header is missing from src/theory.js');
+
 let bundle = MODULES.map((path) => {
-  let code = stripModuleSyntax(read(path));
+  let code = stripModuleSyntax(read(path)).replace(LICENCE_HEADER, '');
   if (path === 'src/audio/engine.js') {
     // The worklet URL is resolved by the prelude instead of import.meta.
     code = code
@@ -181,6 +228,7 @@ ${fonts}${css}
 </style>`;
 
 const script = `<script>
+${licenceNotice}
 (() => {
 'use strict';
 ${prelude}
@@ -192,7 +240,18 @@ ${bundle}
 // their own document skeleton.
 const page = `${head}\n${body}\n${script}`;
 
+// The single file is the whole program for anyone who receives it, so it
+// carries the notice and the offer of source in its own right.
+const htmlNotice = licenceNotice
+  .replace(/^\/\*\n?/, '')
+  .replace(/\n? \*\/$/, '')
+  .replace(/^ \* ?/gm, '  ')
+  .replace(/--/g, '- -');
+
 const out = `<!DOCTYPE html>
+<!--
+${htmlNotice}
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">

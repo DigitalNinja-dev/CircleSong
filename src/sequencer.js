@@ -1,3 +1,22 @@
+/*
+ * CircleSong - Interactive Music Theory & Composition Engine
+ * Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+ * https://github.com/DigitalNinja-dev/CircleSong
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // Transport and scheduling.
 //
 // Playback uses the standard Web Audio lookahead pattern: a coarse timer wakes
@@ -224,6 +243,49 @@ export class Sequencer {
     // much of the bar to sound, so the pattern keeps its tempo and is truncated
     // rather than squeezed.
     const fraction = st.previewFraction ?? 1;
+
+    if (pattern.kind === 'keys') {
+      // Keyboard patterns divide the chord into parts rather than strokes:
+      // the bass note under the left hand, the voices above it, the whole
+      // thing struck at once, or a single voice counted down from the top.
+      const sounding = [];
+      for (let s = 0; s < 6; s++) if (midi[s] !== null) sounding.push(s);
+      if (!sounding.length) return;
+
+      for (const hit of pattern.hits) {
+        if (hit.t >= fraction) continue;
+        const t = swingTime(hit.t, pattern.swing || 0);
+        const when = startTime + t * duration;
+        if (when < startTime - 0.001 || when >= startTime + duration) continue;
+        const vel = hit.vel * (st.velocity ?? 1);
+
+        if (hit.part === 'bass') {
+          const s = sounding[0];
+          this.engine.pluck({ string: s, midi: midi[s], when, velocity: vel });
+          continue;
+        }
+        if (hit.part === 'upper' || hit.part === 'all') {
+          const from = hit.part === 'upper' && sounding.length > 1 ? 1 : 0;
+          const notes = new Array(6).fill(null);
+          for (let k = from; k < sounding.length; k++) notes[sounding[k]] = midi[sounding[k]];
+          // `roll` is the only spread a pianist has — the deliberate one, as in
+          // a rolled ballad chord. Otherwise the notes land together.
+          this.engine.strum({
+            midi: notes,
+            when,
+            direction: 'D',
+            velocity: vel,
+            spread: hit.roll ?? 0.0015,
+          });
+          continue;
+        }
+        // A number counts down from the top voice.
+        const s = sounding[Math.max(0, sounding.length - 1 - hit.part)];
+        if (s === undefined) continue;
+        this.engine.pluck({ string: s, midi: midi[s], when, velocity: vel });
+      }
+      return;
+    }
 
     if (pattern.kind === 'arp') {
       // Map symbolic picks onto whichever strings this voicing actually uses.

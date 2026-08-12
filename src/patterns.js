@@ -1,3 +1,22 @@
+/*
+ * CircleSong - Interactive Music Theory & Composition Engine
+ * Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+ * https://github.com/DigitalNinja-dev/CircleSong
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // Strum / rhythm patterns.
 //
 // A hit's `t` is a fraction of the bar (0..1). `vel` is relative velocity,
@@ -27,6 +46,11 @@ export const RHYTHMS = [
   { id: 'travis', label: 'Travis Picking', tag: 'arp' },
   { id: 'arpUp', label: 'Rising Arpeggio', tag: 'arp' },
   { id: 'wholeNote', label: 'Let Ring', tag: 'sustain' },
+  { id: 'keysBlock', label: 'Block Chords', tag: 'keys' },
+  { id: 'keysBallad', label: 'Ballad Left Hand', tag: 'keys' },
+  { id: 'keysAlberti', label: 'Alberti Bass', tag: 'keys' },
+  { id: 'keysBroken', label: 'Broken Chord', tag: 'keys' },
+  { id: 'keysComp', label: 'Comping Stabs', tag: 'keys' },
 ];
 
 const d = (t, vel = 0.85, extra = {}) => ({ t, dir: 'D', vel, mute: 0, spread: 0.024, ...extra });
@@ -269,6 +293,78 @@ export const RHYTHM_PATTERNS = {
   wholeNote: {
     kind: 'strum',
     hits: [d(0, 0.95, { spread: 0.05 })],
+  },
+
+  // --- keyboard patterns ---
+  //
+  // A piano has no pick crossing the strings, so none of the patterns above
+  // describe one: an upstroke is not a thing a pianist can do, and a strum
+  // spread is the one cue that most says "guitar". These work in parts instead
+  // — bass note, upper voices, or the whole chord struck together — which is
+  // how a keyboard player actually divides a chord up.
+  keysBlock: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'all', vel: 1.0 },
+      { t: 0.25, part: 'all', vel: 0.78 },
+      { t: 0.5, part: 'all', vel: 0.9 },
+      { t: 0.75, part: 'all', vel: 0.76 },
+    ],
+  },
+
+  // The ballad shape: root in the left hand, chord answering above it.
+  keysBallad: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'bass', vel: 0.95 },
+      { t: 0.125, part: 'upper', vel: 0.72, roll: 0.02 },
+      { t: 0.5, part: 'bass', vel: 0.8 },
+      { t: 0.625, part: 'upper', vel: 0.68, roll: 0.02 },
+    ],
+  },
+
+  // Alberti bass: low, high, middle, high. Two centuries of keyboard music.
+  keysAlberti: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'bass', vel: 0.9 },
+      { t: 0.125, part: 0, vel: 0.68 },
+      { t: 0.25, part: 1, vel: 0.7 },
+      { t: 0.375, part: 0, vel: 0.66 },
+      { t: 0.5, part: 'bass', vel: 0.85 },
+      { t: 0.625, part: 0, vel: 0.68 },
+      { t: 0.75, part: 1, vel: 0.7 },
+      { t: 0.875, part: 0, vel: 0.66 },
+    ],
+  },
+
+  // Flowing broken chord, up and back down.
+  keysBroken: {
+    kind: 'keys',
+    hits: [
+      { t: 0, part: 'bass', vel: 0.92 },
+      { t: 0.125, part: 2, vel: 0.7 },
+      { t: 0.25, part: 1, vel: 0.72 },
+      { t: 0.375, part: 0, vel: 0.78 },
+      { t: 0.5, part: 1, vel: 0.7 },
+      { t: 0.625, part: 2, vel: 0.68 },
+      { t: 0.75, part: 'bass', vel: 0.8 },
+      { t: 0.875, part: 2, vel: 0.66 },
+    ],
+  },
+
+  // Off-the-beat chord stabs over a rooted downbeat — pop and soul comping.
+  keysComp: {
+    kind: 'keys',
+    swing: 0.15,
+    hits: [
+      { t: 0, part: 'bass', vel: 0.9 },
+      { t: 0.1875, part: 'upper', vel: 0.85 },
+      { t: 0.375, part: 'upper', vel: 0.7 },
+      { t: 0.5, part: 'bass', vel: 0.78 },
+      { t: 0.6875, part: 'upper', vel: 0.82 },
+      { t: 0.875, part: 'upper', vel: 0.72 },
+    ],
   },
 };
 
