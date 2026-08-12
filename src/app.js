@@ -818,35 +818,17 @@ function renderCircle() {
       el('span', 'strip-note', noteName(pc, preferFlats())),
       el('span', 'strip-grade', chord.numeral)
     );
-    b.title =
-      state.exploreMode === 'chord'
-        ? `${chord.symbol} — degree ${i + 1} (${chord.numeral})`
-        : `${noteName(pc, preferFlats())} — degree ${i + 1}`;
+    b.title = `${noteName(pc, preferFlats())} — degree ${i + 1} of the key (${chord.numeral})`;
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
-      if (state.exploreMode === 'chord') {
-        // Chords here play with the selected rhythm too, so the strip and the
-        // wheel and the chord grid all sound like the same instrument.
-        const v = resolveVoicing(chord, 'root', { tuning: tuning() });
-        if (v) { await playChordNow(chord, v); return; }
-      }
-      // Single notes are for jamming: they layer over whatever is sounding
-      // instead of cutting it, and each is placed on a free string so a run
-      // rings like a real player moving across the neck.
-      //
-      // Crucially they never touch anything else. A global damp here would fade
-      // the loop and every other note still ringing, which makes it impossible
-      // to try a melody over a playing progression — so the note releases only
-      // the one string it was given.
-      const when = engine.currentTime + 0.02;
-      const string = engine.pluckNote({
+      // Always one note, whatever the wheel's Chord/Note switch says. This
+      // strip is for working out a line over a progression, and it plays on
+      // voices of its own: nothing that silences a chord reaches it, no chord
+      // can steal its voice, and stopping the transport leaves it ringing.
+      engine.pluckMelody({
         midi: 60 + pc + (pc < state.rootPc ? 12 : 0),
-        tuning: tuning(),
-        when,
         velocity: 0.85,
-        layer: true,
       });
-      if (string >= 0) engine.release(string, when + 2.2, 0.85, 0.8);
     };
     strip.appendChild(b);
   });
