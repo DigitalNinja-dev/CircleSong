@@ -475,10 +475,40 @@
       <p id="tunerMicNote" class="tuner-mic-note"></p>
       <p id="tunerError" class="tuner-err" hidden></p>
 
-      <div class="row gap-xs mt-s">
-        <span class="micro-label">REFERENCE A4</span>
-        <div class="row gap-xs grow" id="tunerA4Row"></div>
-      </div>
+      <details id="tunerOptions" class="tuner-options">
+        <summary><span>OPTIONS</span><span class="opt-caret">▾</span></summary>
+        <div class="tuner-opt-body">
+          <div class="tuner-opt">
+            <span class="micro-label">TARGET</span>
+            <div class="row gap-xs wrap" id="tunerModeRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">REFERENCE TONE</span>
+            <div class="row gap-xs wrap" id="tunerRefRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">CHIME WHEN IN TUNE</span>
+            <div class="row gap-xs wrap" id="tunerChimeRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">SENSITIVITY</span>
+            <div class="row gap-xs wrap" id="tunerGateRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">RESPONSE</span>
+            <div class="row gap-xs wrap" id="tunerRespRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">IN-TUNE WINDOW</span>
+            <div class="row gap-xs wrap" id="tunerStrictRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">REFERENCE A4</span>
+            <div class="row gap-xs wrap" id="tunerA4Row"></div>
+          </div>
+          <p class="tuner-opt-note" id="tunerOptNote"></p>
+        </div>
+      </details>
     </section>
 
     <!-- /08 SONGS -->

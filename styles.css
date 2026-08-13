@@ -891,3 +891,24 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
 .tuner-mic-note { margin: 8px 0 0; font: 400 10px/1.5 var(--sans); color: var(--dim); text-align: center; }
 .tuner-err { margin: 8px 0 0; font: 400 11px/1.55 var(--sans); color: oklch(0.8 0.13 75); }
+
+/* Options: everything that shapes the reading, folded away so the dial stays
+   the whole screen until you want to change something. */
+.tuner-options { margin-top: 14px; border: 1px solid var(--border); background: oklch(0.15 0.011 250); }
+.tuner-options > summary {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 13px; cursor: pointer; list-style: none;
+  font: 700 10px var(--mono); letter-spacing: 0.12em; color: var(--dim);
+}
+.tuner-options > summary::-webkit-details-marker { display: none; }
+.tuner-options > summary:hover { color: var(--a); }
+.tuner-options[open] > summary { border-bottom: 1px solid var(--border); color: oklch(0.85 0.006 250); }
+.tuner-options .opt-caret { transition: transform 0.15s ease; }
+.tuner-options[open] .opt-caret { transform: rotate(180deg); }
+.tuner-opt-body { display: flex; flex-direction: column; gap: 11px; padding: 13px; }
+.tuner-opt { display: flex; flex-direction: column; gap: 6px; }
+.tuner-opt-note { margin: 2px 0 0; font: 400 10px/1.5 var(--sans); color: var(--dim); }
+
+/* The string whose reference tone is currently being held. */
+.tuner-string.sounding { border-color: var(--b); box-shadow: 0 0 10px oklch(0.7 0.16 250 / 0.4); }
+.tuner-string.sounding .ts-index { color: var(--b); }
