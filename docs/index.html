@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<!--
+  CircleSong - Interactive Music Theory & Composition Engine
+  Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+  https://github.com/DigitalNinja-dev/CircleSong
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU Affero General Public License for more details.
+
+  You should have received a copy of the GNU Affero General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0d0d">
+<title>CircleSong</title>
+<meta name="description" content="CircleSong — an interactive, theory-guided guitar DAW and progression sequencer built on the Circle of Fifths.">
+<!-- Fonts are served from the repo, not a CDN: the app must work offline once
+     installed, and a font CDN is exactly the request that fails on a phone with
+     no signal. Regenerate with `npm run fonts`. -->
+<link rel="stylesheet" href="./assets/fonts.css">
+<link rel="stylesheet" href="./styles.css">
+
+<!-- Installable on Android/iOS: adds a launcher icon and runs without browser chrome. -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./assets/logo.svg">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CircleSong">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<div class="stage">
+  <div class="phone" id="phone">
+    <span class="bracket tl"></span><span class="bracket tr"></span>
+    <span class="bracket bl"></span><span class="bracket br"></span>
+
+    <!-- ABOUT -->
+    <div id="aboutOverlay" class="overlay" hidden>
+      <div class="about" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <div class="row tight">
+          <img src="assets/logo.svg" alt="" class="logo lg">
+          <span id="aboutTitle" class="wordmark lg">CIRCLE<span class="accent">SONG</span></span>
+        </div>
+        <span class="version">VERSION 1.0</span>
+        <p>CircleSong is a circle-of-fifths powered composition tool for guitar players. It maps the theory behind keys, modes, and chord progressions onto an instrument you already play, so you can build song structures — verses, choruses, bridges — by ear and by understanding, not guesswork.</p>
+        <p>Pick a key, hear every diatonic chord and its inversions instantly, sequence them into a loop, and get progression ideas grounded in real theory and well-known songs. The Learn tab and ear trainer build your fluency in modes as you write — so composing and studying happen in the same place.</p>
+        <p class="credit">by Nicolás Raul Jean-Pierre Figueroa</p>
+        <p class="licence">
+          Copyright &copy; 2026. Free software under the
+          <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU AGPL v3</a>,
+          with no warranty. Section 13 of that licence gives everyone who uses
+          CircleSong over a network the right to its source:
+        </p>
+        <a class="source-link" href="https://github.com/DigitalNinja-dev/CircleSong" target="_blank" rel="noopener noreferrer">Source Code (AGPL v3.0)</a>
+        <button id="aboutCloseBtn" class="about-close">CLOSE</button>
+      </div>
+    </div>
+
+    <!-- TOP TRANSPORT BAR -->
+    <header class="transport">
+      <div class="row between">
+        <div class="row tight grow">
+          <img src="assets/logo.svg" alt="" class="logo" id="appLogo">
+          <button id="aboutBtn" class="brand-btn" aria-haspopup="dialog" title="About CircleSong">
+            <span class="wordmark">CIRCLE<span class="accent">SONG</span></span>
+          </button>
+          <i id="armedLed" class="led-dot" title="Audio engine"></i>
+        </div>
+        <button id="playBtn" class="play" aria-label="Play"><span class="play-icon"></span></button>
+      </div>
+
+      <div class="row tight">
+        <span class="song-label">SONG:</span>
+        <input id="projectTitle" class="title-input" value="Untitled Song" aria-label="Song title">
+      </div>
+
+      <div class="row">
+        <span class="micro-label">BPM</span>
+        <input id="bpm" type="range" min="40" max="240" value="96" class="grow" aria-label="Tempo">
+        <span id="bpmValue" class="mono-value">96</span>
+      </div>
+
+      <div class="row scroll-x">
+        <select id="timeSigSelect" class="select compact" aria-label="Time signature"></select>
+        <span class="divider"></span>
+        <button id="metroBtn" class="chip toggle" aria-pressed="true">
+          <span class="led"></span><span>Metro</span>
+        </button>
+        <button id="loopBtn" class="chip toggle" aria-pressed="true">Loop</button>
+        <button id="drumsQuickBtn" class="chip toggle" aria-pressed="false" title="Backing drums">
+          <span class="led"></span><span>Drums</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- /01 CIRCLE OF FIFTHS -->
+    <section class="panel" id="tab-circle">
+      <div class="head">
+        <h2>/01 CIRCLE_OF_FIFTHS</h2>
+        <span id="circleKeyLabel" class="accent-a"></span>
+      </div>
+      <div class="row gap-xs mb-s">
+        <select id="modeSelect" class="select grow" aria-label="Mode"></select>
+        <button id="lockBtn" class="lock-btn" aria-pressed="false"></button>
+      </div>
+      <div id="exploreModeRow" class="row gap-xs mb-s" hidden>
+        <span class="micro-label">WHEEL TAP PLAYS</span>
+        <div class="row gap-xs grow" id="exploreModeBtns"></div>
+      </div>
+      <div class="row between mb-s">
+        <div>
+          <span class="setting-name">Show secondary dominants</span>
+          <span class="setting-note">The chords that pull into each degree</span>
+        </div>
+        <button id="secDomBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
+      <div class="wheel" id="wheel">
+        <div class="wheel-outer" id="wheelOuter"></div>
+        <div class="wheel-inner" id="wheelInner"></div>
+        <div class="wheel-spokes"></div>
+        <svg class="wheel-arcs" id="wheelArcs" viewBox="0 0 280 280" aria-hidden="true"></svg>
+        <div class="wheel-labels" id="wheelLabels"></div>
+        <div class="wheel-hub">
+          <span id="hubKey">C</span>
+          <span id="hubMode">Ionian</span>
+        </div>
+      </div>
+      <div class="row between hint">
+        <span>◄ Fourths (subdominant)</span>
+        <span>Fifths (dominant) ►</span>
+      </div>
+      <p class="body-copy">Outer ring — major keys. Inner ring — their relative minors. Bright wedges are diatonic to the current key. Clockwise stacks a 5th toward the dominant; counter-clockwise a 4th toward the subdominant. Lock the key, then tap any wedge to hear it and see how it relates.</p>
+      <div id="secDomPanel" hidden>
+        <span class="micro-label">SECONDARY DOMINANTS</span>
+        <div id="secDomRow" class="row wrap gap-xs mt-s"></div>
+        <p id="secDomHint" class="body-copy tight"></p>
+      </div>
+      <div id="exploreCard" class="explore-card" hidden>
+        <span id="exploreName"></span>
+        <p id="exploreText"></p>
+      </div>
+      <div class="scale-strip" id="scaleStrip"></div>
+    </section>
+
+    <!-- /02 TONE -->
+    <section class="panel" id="tab-tone" hidden>
+      <h2>/02 GUITAR_TONE</h2>
+      <div class="grid-3" id="toneGrid"></div>
+
+      <h2 class="mt">/02B VOICE</h2>
+      <div class="sliders" id="voiceSliders"></div>
+      <div class="row mt-s">
+        <span class="micro-label">TUNING</span>
+        <select id="tuningSelect" class="select grow" aria-label="Tuning"></select>
+      </div>
+
+      <h2 class="mt">/02C PLAYBACK</h2>
+      <div class="row between">
+        <div>
+          <span class="setting-name">Cut previous sound</span>
+          <span class="setting-note">Each chord silences the one before it</span>
+        </div>
+        <button id="retriggerBtn" class="chip toggle solid" aria-pressed="true">On</button>
+      </div>
+      <div class="row mt-s">
+        <span class="micro-label">AUDITION</span>
+        <div class="row gap-xs grow" id="previewLengthRow"></div>
+      </div>
+
+      <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
+      <div class="row gap-xs mb-s">
+        <span class="micro-label">FEEL</span>
+        <select id="rhythmFamilySelect" class="select grow" aria-label="Rhythm family"></select>
+      </div>
+      <div id="rhythmList"></div>
+
+    </section>
+
+    <!-- DRUM MACHINE -->
+    <section class="panel" id="tab-drums" hidden>
+      <div class="head">
+        <h2>/03 DRUM_MACHINE</h2>
+        <button id="drumsBtn" class="chip toggle solid small" aria-pressed="false">Off</button>
+      </div>
+
+      <div class="row gap-xs mb-s">
+        <select id="drumStyleSelect" class="select grow" aria-label="Groove"></select>
+        <select id="drumKitSelect" class="select" aria-label="Drum kit"></select>
+      </div>
+
+      <div class="seq-wrap">
+        <div class="seq" id="drumGrid" role="grid" aria-label="Drum step sequencer"></div>
+      </div>
+      <p class="hint block">Tap a step to cycle it through soft, medium and hard, then off. Tap a voice name to preview it; the ✕ clears that row.</p>
+
+      <div class="row gap-s">
+        <button id="drumClearBtn" class="chip small">Clear grid</button>
+        <button id="drumResetBtn" class="chip small">Reset groove</button>
+        <button id="drumDoubleBtn" class="chip small" title="Copy the first half onto the second">Double</button>
+        <button id="drumVaryBtn" class="chip small filled-b" title="Nudge the groove into a variation of itself">✦ Vary</button>
+      </div>
+
+      <div class="sliders mt">
+        <div class="slider-row">
+          <label for="drumVolume">DRUM VOL</label>
+          <input id="drumVolume" type="range" min="0" max="1" step="0.01" value="0.7" class="grow">
+          <output id="drumVolumeOut">70%</output>
+        </div>
+        <div class="slider-row">
+          <label for="drumSwing">SWING</label>
+          <input id="drumSwing" type="range" min="0" max="0.6" step="0.01" value="0" class="grow">
+          <output id="drumSwingOut">0%</output>
+        </div>
+        <div class="slider-row">
+          <label for="drumHumanize">HUMANIZE</label>
+          <input id="drumHumanize" type="range" min="0" max="1" step="0.01" value="0.35" class="grow">
+          <output id="drumHumanizeOut">35%</output>
+        </div>
+      </div>
+
+      <div class="row between mt-s">
+        <div>
+          <span class="setting-name">Fill before the loop turns</span>
+          <span class="setting-note">A short fill on the last bar</span>
+        </div>
+        <button id="drumFillBtn" class="chip toggle solid" aria-pressed="true">On</button>
+      </div>
+    </section>
+
+    <!-- /04 COMPOSE -->
+    <section class="panel" id="tab-compose" hidden>
+      <h2>/04 DIATONIC_CHORDS</h2>
+      <div class="grid-4" id="chordGrid"></div>
+
+      <div class="card mt">
+        <div class="row between">
+          <div>
+            <span id="activeChordName" class="chord-name"></span>
+            <span id="activeFunctionName" class="muted"></span>
+          </div>
+          <button id="previewBtn" class="chip soft">▶ Preview</button>
+        </div>
+        <p id="activeFunctionBlurb" class="body-copy tight"></p>
+
+        <div class="builder">
+          <div class="builder-row">
+            <span class="micro-label">SIZE</span>
+            <div id="chordSizeRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">COLOUR</span>
+            <div id="chordColourRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">ALTER</span>
+            <div id="chordAlterRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label">SHAPE</span>
+            <div id="inversionRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <div class="builder-row">
+            <span class="micro-label"></span>
+            <div id="chordResetRow" class="row wrap gap-xs grow"></div>
+          </div>
+          <p id="chordBuilderHint" class="body-copy tight"></p>
+          <p id="chordScaleHint" class="scale-hint"></p>
+        </div>
+
+        <div class="diagram-row">
+          <svg id="chordDiagram" viewBox="0 0 280 210" width="180" height="200" role="img" aria-label="Chord diagram"></svg>
+          <div class="legend">
+            <span id="positionLabel" class="mono-strong"></span>
+            <span id="shapeLabel" class="mono-dim"></span>
+            <div class="legend-item"><i style="background:var(--a)"></i>Root</div>
+            <div class="legend-item"><i style="background:var(--b)"></i>3rd</div>
+            <div class="legend-item"><i style="background:var(--c)"></i>5th</div>
+            <div class="legend-item"><i style="background:var(--d)"></i>7th</div>
+            <button id="nextVoicingBtn" class="chip small mt-s">↻ Next shape</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- /05 TIMELINE -->
+    <section class="panel" id="tab-timeline" hidden>
+      <div class="head">
+        <h2>/05 TIMELINE</h2>
+        <div class="row gap-xs" id="barSizeRow"></div>
+      </div>
+      <div class="section-bar">
+        <div class="chip-row tight-row" id="sectionTabs"></div>
+        <div class="row gap-xs">
+          <button id="addSectionBtn" class="chip small" title="Add an empty loop">+ Loop</button>
+          <button id="dupSectionBtn" class="chip small" title="Duplicate this loop">Duplicate</button>
+          <button id="delSectionBtn" class="chip small" title="Delete this loop">Delete</button>
+        </div>
+      </div>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">THIS LOOP IS A</span>
+        <select id="sectionRoleSelect" class="select grow" aria-label="Section role"></select>
+      </div>
+      <p id="sectionRoleHint" class="hint block"></p>
+      <div class="grid-4" id="timelineGrid"></div>
+
+      <!-- Chord picker: opens on the bar being edited. -->
+      <div id="pickerCard" class="card picker" hidden>
+        <div class="row between">
+          <span class="micro-label" id="pickerTitle">BAR 1</span>
+          <button id="pickerCloseBtn" class="chip small">Done</button>
+        </div>
+        <span class="micro-label mt-s">SUGGESTED NEXT</span>
+        <div id="pickerSuggestions" class="suggest-list"></div>
+        <span class="micro-label mt-s">EVERY CHORD IN THE KEY</span>
+        <div id="pickerScale" class="row wrap gap-xs"></div>
+        <div id="pickerEdit" hidden>
+          <span class="micro-label mt-s">THIS CHORD</span>
+          <div class="row wrap gap-xs" id="pickerSizeRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
+          <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
+          <p id="pickerHint" class="body-copy tight"></p>
+          <div class="row gap-xs">
+            <button id="pickerResetBtn" class="chip small">Follow the key</button>
+            <button id="pickerClearBtn" class="chip small">Remove chord</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="analysisCard" class="card analysis" hidden>
+        <span class="micro-label">HOW THIS LOOP READS</span>
+        <p id="analysisSummary" class="mono-strong"></p>
+        <p id="analysisCadence" class="body-copy tight"></p>
+        <ul id="analysisNotes" class="note-list"></ul>
+      </div>
+
+      <div class="row between mt">
+        <div>
+          <span class="setting-name">Smooth voicings</span>
+          <span class="setting-note">Pick shapes that connect, so the hand barely moves</span>
+        </div>
+        <button id="smoothBtn" class="chip toggle solid" aria-pressed="false">Off</button>
+      </div>
+      <div class="row gap-s mt">
+        <button id="clearTimelineBtn" class="chip small">Clear all</button>
+        <button id="exportBtn" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput" type="file" accept="application/json" hidden></label>
+      </div>
+    </section>
+
+    <!-- /06 LEARN -->
+    <section class="panel" id="tab-learn" hidden>
+      <h2>/06 MODES</h2>
+      <p class="body-copy">Modes are the 7 scales hiding inside every major scale — same notes, different starting point, different mood. Pick one to hear it and read how guitarists use it.</p>
+      <div class="chip-row" id="learnModeRow"></div>
+      <div class="card">
+        <div class="row baseline gap-s">
+          <span id="learnName" class="learn-title"></span>
+          <span id="learnAlsoKnown" class="muted small"></span>
+        </div>
+        <span id="learnFormula" class="mono-strong block"></span>
+        <div id="diffStrip" class="diff-strip" aria-label="Scale degrees compared with the major scale"></div>
+        <p id="learnMood" class="accent-b tight"></p>
+        <p id="learnUse" class="body-copy tight"></p>
+        <div class="row gap-s">
+          <button id="playScaleBtn" class="chip soft grow">▶ Play Scale</button>
+          <button id="playVampBtn" class="chip filled-c grow">▶ Play Vamp</button>
+        </div>
+      </div>
+
+      <h3>EAR_TRAINER // GUESS_THE_MODE</h3>
+      <p class="hint">Score: <span id="quizScore">0 / 0</span> · <span id="quizStreak">Streak: 0 (best 0)</span></p>
+      <div id="masteryDots" class="mastery-dots" aria-label="Modes identified correctly at least once"></div>
+      <div class="row gap-s">
+        <button id="quizStartBtn" class="chip filled-a grow">▶ Start</button>
+        <button id="quizReplayBtn" class="chip" hidden>↺</button>
+      </div>
+      <div id="quizOptions" class="grid-2 mt-s" hidden></div>
+      <p id="quizFeedback" class="feedback"></p>
+    </section>
+
+    <!-- /07 ASSISTANT -->
+    <section class="panel" id="tab-assist" hidden>
+      <h2>/07 SONGWRITING_ASSISTANT</h2>
+      <div class="key-banner" id="assistKeyBanner">
+        <span class="micro-label">EVERYTHING BELOW IS IN</span>
+        <span id="assistKeyName" class="key-name"></span>
+        <span id="assistKeyLock" class="key-lock"></span>
+      </div>
+      <div class="chip-row" id="moodRow"></div>
+      <div id="suggestionCard" class="card flat" hidden>
+        <div class="row between">
+          <span id="suggestionLabel" class="accent-b strong"></span>
+          <button id="applySuggestionBtn" class="chip filled-b small">Apply</button>
+        </div>
+        <p id="suggestionText" class="body-copy tight"></p>
+      </div>
+
+      <h3>// SONG_STRUCTURE_IDEAS</h3>
+      <div class="chip-row" id="sectionRow"></div>
+      <div class="stack" id="sectionVariants"></div>
+
+      <h3>// PROGRESSION_LIBRARY</h3>
+      <p class="hint block">Pick a family or search, then tap a progression to open it — you'll hear it in the current key. Apply writes it to the timeline. Numerals and chord names are computed from what will actually play.</p>
+      <div class="row gap-xs">
+        <span class="micro-label">FAMILY</span>
+        <select id="templateFamilySelect" class="select grow" aria-label="Progression family"></select>
+      </div>
+      <input id="templateSearch" class="search-input" type="search" placeholder="Search name, numerals, or a song…" aria-label="Search progressions">
+      <p id="templateCount" class="micro-label"></p>
+      <div class="stack" id="templateList"></div>
+    </section>
+
+    <!-- /09 TUNER -->
+    <section class="panel" id="tab-tuner" hidden>
+      <div class="tuner-head">
+        <h2>/09 TUNER</h2>
+        <span class="tuner-a4" id="tunerA4Label">A4 = 440 Hz</span>
+      </div>
+
+      <div class="tuner-pills">
+        <div class="pill-select">
+          <select id="tunerInstrument" aria-label="Instrument"></select>
+          <span class="pill-caret">▾</span>
+        </div>
+        <div class="pill-select">
+          <select id="tunerTuning" aria-label="Tuning"></select>
+          <span class="pill-caret">▾</span>
+        </div>
+        <button id="tunerAutoBtn" class="pill" aria-pressed="true">AUTO</button>
+      </div>
+
+      <div class="tuner-dial-wrap">
+        <svg id="tunerDial" class="tuner-dial" viewBox="8 6 224 212" role="img" aria-label="Tuning meter">
+          <defs>
+            <linearGradient id="tunerArcGrad" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="var(--d)"></stop>
+              <stop offset="45%" stop-color="var(--d)"></stop>
+              <stop offset="100%" stop-color="var(--a)"></stop>
+            </linearGradient>
+            <filter id="tunerGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3.2" result="b"></feGaussianBlur>
+              <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+          <g id="tunerTicks"></g>
+          <path id="tunerTrack" class="dial-track"></path>
+          <path id="tunerArc" class="dial-arc"></path>
+          <g id="tunerPointer"></g>
+        </svg>
+        <div class="tuner-centre">
+          <span id="tunerNote" class="tuner-note">—</span>
+          <span id="tunerCents" class="tuner-cents"></span>
+        </div>
+        <div class="tuner-stats">
+          <div class="stat"><span class="stat-key">Signal:</span><span id="tunerSignal" class="stat-val">—</span></div>
+          <div class="stat mid"><span id="tunerFreq" class="stat-val">Freq: —</span></div>
+          <div class="stat right"><span class="stat-key">Status:</span><span id="tunerState" class="stat-val">—</span></div>
+        </div>
+      </div>
+
+      <div id="tunerStrings" class="tuner-strings"></div>
+
+      <button id="tunerMicBtn" class="tuner-listen" aria-pressed="false">
+        <span class="dot"></span><span id="tunerMicLabel">START LISTENING</span>
+      </button>
+      <p id="tunerMicNote" class="tuner-mic-note"></p>
+      <p id="tunerError" class="tuner-err" hidden></p>
+
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">REFERENCE A4</span>
+        <div class="row gap-xs grow" id="tunerA4Row"></div>
+      </div>
+    </section>
+
+    <!-- /08 SONGS -->
+    <section class="panel" id="tab-songs" hidden>
+      <h2>/08 SONGS</h2>
+      <div class="card flat">
+        <span class="micro-label">CURRENT SONG</span>
+        <p id="songsCurrent" class="mono-strong"></p>
+        <div class="row wrap gap-xs mt-s">
+          <button id="saveProjectBtn" class="chip small filled-a">Save</button>
+          <button id="saveAsProjectBtn" class="chip small">Save as new</button>
+          <button id="newProjectBtn" class="chip small">New song</button>
+        </div>
+      </div>
+
+      <h3>// SAVED_PROJECTS</h3>
+      <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
+      <div class="stack" id="projectList"></div>
+      <div class="row gap-s mt">
+        <button id="exportBtn2" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
+      </div>
+    </section>
+
+    <div class="spacer"></div>
+
+    <footer class="byline">CircleSong — by Nicolás Raul Jean-Pierre Figueroa · <a href="https://github.com/DigitalNinja-dev/CircleSong" target="_blank" rel="noopener noreferrer">Source Code (AGPL v3.0)</a></footer>
+
+    <!-- BOTTOM TAB NAV -->
+    <nav class="tabbar" id="tabbar"></nav>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
