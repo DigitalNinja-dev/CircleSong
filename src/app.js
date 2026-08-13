@@ -2762,7 +2762,6 @@ function wire() {
     render();
     toast('New song started.');
   };
-  $('exportBtn2').onclick = exportSong;
   $('importInput2').onchange = importSong;
 
   $('pickerCloseBtn').onclick = closePicker;
@@ -2898,7 +2897,6 @@ function wire() {
     setBars(makeBars(barCount()), barCount());
     renderTimeline();
   };
-  $('exportBtn').onclick = exportSong;
   $('importInput').onchange = importSong;
 
   document.addEventListener('keydown', (e) => {
@@ -2925,7 +2923,7 @@ function wire() {
 
 // ---------------------------------------------------------------- save/load
 
-/** The song as plain JSON — the one shape used by export, save and load. */
+/** The song as plain JSON — the one shape used by saving, loading and import. */
 function songData() {
   return {
     format: 'circlesong.v3',
@@ -2954,17 +2952,6 @@ function songData() {
     keyName: `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`,
     barTotal: state.sections.reduce((n, sec) => n + sec.barCount, 0),
   };
-}
-
-function exportSong() {
-  const data = songData();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${state.projectTitle.replace(/[^\w-]+/g, '_') || 'circlesong'}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('Exported song JSON.');
 }
 
 function importSong(e) {

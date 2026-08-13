@@ -1245,8 +1245,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       </div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
-        <button id="exportBtn" class="chip small">Export JSON</button>
-        <label class="chip small file-label">Import<input id="importInput" type="file" accept="application/json" hidden></label>
+        <label class="chip small file-label">Import a song file<input id="importInput" type="file" accept="application/json" hidden></label>
       </div>
     </section>
 
@@ -1392,8 +1391,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
       <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
       <div class="stack" id="projectList"></div>
       <div class="row gap-s mt">
-        <button id="exportBtn2" class="chip small">Export JSON</button>
-        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
+        <label class="chip small file-label">Import a song file<input id="importInput2" type="file" accept="application/json" hidden></label>
       </div>
     </section>
 
@@ -9108,7 +9106,6 @@ function wire() {
     render();
     toast('New song started.');
   };
-  $('exportBtn2').onclick = exportSong;
   $('importInput2').onchange = importSong;
 
   $('pickerCloseBtn').onclick = closePicker;
@@ -9244,7 +9241,6 @@ function wire() {
     setBars(makeBars(barCount()), barCount());
     renderTimeline();
   };
-  $('exportBtn').onclick = exportSong;
   $('importInput').onchange = importSong;
 
   document.addEventListener('keydown', (e) => {
@@ -9271,7 +9267,7 @@ function wire() {
 
 // ---------------------------------------------------------------- save/load
 
-/** The song as plain JSON — the one shape used by export, save and load. */
+/** The song as plain JSON — the one shape used by saving, loading and import. */
 function songData() {
   return {
     format: 'circlesong.v3',
@@ -9300,17 +9296,6 @@ function songData() {
     keyName: `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`,
     barTotal: state.sections.reduce((n, sec) => n + sec.barCount, 0),
   };
-}
-
-function exportSong() {
-  const data = songData();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${state.projectTitle.replace(/[^\w-]+/g, '_') || 'circlesong'}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('Exported song JSON.');
 }
 
 function importSong(e) {
