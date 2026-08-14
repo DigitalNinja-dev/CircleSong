@@ -219,13 +219,24 @@ export class ReferenceTone {
     this.ctx = ctx;
     this.destination = destination || ctx.destination;
     this.nodes = null;
+    this._timer = null;
+    /** Called when a bounded tone ends by itself, so the UI can catch up. */
+    this.onStop = null;
   }
 
   get playing() {
     return !!this.nodes;
   }
 
-  play(freq, { wave = 'sine', level = 0.12 } = {}) {
+  /**
+   * Sound a pitch.
+   *
+   * `stopAfter`, in seconds, ends the tone on its own. That matters when the
+   * microphone is open: a tone held through the speakers is heard by the tuner,
+   * which will happily settle on its own reference and report that everything
+   * is perfectly in tune.
+   */
+  play(freq, { wave = 'sine', level = 0.12, stopAfter = 0 } = {}) {
     this.stop();
     const t = this.ctx.currentTime;
     const gain = this.ctx.createGain();
@@ -246,9 +257,19 @@ export class ReferenceTone {
       oscs.push(o);
     }
     this.nodes = { gain, oscs };
+
+    clearTimeout(this._timer);
+    if (stopAfter > 0) {
+      this._timer = setTimeout(() => {
+        this.stop();
+        if (this.onStop) this.onStop();
+      }, stopAfter * 1000);
+    }
   }
 
   stop() {
+    clearTimeout(this._timer);
+    this._timer = null;
     if (!this.nodes) return;
     const { gain, oscs } = this.nodes;
     this.nodes = null;

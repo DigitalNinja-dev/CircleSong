@@ -2127,6 +2127,20 @@ function setTunerMode(mode, midi = null) {
   renderTuner();
 }
 
+/**
+ * Twelve semitones from the middle of a chromatic tuning's range.
+ *
+ * A chromatic setting covers every note the instrument can make, which is far
+ * too many to put on screen — so it used to put none there at all, leaving a
+ * line of text and nothing to tap. One octave, centred, is playable.
+ */
+function octaveOf(notes) {
+  const mid = notes[Math.floor(notes.length / 2)];
+  // Start at the C at or below the middle, so the row reads as an octave.
+  const start = mid - (((mid % 12) + 12) % 12);
+  return Array.from({ length: 12 }, (_, i) => start + i).filter((m) => notes.includes(m));
+}
+
 /** A new instrument or tuning: nothing pinned, nothing droning, nothing read. */
 function changeTuning() {
   stopReference();
@@ -2137,7 +2151,15 @@ function changeTuning() {
   renderTuner();
 }
 
-/** Sound — or silence — the reference pitch for a string. */
+/**
+ * Sound the reference pitch for a note.
+ *
+ * Every tap sounds. Tapping a note is how you ask what it sounds like, so
+ * tapping the same one twice must answer twice — it used to toggle the tone off
+ * instead, which meant every second tap was silent. Stopping is the STOP TONE
+ * button's job now, and the tone stops by itself on everything that already
+ * silenced it.
+ */
 async function soundReference(midi) {
   const mode = TUNER_REF_BY_ID[state.tunerRef];
   if (!mode || mode.id === 'off') return;
@@ -2146,13 +2168,16 @@ async function soundReference(midi) {
     engine.pluckMelody({ midi, velocity: 0.8 });
     return;
   }
-  if (!refTone) refTone = new ReferenceTone(engine.ctx, engine.master);
-  // Tapping the sounding string again is the way to stop the drone.
-  if (refTone.playing && refTone.midi === midi) {
-    stopReference();
-    return;
+  if (!refTone) {
+    refTone = new ReferenceTone(engine.ctx, engine.master);
+    refTone.onStop = () => { refTone.midi = null; renderTunerRefState(); };
   }
-  refTone.play(midiToFreq(midi, state.tunerA4), { wave: mode.wave });
+  refTone.play(midiToFreq(midi, state.tunerA4), {
+    wave: mode.wave,
+    // While the microphone is open the tuner can hear the reference through the
+    // speakers and settle on it, so a tap answers and then gets out of the way.
+    stopAfter: state.tunerOn ? 3 : 0,
+  });
   refTone.midi = midi;
   renderTunerRefState();
 }
@@ -2164,12 +2189,16 @@ function stopReference() {
   renderTunerRefState();
 }
 
-/** Mark whichever string is currently droning. */
+/** Mark whichever note is currently sounding, and offer a way to stop it. */
 function renderTunerRefState() {
   const sounding = refTone && refTone.playing ? refTone.midi : null;
   for (const b of document.querySelectorAll('#tunerStrings .tuner-string')) {
     b.classList.toggle('sounding', Number(b.dataset.midi) === sounding);
   }
+  const stop = $('tunerStopTone');
+  if (!stop) return;
+  stop.hidden = sounding === null;
+  if (sounding !== null) stop.textContent = `Stop ${midiLabel(sounding)}`;
 }
 
 /** Point on the dial for a cents value. */
@@ -2245,32 +2274,35 @@ function renderTuner() {
   buildDialTicks();
   $('tunerTrack').setAttribute('d', dialArc(-50, 50, DIAL.r));
 
-  // Strings.
+  // Strings — or, for a chromatic tuning, an octave of notes to tap.
   const strings = $('tunerStrings');
   strings.replaceChildren();
   const reading = state.tunerReading;
-  if (tuning.notes.length > 12) {
-    strings.appendChild(el('p', 'tuner-mic-note', 'Chromatic — play any note and it will be named.'));
-  } else {
-    const count = tuning.notes.length;
-    tuning.notes.forEach((midi, i) => {
-      const pinned = state.tunerTarget === midi;
-      const live = reading && reading.midi === midi && reading.state !== 'off';
-      const b = el('button', `tuner-string${pinned ? ' pinned' : ''}${live ? ' live' : ''}${live && reading.state === 'locked' ? ' locked' : ''}`);
-      b.append(
-        el('span', 'ts-name', midiLabel(midi)),
-        el('span', 'ts-index', `STR ${count - i}`)
-      );
-      b.dataset.midi = String(midi);
-      b.onclick = () => {
-        // Pinning a string is what "manual" means, so tapping one switches to
-        // it; tapping the pinned string again hands the choice back to AUTO.
-        setTunerMode(pinned ? 'auto' : 'manual', midi);
-        soundReference(midi);
-      };
-      strings.appendChild(b);
-    });
-  }
+  const chromatic = tuning.notes.length > 12;
+  // A chromatic tuning covers the whole instrument; the octave in the middle of
+  // it is the one worth putting under a finger.
+  const shown = chromatic ? octaveOf(tuning.notes) : tuning.notes;
+
+  const count = shown.length;
+  shown.forEach((midi, i) => {
+    const pinned = state.tunerTarget === midi;
+    const live = reading && reading.midi === midi && reading.state !== 'off';
+    const b = el('button', `tuner-string${chromatic ? ' chromatic' : ''}${pinned ? ' pinned' : ''}${live ? ' live' : ''}${live && reading.state === 'locked' ? ' locked' : ''}`);
+    b.append(
+      el('span', 'ts-name', midiLabel(midi)),
+      el('span', 'ts-index', chromatic ? '' : `STR ${count - i}`)
+    );
+    b.dataset.midi = String(midi);
+    b.onclick = () => {
+      // Pinning a string is what "manual" means, so tapping one switches to it;
+      // tapping the pinned one again hands the choice back to AUTO. Either way
+      // the note sounds — that part is not a toggle.
+      setTunerMode(pinned ? 'auto' : 'manual', midi);
+      soundReference(midi);
+    };
+    strings.appendChild(b);
+  });
+  $('tunerChromaticNote').hidden = !chromatic;
 
   chipRow(
     'tunerModeRow',
@@ -3050,6 +3082,7 @@ function wire() {
     changeTuning();
   };
   $('tunerMicBtn').onclick = toggleTuner;
+  $('tunerStopTone').onclick = stopReference;
   $('tunerAutoBtn').onclick = () => setTunerMode(state.tunerMode === 'auto' ? 'manual' : 'auto');
 
   // --- songs, saving, audio export ---

@@ -912,3 +912,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 /* The string whose reference tone is currently being held. */
 .tuner-string.sounding { border-color: var(--b); box-shadow: 0 0 10px oklch(0.7 0.16 250 / 0.4); }
 .tuner-string.sounding .ts-index { color: var(--b); }
+
+/* A chromatic row is twelve notes wide, so it scrolls rather than shrinking
+   each one below the size of a fingertip. */
+.tuner-strings { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+.tuner-string.chromatic { flex: 0 0 44px; padding: 10px 2px; }
+.tuner-string.chromatic .ts-index { display: none; }
+
+.tuner-stop-tone {
+  display: block; margin: 8px auto 0;
+  border-color: var(--b); color: var(--b); border-radius: 8px;
+}
+.tuner-stop-tone:hover { background: oklch(0.7 0.16 250 / 0.15); }
