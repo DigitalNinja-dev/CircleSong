@@ -179,10 +179,36 @@
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="row gap-xs mb-s">
-        <span class="micro-label">FEEL</span>
+        <span class="micro-label">STYLE</span>
         <select id="rhythmFamilySelect" class="select grow" aria-label="Rhythm family"></select>
       </div>
       <div id="rhythmList"></div>
+
+      <div class="card flat mt-s" id="feelCard">
+        <div class="row between wrap gap-xs">
+          <span class="micro-label">NOW PLAYING</span>
+          <span id="rhythmTempoHint" class="setting-note"></span>
+        </div>
+        <p id="rhythmNowPlaying" class="mono-strong"></p>
+        <button id="setTempoBtn" class="chip small" hidden></button>
+
+        <div class="row gap-xs mt-s">
+          <span class="micro-label">FEEL</span>
+          <div class="row gap-xs grow" id="feelRow"></div>
+        </div>
+        <p id="feelNote" class="setting-note"></p>
+
+        <div class="slider-row">
+          <label for="swingSlider">SWING</label>
+          <input type="range" id="swingSlider" class="grow" min="0" max="0.6" step="0.02">
+          <output id="swingOut"></output>
+        </div>
+        <div class="slider-row">
+          <label for="humanizeSlider">HUMANIZE</label>
+          <input type="range" id="humanizeSlider" class="grow" min="0" max="1" step="0.05">
+          <output id="humanizeOut"></output>
+        </div>
+      </div>
 
     </section>
 

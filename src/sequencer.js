@@ -25,7 +25,7 @@
 // not from setTimeout, so strums stay locked to the grid even when the main
 // thread is busy laying out the UI.
 
-import { getPattern, swingTime } from './patterns.js';
+import { getPattern, swingTime, selectStrings, applyFeel } from './patterns.js';
 import { resolveVoicing, voicingNotes } from './fretboard.js';
 import { patternHits } from './drum-patterns.js';
 
@@ -244,6 +244,50 @@ export class Sequencer {
     // rather than squeezed.
     const fraction = st.previewFraction ?? 1;
 
+    // Feel is applied before anything else, because it changes what the events
+    // are; swing and humanize then move them around.
+    const feel = st.feel || 'straight';
+    const swing = st.swing ?? null;
+    const human = st.humanize ?? 0;
+    const beatDur = duration / (parseTimeSig(st.timeSig || '4/4').beats || 4);
+    // Half-time spans two bars, so it needs to know which one this is. A
+    // preview is always the first.
+    const bar = st.bar ?? this.barIndex;
+
+    /**
+     * Placement drift and velocity variance, least on the downbeat — the same
+     * treatment the drums already get, and for the same reason: nobody plays a
+     * grid, and the downbeat is the reference everything else is heard against.
+     * Timing drift is in seconds, because a player's hand is late by
+     * milliseconds rather than by a fraction of a beat.
+     */
+    const humanize = (t, vel) => {
+      if (!human) return { t, vel };
+      const anchor = t < 1e-6 ? 0.3 : 1;
+      return {
+        t: t + (Math.random() - 0.5) * 0.018 * human * anchor,
+        vel: vel * (1 + (Math.random() - 0.5) * 0.22 * human),
+      };
+    };
+
+    /**
+     * Put a stroke on the clock, inside this slot.
+     *
+     * Clamped rather than filtered: swing and humanize can nudge a stroke a few
+     * milliseconds either side of the slot, and dropping it for that reason
+     * loses whole downbeats — a "Let Ring" bar would occasionally not ring at
+     * all. Whether a stroke belongs in this slot is decided by the pattern's own
+     * position, above, not by where the drift left it.
+     */
+    const placeIn = (t) =>
+      Math.min(
+        Math.max(startTime + t * duration, startTime),
+        startTime + duration - 0.001
+      );
+
+    /** Swing: whatever the user asked for, or the pattern's own if they have not. */
+    const swingAmount = swing === null ? pattern.swing || 0 : swing;
+
     if (pattern.kind === 'keys') {
       // Keyboard patterns divide the chord into parts rather than strokes:
       // the bass note under the left hand, the voices above it, the whole
@@ -252,12 +296,11 @@ export class Sequencer {
       for (let s = 0; s < 6; s++) if (midi[s] !== null) sounding.push(s);
       if (!sounding.length) return;
 
-      for (const hit of pattern.hits) {
+      for (const hit of applyFeel(pattern.hits, feel, bar)) {
         if (hit.t >= fraction) continue;
-        const t = swingTime(hit.t, pattern.swing || 0);
-        const when = startTime + t * duration;
-        if (when < startTime - 0.001 || when >= startTime + duration) continue;
-        const vel = hit.vel * (st.velocity ?? 1);
+        const shifted = humanize(swingTime(hit.t, swingAmount), hit.vel);
+        const when = placeIn(shifted.t);
+        const vel = shifted.vel * (st.velocity ?? 1);
 
         if (hit.part === 'bass') {
           const s = sounding[0];
@@ -297,40 +340,61 @@ export class Sequencer {
         const fromTop = sounding[sounding.length - 1 - name];
         return fromTop ?? sounding[sounding.length - 1];
       };
-      for (const p of pattern.picks) {
+      for (const p of applyFeel(pattern.picks, feel, bar)) {
         if (p.t >= fraction) continue;
         const s = pick(p.pick);
         if (s === undefined) continue;
+        const shifted = humanize(swingTime(p.t, swingAmount), p.vel);
+        const when = placeIn(shifted.t);
         this.engine.pluck({
           string: s,
           midi: midi[s],
-          when: startTime + p.t * duration,
-          velocity: p.vel * (st.velocity ?? 1),
+          when,
+          velocity: shifted.vel * (st.velocity ?? 1),
           hardness: Math.max(0, this.engine.stringParams.hardness - 0.3),
         });
       }
       return;
     }
 
-    for (const hit of pattern.hits) {
+    const sounding = [];
+    for (let s = 0; s < 6; s++) if (midi[s] !== null) sounding.push(s);
+    if (!sounding.length) return;
+
+    for (const hit of applyFeel(pattern.hits, feel, bar)) {
       if (hit.t >= fraction) continue;
-      const t = swingTime(hit.t, pattern.swing || 0);
-      const when = startTime + t * duration;
-      if (when < startTime - 0.001 || when >= startTime + duration) continue;
+      const shifted = humanize(swingTime(hit.t, swingAmount), hit.vel);
+      const when = placeIn(shifted.t);
+
+      // Which strings this stroke actually catches. A reggae chop is three
+      // strings and a boom-chick "boom" is one; strumming all six for both is
+      // the difference between a pattern and an impression of one.
+      const strings = selectStrings(hit.strings, sounding);
+      if (!strings.length) continue;
+      const masked = new Array(6).fill(null);
+      for (const s of strings) masked[s] = midi[s];
 
       this.engine.strum({
-        midi,
+        midi: masked,
         when,
         direction: hit.dir,
-        velocity: Math.min(1, hit.vel * (st.velocity ?? 1)),
+        velocity: Math.min(1, shifted.vel * (st.velocity ?? 1)),
         spread: hit.spread,
-        muteAmount: hit.mute,
+        muteAmount: hit.ghost ? 1 : hit.mute,
+        humanize: human,
+        // The pattern has already said which strings it wants; the upstroke's
+        // usual habit of catching only the top few would take them away again.
+        trimUpstroke: !hit.strings,
       });
 
-      // A damped chop is a strum plus an immediate choke.
-      if (hit.mute > 0.4) {
-        const choke = when + Math.min(0.12, duration * 0.12);
-        for (let s = 0; s < 6; s++) if (midi[s] !== null) this.engine.release(s, choke, 0.85, 0.03);
+      // How long it rings. `choke` is in beats; a heavily muted stroke with no
+      // explicit choke still gets one, because that is what a mute *is*.
+      const chokeBeats = hit.ghost ? 0.12 : hit.choke ?? (hit.mute > 0.4 ? 0.35 : 0);
+      if (chokeBeats > 0) {
+        const at = when + chokeBeats * beatDur;
+        // Only inside this slot — a chop must not reach into the next chord.
+        const limit = startTime + duration - 0.005;
+        for (const s of strings) this.engine.release(s, Math.min(at, limit), 0.9, 0.02);
       }
     }
   }

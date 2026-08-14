@@ -55,7 +55,7 @@ import {
 } from './fretboard.js';
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
-import { RHYTHMS } from './patterns.js';
+import { RHYTHMS, FEELS, patternTempo, getPattern } from './patterns.js';
 import {
   Tuner,
   ReferenceTone,
@@ -200,6 +200,16 @@ const state = {
   templateOpen: null,
   /** Which family of strum/rhythm feels is being browsed. */
   rhythmFamily: 'All',
+  /**
+   * How the chosen pattern is re-timed: as written, twice as fast, or stretched
+   * over two bars. Double-time is the general form of "ska is reggae at double
+   * tempo" — it works on anything.
+   */
+  feel: 'straight',
+  /** Swing amount, or null to use whatever the pattern was written with. */
+  swing: null,
+  /** How much the strumming hand drifts off the grid, 0..1. */
+  humanize: 0.25,
   showAbout: false,
   // --- tuner ---
   tunerInstrument: 'guitar',
@@ -269,6 +279,9 @@ const sequencer = new Sequencer(engine, () => ({
   loop: state.loop,
   metronome: state.metronome,
   rhythm: state.rhythm,
+  feel: state.feel,
+  swing: state.swing,
+  humanize: state.humanize,
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
   drumsOn: state.drumsOn,
@@ -454,6 +467,10 @@ async function playChordNow(chord, voicing, { duration, fraction } = {}) {
   const when = auditionStart();
   sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, when, dur, {
     rhythm: state.rhythm,
+    feel: state.feel,
+    swing: state.swing,
+    humanize: state.humanize,
+    timeSig: state.timeSig,
     tuning: tuning(),
     velocity: 1,
     previewFraction: frac,
@@ -1160,9 +1177,10 @@ function renderTone() {
 const RHYTHM_FAMILIES = [
   { label: 'Strumming', tags: ['strum'] },
   { label: 'Muted & Percussive', tags: ['percussive'] },
-  { label: 'Offbeat', tags: ['offbeat'] },
+  { label: 'Reggae, Ska & Offbeat', tags: ['offbeat'] },
   { label: 'Jazz Comping', tags: ['comp'] },
   { label: 'Latin & Syncopated', tags: ['syncop'] },
+  { label: 'Country & Bluegrass', tags: ['country'] },
   { label: 'Other Meters', tags: ['3/4', '6/8'] },
   { label: 'Fingerstyle', tags: ['arp', 'sustain'] },
   { label: 'Keyboard', tags: ['keys'] },
@@ -1203,12 +1221,94 @@ function renderRhythms() {
     const grid = el('div', 'rhythm-grid');
     for (const r of items) {
       const b = el('button', `rhythm-btn${state.rhythm === r.id ? ' active' : ''}`);
-      b.append(el('span', 'name', r.label), el('span', 'tag', r.tag));
-      b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
+      const range = patternTempo(r.id);
+      b.append(el('span', 'name', r.label), el('span', 'tag', range ? `${range[0]}–${range[1]} BPM` : r.tag));
+      if (range) b.title = `Written for ${range[0]}–${range[1]} BPM`;
+      b.onclick = () => {
+        state.rhythm = r.id;
+        // Each pattern has its own idea of how much it swings, so a new choice
+        // hands the slider back to it rather than carrying the last one over.
+        state.swing = null;
+        renderTone();
+        previewDegree(state.activeDegree);
+      };
       grid.appendChild(b);
     }
     list.appendChild(grid);
   }
+
+  renderFeel();
+}
+
+/**
+ * The controls that shape whatever pattern is loaded.
+ *
+ * These belong here rather than inside the pattern data because they are the
+ * things a player changes while playing the same figure: how fast the figure
+ * itself goes, how far the offbeats lean, and how tightly the hand holds the
+ * grid. Double-time in particular is the general form of the difference between
+ * a reggae skank and a ska stroke — the same gesture, twice as often.
+ */
+function renderFeel() {
+  const current = RHYTHMS.find((r) => r.id === state.rhythm);
+  const pattern = getPattern(state.rhythm);
+  const range = patternTempo(state.rhythm);
+
+  $('rhythmNowPlaying').textContent = current ? current.label : state.rhythm;
+  $('rhythmTempoHint').textContent = range
+    ? `written for ${range[0]}–${range[1]} BPM`
+    : 'any tempo';
+
+  // Suggest the tempo; never move the transport without being asked.
+  const setBtn = $('setTempoBtn');
+  const inRange = !range || (state.bpm >= range[0] && state.bpm <= range[1]);
+  setBtn.hidden = inRange;
+  if (!inRange) {
+    const target = Math.round((range[0] + range[1]) / 2);
+    setBtn.textContent = `Set ${target} BPM`;
+    setBtn.title = `You are at ${state.bpm}; this feel is written for ${range[0]}–${range[1]}`;
+    setBtn.onclick = () => {
+      state.bpm = target;
+      renderTransport();
+      renderTone();
+    };
+  }
+
+  const feelRow = $('feelRow');
+  feelRow.replaceChildren();
+  for (const f of FEELS) {
+    const b = el('button', `chip small${state.feel === f.id ? ' active' : ''}`, f.label);
+    b.title = f.note;
+    b.onclick = () => {
+      state.feel = f.id;
+      renderTone();
+      previewDegree(state.activeDegree);
+    };
+    feelRow.appendChild(b);
+  }
+  $('feelNote').textContent = (FEELS.find((f) => f.id === state.feel) || FEELS[0]).note;
+
+  const swing = state.swing ?? pattern.swing ?? 0;
+  const swingSlider = $('swingSlider');
+  swingSlider.value = swing;
+  $('swingOut').textContent =
+    state.swing === null
+      ? swing > 0
+        ? `${Math.round(swing * 100)}% (pattern)`
+        : 'straight'
+      : `${Math.round(swing * 100)}%`;
+  swingSlider.oninput = () => {
+    state.swing = Number(swingSlider.value);
+    renderFeel();
+  };
+
+  const human = $('humanizeSlider');
+  human.value = state.humanize;
+  $('humanizeOut').textContent = state.humanize ? `${Math.round(state.humanize * 100)}%` : 'machine';
+  human.oninput = () => {
+    state.humanize = Number(human.value);
+    renderFeel();
+  };
 }
 
 /** Seed the editable grid from a named groove. */
@@ -3137,6 +3237,9 @@ function songData() {
     mode: modeId(),
     tone: state.tone,
     rhythm: state.rhythm,
+    feel: state.feel,
+    swing: state.swing,
+    humanize: state.humanize,
     tuning: state.tuningId,
     drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
@@ -3190,6 +3293,10 @@ function applySongData(data) {
       state.modeIdx = Math.max(0, MODE_IDS.indexOf(data.mode));
       state.tone = PRESETS[data.tone] ? data.tone : 'acoustic';
       state.rhythm = data.rhythm || 'straight8';
+      state.feel = FEELS.some((f) => f.id === data.feel) ? data.feel : 'straight';
+      // null is meaningful here — it means "whatever the pattern says".
+      state.swing = Number.isFinite(data.swing) ? data.swing : null;
+      state.humanize = Number.isFinite(data.humanize) ? data.humanize : 0.25;
       state.tuningId = TUNINGS[data.tuning] ? data.tuning : 'standard';
       state.degreeSpec = data.degreeSpec && typeof data.degreeSpec === 'object' ? data.degreeSpec : {};
 
@@ -3289,6 +3396,8 @@ window.CircleSong = {
   sequencer,
   MODES,
   PRESETS,
+  RHYTHMS,
+  FEELS,
   /** Bars of the loop currently active — state.sections holds them all. */
   get bars() { return bars(); },
   activeSection,
