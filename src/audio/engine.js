@@ -61,7 +61,7 @@ export const PRESETS = {
     drive: 0,
     tone: { low: 1.5, mid: -1.5, midFreq: 500, high: 2.5 },
     reverb: 0.16,
-    gain: 0.52,
+    gain: 0.82,
     coupling: 0.008,
   },
   nylon: {
@@ -72,7 +72,7 @@ export const PRESETS = {
     drive: 0,
     tone: { low: 2, mid: 1, midFreq: 320, high: -2 },
     reverb: 0.2,
-    gain: 0.48,
+    gain: 0.71,
     coupling: 0.01,
   },
   electric: {
@@ -83,7 +83,7 @@ export const PRESETS = {
     drive: 0.12,
     tone: { low: 0, mid: -2, midFreq: 700, high: 3 },
     reverb: 0.14,
-    gain: 0.54,
+    gain: 0.47,
     coupling: 0.004,
   },
   crunch: {
@@ -94,7 +94,7 @@ export const PRESETS = {
     drive: 0.55,
     tone: { low: 1, mid: 2, midFreq: 800, high: 1 },
     reverb: 0.1,
-    gain: 0.3,
+    gain: 0.1,
     coupling: 0.004,
   },
   jazz: {
@@ -105,7 +105,7 @@ export const PRESETS = {
     drive: 0.05,
     tone: { low: 2, mid: 1.5, midFreq: 400, high: -6 },
     reverb: 0.18,
-    gain: 0.38,
+    gain: 0.33,
     coupling: 0.005,
   },
   reggae: {
@@ -116,7 +116,7 @@ export const PRESETS = {
     drive: 0.08,
     tone: { low: -4, mid: 3, midFreq: 1200, high: 1 },
     reverb: 0.22,
-    gain: 0.58,
+    gain: 0.62,
     coupling: 0.003,
   },
 
@@ -141,7 +141,7 @@ export const PRESETS = {
     // voice lives in the mids; a piano's lives at both ends.
     tone: { low: 4, mid: -3.5, midFreq: 900, high: 0.5 },
     reverb: 0.3,
-    gain: 0.42,
+    gain: 1.43,
     // Undamped neighbours ring in sympathy, as on a real piano — but gently.
     // A long decay leaves very little headroom before the coupled loop stops
     // being passive, and the sympathetic ring is a colour, not the sound.
@@ -159,7 +159,7 @@ export const PRESETS = {
     drive: 0.06,
     tone: { low: 2, mid: -2.5, midFreq: 900, high: 2 },
     reverb: 0.2,
-    gain: 0.2,
+    gain: 0.44,
     coupling: 0.004,
     isKeyboard: true,
   },
@@ -375,8 +375,18 @@ export class AudioEngine {
   _buildChain() {
     const ctx = this.ctx;
 
+    // Rumble filter, first thing in the chain. The lowest note the instrument
+    // can make is the low E at 82.4 Hz, so everything below this is the tail of
+    // the model's excitation noise and the body's air mode skirt — inaudible on
+    // any speaker anyone will use, and it was spending real headroom.
+    this.rumble = ctx.createBiquadFilter();
+    this.rumble.type = 'highpass';
+    this.rumble.frequency.value = 70;
+    this.rumble.Q.value = 0.6;
+
     this.input = ctx.createGain();
-    this.node.connect(this.input);
+    this.node.connect(this.rumble);
+    this.rumble.connect(this.input);
 
     // Drive stage: parallel clean + soft-clip, crossfaded by preset.drive.
     this.cleanGain = ctx.createGain();
@@ -427,13 +437,17 @@ export class AudioEngine {
     this.bus.connect(this.reverbSend);
     this.reverbSend.connect(this.room);
 
-    // Glue compression, then master.
+    // Glue compression, then master. Gentle and slow to grab: the attack is
+    // deliberately longer than a pick transient, so the strum keeps its point
+    // and only the body of the chord is levelled. It used to be doing 8 dB of
+    // work on every strum because the body convolution was 20 dB too loud —
+    // with that fixed, this is back to being glue rather than a fire escape.
     this.comp = ctx.createDynamicsCompressor();
-    this.comp.threshold.value = -18;
-    this.comp.knee.value = 22;
-    this.comp.ratio.value = 3;
-    this.comp.attack.value = 0.006;
-    this.comp.release.value = 0.22;
+    this.comp.threshold.value = -14;
+    this.comp.knee.value = 18;
+    this.comp.ratio.value = 2.5;
+    this.comp.attack.value = 0.012;
+    this.comp.release.value = 0.25;
 
     this.master = ctx.createGain();
     this.master.gain.value = this.masterVolume;
@@ -444,11 +458,11 @@ export class AudioEngine {
     // crackle. The compressor catches sustained overs, the shaper is a
     // brickwall for anything that slips past its attack time.
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -1.5;
-    this.limiter.knee.value = 0;
-    this.limiter.ratio.value = 20;
-    this.limiter.attack.value = 0.002;
-    this.limiter.release.value = 0.1;
+    this.limiter.threshold.value = -2;
+    this.limiter.knee.value = 2;
+    this.limiter.ratio.value = 12;
+    this.limiter.attack.value = 0.003;
+    this.limiter.release.value = 0.12;
 
     this.safety = ctx.createWaveShaper();
     this.safety.curve = safetyCurve();
@@ -593,7 +607,16 @@ export class AudioEngine {
    *  midi: array of 6 (MIDI note or null), when, direction 'D'|'U',
    *  velocity, spread (seconds across the whole strum), mute 0..1, accent
    */
-  strum({ midi, when, direction = 'D', velocity = 0.8, spread = 0.022, muteAmount = 0 }) {
+  strum({
+    midi,
+    when,
+    direction = 'D',
+    velocity = 0.8,
+    spread = 0.022,
+    muteAmount = 0,
+    trimUpstroke = true,
+    humanize = 1,
+  }) {
     if (!this.ready) return;
     const played = [];
     for (let s = 0; s < 6; s++) if (midi[s] !== null && midi[s] !== undefined) played.push(s);
@@ -617,17 +640,26 @@ export class AudioEngine {
     let order = played;
     if (direction === 'U') {
       order = played.slice().reverse();
-      // Upstrokes typically catch only the top strings.
-      const keep = Math.max(2, Math.ceil(played.length * 0.65));
-      order = order.slice(0, keep);
+      // Upstrokes typically catch only the top strings — unless the caller has
+      // already chosen which strings the stroke crosses, in which case trimming
+      // again would silently undo that choice.
+      if (trimUpstroke) {
+        const keep = Math.max(2, Math.ceil(played.length * 0.65));
+        order = order.slice(0, keep);
+      }
     }
 
     const basePickPos = this.stringParams.pickPos;
     const gap = spread / Math.max(1, order.length - 1);
     order.forEach((s, i) => {
-      // Humanise: ±12% velocity, small timing jitter, brighter on the treble.
-      const jitter = (Math.random() - 0.5) * gap * 0.35;
-      const v = velocity * (0.88 + Math.random() * 0.24) * (direction === 'U' ? 0.82 : 1);
+      // Humanise: ±12% velocity and a little timing jitter, both scaled by the
+      // caller's humanize setting so that "machine" really is one — brighter on
+      // the treble either way, which is the pick angle rather than the player.
+      const jitter = (Math.random() - 0.5) * gap * 0.35 * humanize;
+      const v =
+        velocity *
+        (1 + (Math.random() - 0.5) * 0.24 * humanize) *
+        (direction === 'U' ? 0.82 : 1);
       this.pluck({
         string: s,
         midi: midi[s],

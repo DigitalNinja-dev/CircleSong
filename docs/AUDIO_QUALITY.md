@@ -60,6 +60,27 @@ and back plate modes, and a diffuse tail:
 - **Archtop** — mellow, quick, pronounced low-mids
 - **1×12 cabinet** — the ~80 Hz–5 kHz window with a 2.6 kHz presence peak
 
+Two things about how these are specified matter more than the mode lists:
+
+**Modes are given as peak gain in dB, not as amplitudes.** A decaying sinusoid
+of amplitude `a` in an impulse response is not an `a`-sized bump in the
+frequency response — its resonant gain is `a · τ · sampleRate / 2`. At 48 kHz a
+mode with amplitude 1.0 and a 0.14 s T60 is a **+54 dB** resonator. That is what
+these bodies were: an F barre, whose root F2 (87 Hz) and octave F3 (175 Hz)
+straddle the two strongest modes, came out enormously louder than a chord that
+happened to sit between them. `modalIR` now solves for the amplitude from a
+stated peak, so a mode means what it says and is independent of both the sample
+rate and the chosen T60.
+
+**IRs are normalised by their average gain across 80 Hz–6 kHz.** A convolution's
+gain is a property of the whole response, not of its peak sample, so
+peak-normalising left the level to chance: the bodies ranged from −1 dB
+(cabinet) to +12 dB broadband, and far more than that in the band the guitar
+actually occupies. Broadband energy is not the right measure either — a speaker
+cabinet is a band-pass, and normalising its total energy leaves it far too loud
+inside the band where all the signal is. Measuring where the instrument lives
+treats a resonant box and a band-limited speaker alike.
+
 These are generated rather than shipped as audio so the app stays
 dependency-free and loads instantly. **Swapping in real recorded IRs is a
 drop-in change** — see §2.1, it is the single highest-value upgrade available.
@@ -67,16 +88,39 @@ drop-in change** — see §2.1, it is the single highest-value upgrade available
 ### 1.3 Signal chain (`src/audio/engine.js`)
 
 ```
-strings -> drive (clean/soft-clip blend) -> tone stack -> body or cab convolution
-        -> glue compressor -> master -> limiter -> safety shaper -> out
+strings -> 70 Hz rumble filter -> drive (clean/soft-clip blend) -> tone stack
+        -> body or cab convolution -> glue compressor -> master -> limiter
+        -> safety shaper -> out
                           \-> reverb send -> room convolution -^
 ```
 
 The limiter and safety shaper exist because a six-string strum sums six
-correlated transients: before they were added, every preset peaked between
-+2.5 and +6 dBFS and the destination hard-clipped, turning the modelled attack
-into crackle. All presets now peak at ~0.9 with zero clipped samples, and sit
-within 0.04 of each other so switching tones does not jump in loudness.
+correlated transients. They are the last resort, not the plan: with the body
+convolution mis-staged they were engaged on *every* strum, and the resulting
+soft-clipping was audible as harshness on exactly the chords that excite a body
+mode hardest. Measured through the graph for an F barre at full velocity, the
+chain used to look like this:
+
+| tap | peak | RMS | crest |
+|---|---|---|---|
+| worklet out | 0.365 | 0.085 | 4.30 |
+| **post body convolution** | **3.243** | **0.930** | 3.49 |
+| output | 0.864 | 0.367 | **2.36** |
+
+— a 20.8 dB convolution gain, 10 dB over full scale, and a crest factor halved
+by permanent limiting. With the IRs normalised and the preset gains restaged it
+now runs 0.77 → 0.73 → 0.81, crest **4.5**, limiter reduction 0.09 dB, and no
+samples past the safety knee at all. The chain is transparent and the ceiling is
+there for emergencies.
+
+Gain staging targets a worst-case peak near −1.5 dBFS per preset. Peak level is
+unchanged from before the fix; RMS is 2–3 dB lower, and that difference is
+precisely the distortion that used to be supplying it.
+
+The **70 Hz rumble filter** is first in the chain. The lowest note the
+instrument can make is the low E at 82.4 Hz, so everything below it is
+excitation noise and the skirt of the air mode — inaudible, and expensive in
+headroom.
 
 ### 1.4 Retrigger and stop behaviour
 
@@ -98,10 +142,37 @@ Correct notes played mechanically still sound fake. The strum engine adds:
 
 - Sequential string contact across 12–50 ms rather than simultaneous onset
 - Upstrokes that start at the treble side and catch fewer strings
-- Per-note velocity jitter (±12 %) and timing jitter
+- Per-note velocity jitter (±12 %) and timing jitter, scaled by the Humanize
+  control so that "machine" really is one
 - Pick position drifting slightly across the strings within one stroke
 - Palm/fret-hand mutes as a real loop-damping change, not a volume envelope
 - Swing as an actual timing offset on offbeats
+- **Pick attack** — a short broadband transient at the bridge, played alongside
+  the string rather than through it. An ideal plucked string's partials fall off
+  at 12 dB/octave from the fundamental, which leaves a low E with essentially no
+  energy above 1 kHz; the sound of the plectrum itself is where a strummed steel
+  string's 2–6 kHz comes from. Its absence was being masked by clipping
+  harmonics, so removing the distortion made adding it necessary. It follows
+  pick hardness, is silent for the hammer-excited keyboard presets, and survives
+  the fret-hand mute — a muted chuck is mostly this sound.
+
+The pattern data itself carries three things a down/up/velocity model cannot
+express, and whose absence had made a reggae skank and a ska stroke literally
+identical (same four positions, different labels):
+
+- `strings` — which part of the voicing a stroke catches. Reggae and ska chop
+  the top three and leave the low end to the bass; Freddie Green comping lives
+  on the inner strings; boom-chick alternates a single bass note against a
+  chord.
+- `choke` — how long a chord rings, in **beats**, before the fret hand stops it.
+  The staccato stop is the character of a chop, and beats is the right unit
+  because a player thinks in note values.
+- `ghost` — a fully damped percussive stroke. The scratches between the chords
+  are most of what makes funk and disco read as funk and disco.
+
+On top of the pattern, `Feel` re-times any figure into double- or half-time.
+Double-time is the general form of the thing that separates ska from reggae:
+the same gesture, twice as often.
 
 ---
 

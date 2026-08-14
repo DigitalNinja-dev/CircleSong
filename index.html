@@ -179,10 +179,36 @@
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="row gap-xs mb-s">
-        <span class="micro-label">FEEL</span>
+        <span class="micro-label">STYLE</span>
         <select id="rhythmFamilySelect" class="select grow" aria-label="Rhythm family"></select>
       </div>
       <div id="rhythmList"></div>
+
+      <div class="card flat mt-s" id="feelCard">
+        <div class="row between wrap gap-xs">
+          <span class="micro-label">NOW PLAYING</span>
+          <span id="rhythmTempoHint" class="setting-note"></span>
+        </div>
+        <p id="rhythmNowPlaying" class="mono-strong"></p>
+        <button id="setTempoBtn" class="chip small" hidden></button>
+
+        <div class="row gap-xs mt-s">
+          <span class="micro-label">FEEL</span>
+          <div class="row gap-xs grow" id="feelRow"></div>
+        </div>
+        <p id="feelNote" class="setting-note"></p>
+
+        <div class="slider-row">
+          <label for="swingSlider">SWING</label>
+          <input type="range" id="swingSlider" class="grow" min="0" max="0.6" step="0.02">
+          <output id="swingOut"></output>
+        </div>
+        <div class="slider-row">
+          <label for="humanizeSlider">HUMANIZE</label>
+          <input type="range" id="humanizeSlider" class="grow" min="0" max="1" step="0.05">
+          <output id="humanizeOut"></output>
+        </div>
+      </div>
 
     </section>
 
@@ -352,8 +378,7 @@
       </div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
-        <button id="exportBtn" class="chip small">Export JSON</button>
-        <label class="chip small file-label">Import<input id="importInput" type="file" accept="application/json" hidden></label>
+        <label class="chip small file-label">Import a song file<input id="importInput" type="file" accept="application/json" hidden></label>
       </div>
     </section>
 
@@ -476,10 +501,40 @@
       <p id="tunerMicNote" class="tuner-mic-note"></p>
       <p id="tunerError" class="tuner-err" hidden></p>
 
-      <div class="row gap-xs mt-s">
-        <span class="micro-label">REFERENCE A4</span>
-        <div class="row gap-xs grow" id="tunerA4Row"></div>
-      </div>
+      <details id="tunerOptions" class="tuner-options">
+        <summary><span>OPTIONS</span><span class="opt-caret">▾</span></summary>
+        <div class="tuner-opt-body">
+          <div class="tuner-opt">
+            <span class="micro-label">TARGET</span>
+            <div class="row gap-xs wrap" id="tunerModeRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">REFERENCE TONE</span>
+            <div class="row gap-xs wrap" id="tunerRefRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">CHIME WHEN IN TUNE</span>
+            <div class="row gap-xs wrap" id="tunerChimeRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">SENSITIVITY</span>
+            <div class="row gap-xs wrap" id="tunerGateRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">RESPONSE</span>
+            <div class="row gap-xs wrap" id="tunerRespRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">IN-TUNE WINDOW</span>
+            <div class="row gap-xs wrap" id="tunerStrictRow"></div>
+          </div>
+          <div class="tuner-opt">
+            <span class="micro-label">REFERENCE A4</span>
+            <div class="row gap-xs wrap" id="tunerA4Row"></div>
+          </div>
+          <p class="tuner-opt-note" id="tunerOptNote"></p>
+        </div>
+      </details>
     </section>
 
     <!-- /08 SONGS -->
@@ -499,8 +554,7 @@
       <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
       <div class="stack" id="projectList"></div>
       <div class="row gap-s mt">
-        <button id="exportBtn2" class="chip small">Export JSON</button>
-        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
+        <label class="chip small file-label">Import a song file<input id="importInput2" type="file" accept="application/json" hidden></label>
       </div>
     </section>
 

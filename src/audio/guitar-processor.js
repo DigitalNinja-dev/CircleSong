@@ -80,6 +80,19 @@ class StringModel {
     this.dcX1 = 0;
     this.dcY1 = 0;
 
+    /**
+     * Pick attack: the sound of the plectrum itself leaving the string.
+     *
+     * This is not part of the string's motion and must not go into the delay
+     * line — it happens once, at the bridge, and it is the reason a strummed
+     * steel string has energy at 2-6 kHz when the string's own partials, which
+     * fall off at 12 dB/octave from the fundamental, have essentially none.
+     * Without it the model is correct and lifeless, and every bit of top end you
+     * hear is whatever the chain downstream distorted into existence.
+     */
+    this.atkBuf = new Float32Array(Math.ceil(sampleRate * 0.008));
+    this.atkPos = this.atkBuf.length;
+
     // Mute envelope: multiplies loop gain, used for palm mutes and note-offs.
     this.muteGain = 1;
     this.muteTarget = 1;
@@ -317,6 +330,29 @@ class StringModel {
       this.buf[idx] += combed[i] * gain;
     }
 
+    // Pick attack, played once alongside the string rather than through it.
+    // A hammer has none of this — felt on a piano string does not scrape — and
+    // a fingertip has very little, so it follows pick hardness. It survives the
+    // fret-hand mute on purpose: a muted chuck is mostly this sound.
+    const atkLevel = vel * vel * hardness * (1 - hammer) * 0.075;
+    if (atkLevel > 0.001) {
+      const len = this.atkBuf.length;
+      // ~1.4 ms at full hardness, longer and softer for a fingertip.
+      const tau = (0.0006 + 0.0016 * (1 - hardness)) * this.sr;
+      let prev = 0;
+      for (let i = 0; i < len; i++) {
+        const white = this.noise();
+        // First difference: a 6 dB/oct tilt upward, so the click lands where a
+        // plectrum's does rather than adding yet more low mids.
+        const hp = white - prev;
+        prev = white;
+        this.atkBuf[i] = hp * Math.exp(-i / tau) * atkLevel;
+      }
+      this.atkPos = 0;
+    } else {
+      this.atkPos = this.atkBuf.length;
+    }
+
     this.lpState = 0;
     this.active = true;
     this.amp = vel;
@@ -339,6 +375,7 @@ class StringModel {
     this.dispY.fill(0);
     this.muteGain = 1;
     this.muteTarget = 1;
+    this.atkPos = this.atkBuf.length;
   }
 
   /** Advance one sample. `coupling` is the shared bridge signal. */
@@ -389,6 +426,10 @@ class StringModel {
     // the delay line, not just what recirculates — so damping has to attenuate
     // the output too, otherwise a "cut" still rings for a full period.
     out *= this.muteGain;
+
+    // The pick noise is added here, outside the loop and after the mute, so it
+    // neither recirculates nor gets damped away with the string.
+    if (this.atkPos < this.atkBuf.length) out += this.atkBuf[this.atkPos++];
 
     this.w = (this.w + 1) & MASK;
 

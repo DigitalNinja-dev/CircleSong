@@ -34,6 +34,7 @@ import {
   chordLabel,
   keySignaturePrefersFlats,
   midiToName,
+  midiToFreq,
   modeStepsAbsolute,
   chordForSpec,
   describeSpec,
@@ -54,8 +55,16 @@ import {
 } from './fretboard.js';
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
-import { RHYTHMS } from './patterns.js';
-import { Tuner, INSTRUMENTS, INSTRUMENT_BY_ID, findTuning, midiLabel } from './tuner.js';
+import { RHYTHMS, FEELS, patternTempo, getPattern } from './patterns.js';
+import {
+  Tuner,
+  ReferenceTone,
+  playChime,
+  INSTRUMENTS,
+  INSTRUMENT_BY_ID,
+  findTuning,
+  midiLabel,
+} from './tuner.js';
 import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
@@ -191,6 +200,16 @@ const state = {
   templateOpen: null,
   /** Which family of strum/rhythm feels is being browsed. */
   rhythmFamily: 'All',
+  /**
+   * How the chosen pattern is re-timed: as written, twice as fast, or stretched
+   * over two bars. Double-time is the general form of "ska is reggae at double
+   * tempo" — it works on anything.
+   */
+  feel: 'straight',
+  /** Swing amount, or null to use whatever the pattern was written with. */
+  swing: null,
+  /** How much the strumming hand drifts off the grid, 0..1. */
+  humanize: 0.25,
   showAbout: false,
   // --- tuner ---
   tunerInstrument: 'guitar',
@@ -201,6 +220,15 @@ const state = {
   tunerOn: false,
   tunerReading: null,
   tunerError: '',
+  /** 'auto' follows the nearest string; 'manual' stays on the one you pinned. */
+  tunerMode: 'auto',
+  /** What a string button sounds: nothing, a held oscillator, or the guitar. */
+  tunerRef: 'sine',
+  tunerChime: true,
+  /** Detector feel — noise gate, smoothing, and how wide "in tune" is. */
+  tunerGate: 0.008,
+  tunerResp: 0.25,
+  tunerStrict: 4,
   /** Draw the secondary-dominant arrows on the wheel. */
   showSecDom: false,
 
@@ -242,6 +270,8 @@ function setBars(nextBars, count) {
 const engine = new AudioEngine();
 /** Created on first use — the tuner holds a microphone, so never eagerly. */
 let tuner = null;
+/** The held reference oscillator, likewise built the first time it is asked for. */
+let refTone = null;
 const sequencer = new Sequencer(engine, () => ({
   bars: bars(),
   bpm: state.bpm,
@@ -249,6 +279,9 @@ const sequencer = new Sequencer(engine, () => ({
   loop: state.loop,
   metronome: state.metronome,
   rhythm: state.rhythm,
+  feel: state.feel,
+  swing: state.swing,
+  humanize: state.humanize,
   tuning: TUNINGS[state.tuningId].midi,
   velocity: 1,
   drumsOn: state.drumsOn,
@@ -434,6 +467,10 @@ async function playChordNow(chord, voicing, { duration, fraction } = {}) {
   const when = auditionStart();
   sequencer.scheduleChord({ chord, voicing, voicingMode: state.voicingMode }, when, dur, {
     rhythm: state.rhythm,
+    feel: state.feel,
+    swing: state.swing,
+    humanize: state.humanize,
+    timeSig: state.timeSig,
     tuning: tuning(),
     velocity: 1,
     previewFraction: frac,
@@ -648,7 +685,11 @@ function renderTabs() {
     b.onclick = () => {
       // Holding a microphone open on a screen you have navigated away from is
       // both a battery drain and a thing users are right to distrust.
-      if (state.activeTab === 'tuner' && t.id !== 'tuner' && state.tunerOn) stopTuner();
+      if (state.activeTab === 'tuner' && t.id !== 'tuner') {
+        if (state.tunerOn) stopTuner();
+        // A held reference tone would otherwise drone under every other screen.
+        stopReference();
+      }
       state.activeTab = t.id;
       render();
     };
@@ -1136,9 +1177,10 @@ function renderTone() {
 const RHYTHM_FAMILIES = [
   { label: 'Strumming', tags: ['strum'] },
   { label: 'Muted & Percussive', tags: ['percussive'] },
-  { label: 'Offbeat', tags: ['offbeat'] },
+  { label: 'Reggae, Ska & Offbeat', tags: ['offbeat'] },
   { label: 'Jazz Comping', tags: ['comp'] },
   { label: 'Latin & Syncopated', tags: ['syncop'] },
+  { label: 'Country & Bluegrass', tags: ['country'] },
   { label: 'Other Meters', tags: ['3/4', '6/8'] },
   { label: 'Fingerstyle', tags: ['arp', 'sustain'] },
   { label: 'Keyboard', tags: ['keys'] },
@@ -1179,12 +1221,94 @@ function renderRhythms() {
     const grid = el('div', 'rhythm-grid');
     for (const r of items) {
       const b = el('button', `rhythm-btn${state.rhythm === r.id ? ' active' : ''}`);
-      b.append(el('span', 'name', r.label), el('span', 'tag', r.tag));
-      b.onclick = () => { state.rhythm = r.id; renderTone(); previewDegree(state.activeDegree); };
+      const range = patternTempo(r.id);
+      b.append(el('span', 'name', r.label), el('span', 'tag', range ? `${range[0]}–${range[1]} BPM` : r.tag));
+      if (range) b.title = `Written for ${range[0]}–${range[1]} BPM`;
+      b.onclick = () => {
+        state.rhythm = r.id;
+        // Each pattern has its own idea of how much it swings, so a new choice
+        // hands the slider back to it rather than carrying the last one over.
+        state.swing = null;
+        renderTone();
+        previewDegree(state.activeDegree);
+      };
       grid.appendChild(b);
     }
     list.appendChild(grid);
   }
+
+  renderFeel();
+}
+
+/**
+ * The controls that shape whatever pattern is loaded.
+ *
+ * These belong here rather than inside the pattern data because they are the
+ * things a player changes while playing the same figure: how fast the figure
+ * itself goes, how far the offbeats lean, and how tightly the hand holds the
+ * grid. Double-time in particular is the general form of the difference between
+ * a reggae skank and a ska stroke — the same gesture, twice as often.
+ */
+function renderFeel() {
+  const current = RHYTHMS.find((r) => r.id === state.rhythm);
+  const pattern = getPattern(state.rhythm);
+  const range = patternTempo(state.rhythm);
+
+  $('rhythmNowPlaying').textContent = current ? current.label : state.rhythm;
+  $('rhythmTempoHint').textContent = range
+    ? `written for ${range[0]}–${range[1]} BPM`
+    : 'any tempo';
+
+  // Suggest the tempo; never move the transport without being asked.
+  const setBtn = $('setTempoBtn');
+  const inRange = !range || (state.bpm >= range[0] && state.bpm <= range[1]);
+  setBtn.hidden = inRange;
+  if (!inRange) {
+    const target = Math.round((range[0] + range[1]) / 2);
+    setBtn.textContent = `Set ${target} BPM`;
+    setBtn.title = `You are at ${state.bpm}; this feel is written for ${range[0]}–${range[1]}`;
+    setBtn.onclick = () => {
+      state.bpm = target;
+      renderTransport();
+      renderTone();
+    };
+  }
+
+  const feelRow = $('feelRow');
+  feelRow.replaceChildren();
+  for (const f of FEELS) {
+    const b = el('button', `chip small${state.feel === f.id ? ' active' : ''}`, f.label);
+    b.title = f.note;
+    b.onclick = () => {
+      state.feel = f.id;
+      renderTone();
+      previewDegree(state.activeDegree);
+    };
+    feelRow.appendChild(b);
+  }
+  $('feelNote').textContent = (FEELS.find((f) => f.id === state.feel) || FEELS[0]).note;
+
+  const swing = state.swing ?? pattern.swing ?? 0;
+  const swingSlider = $('swingSlider');
+  swingSlider.value = swing;
+  $('swingOut').textContent =
+    state.swing === null
+      ? swing > 0
+        ? `${Math.round(swing * 100)}% (pattern)`
+        : 'straight'
+      : `${Math.round(swing * 100)}%`;
+  swingSlider.oninput = () => {
+    state.swing = Number(swingSlider.value);
+    renderFeel();
+  };
+
+  const human = $('humanizeSlider');
+  human.value = state.humanize;
+  $('humanizeOut').textContent = state.humanize ? `${Math.round(state.humanize * 100)}%` : 'machine';
+  human.oninput = () => {
+    state.humanize = Number(human.value);
+    renderFeel();
+  };
 }
 
 /** Seed the editable grid from a named groove. */
@@ -1925,6 +2049,129 @@ async function previewSlot(barIdx, slotIdx) {
 // The dial sweeps 270 degrees, ±50 cents, with the gap at the bottom.
 const DIAL = { cx: 120, cy: 120, r: 96, sweep: 135 };
 
+/**
+ * What a string button sounds.
+ *
+ * A held oscillator is the default because it is what you actually tune
+ * against: a plucked note is already decaying by the time your hand reaches the
+ * peg, while a drone lets you hear the beating between the two pitches slow
+ * down and stop. The guitar remains an option for anyone who would rather match
+ * the instrument's own timbre.
+ */
+const TUNER_REFS = [
+  { id: 'off', label: 'Off', note: 'Tapping a string pins it without sounding anything.' },
+  { id: 'sine', label: 'Sine', wave: 'sine', note: 'A held sine. Tap the same string again to silence it.' },
+  { id: 'warm', label: 'Warm', wave: 'triangle', note: 'A held triangle — gentler over a long session.' },
+  { id: 'string', label: 'String', note: 'One pluck of the guitar itself, on the melody voices.' },
+];
+const TUNER_REF_BY_ID = Object.fromEntries(TUNER_REFS.map((r) => [r.id, r]));
+
+// Higher sensitivity means a lower gate: a quiet room can afford to listen for
+// less, a loud one needs the gate up or the noise floor reads as a note.
+const TUNER_GATES = [
+  { label: 'Low', value: 0.02, title: 'Ignores everything quiet — for noisy rooms' },
+  { label: 'Normal', value: 0.008, title: 'The default' },
+  { label: 'High', value: 0.003, title: 'Hears a soft, decaying note for longer' },
+];
+const TUNER_RESPONSES = [
+  { label: 'Steady', value: 0.12, title: 'Slower needle, less jitter' },
+  { label: 'Normal', value: 0.25, title: 'The default' },
+  { label: 'Quick', value: 0.45, title: 'Follows the string immediately' },
+];
+const TUNER_WINDOWS = [
+  { label: '±2¢', value: 2, title: 'Studio — hard to hold, exact when it locks' },
+  { label: '±4¢', value: 4, title: 'The default; below what most ears hear' },
+  { label: '±8¢', value: 8, title: 'Forgiving — locks quickly on stage' },
+];
+
+/** A row of small chips bound to one setting. */
+function chipRow(id, items, current, onPick) {
+  const row = $(id);
+  if (!row) return;
+  row.replaceChildren();
+  for (const it of items) {
+    const b = el('button', `chip small${it.value === current ? ' active' : ''}`, it.label);
+    if (it.title) b.title = it.title;
+    b.onclick = () => onPick(it.value);
+    row.appendChild(b);
+  }
+}
+
+/** Push the current settings onto the live detector, if there is one. */
+function applyTunerOptions() {
+  if (!tuner) return;
+  tuner.a4 = state.tunerA4;
+  tuner.noiseGate = state.tunerGate;
+  tuner.emaAlpha = state.tunerResp;
+  tuner.snapCents = state.tunerStrict;
+  tuner.chimeOnLock = state.tunerChime;
+}
+
+/**
+ * Switch between following the nearest string and holding one.
+ *
+ * Manual matters on a badly slack string: auto will name it as whatever it is
+ * closest to, which on a guitar tuned down a whole tone is the string below.
+ */
+function setTunerMode(mode, midi = null) {
+  state.tunerMode = mode;
+  if (mode === 'auto') {
+    state.tunerTarget = null;
+  } else {
+    const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
+    const reading = state.tunerReading;
+    state.tunerTarget =
+      midi ?? state.tunerTarget ?? (reading && reading.midi) ?? tuning.notes[0];
+  }
+  if (tuner) tuner.setTarget(state.tunerTarget);
+  renderTuner();
+}
+
+/** A new instrument or tuning: nothing pinned, nothing droning, nothing read. */
+function changeTuning() {
+  stopReference();
+  state.tunerMode = 'auto';
+  state.tunerTarget = null;
+  state.tunerReading = null;
+  if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
+  renderTuner();
+}
+
+/** Sound — or silence — the reference pitch for a string. */
+async function soundReference(midi) {
+  const mode = TUNER_REF_BY_ID[state.tunerRef];
+  if (!mode || mode.id === 'off') return;
+  if (!(await ensureAudio())) return;
+  if (mode.id === 'string') {
+    engine.pluckMelody({ midi, velocity: 0.8 });
+    return;
+  }
+  if (!refTone) refTone = new ReferenceTone(engine.ctx, engine.master);
+  // Tapping the sounding string again is the way to stop the drone.
+  if (refTone.playing && refTone.midi === midi) {
+    stopReference();
+    return;
+  }
+  refTone.play(midiToFreq(midi, state.tunerA4), { wave: mode.wave });
+  refTone.midi = midi;
+  renderTunerRefState();
+}
+
+function stopReference() {
+  if (!refTone) return;
+  refTone.stop();
+  refTone.midi = null;
+  renderTunerRefState();
+}
+
+/** Mark whichever string is currently droning. */
+function renderTunerRefState() {
+  const sounding = refTone && refTone.playing ? refTone.midi : null;
+  for (const b of document.querySelectorAll('#tunerStrings .tuner-string')) {
+    b.classList.toggle('sounding', Number(b.dataset.midi) === sounding);
+  }
+}
+
 /** Point on the dial for a cents value. */
 function dialPoint(cents, radius) {
   const a = ((cents / 50) * DIAL.sweep - 90) * (Math.PI / 180);
@@ -1987,10 +2234,13 @@ function renderTuner() {
   $('tunerA4Label').textContent = `A4 = ${state.tunerA4} Hz`;
 
   const autoBtn = $('tunerAutoBtn');
-  const auto = state.tunerTarget === null;
+  const auto = state.tunerMode === 'auto';
   autoBtn.setAttribute('aria-pressed', String(auto));
   autoBtn.classList.toggle('on', auto);
-  autoBtn.textContent = auto ? 'AUTO' : midiLabel(state.tunerTarget);
+  autoBtn.textContent = auto ? 'AUTO' : `MANUAL · ${midiLabel(state.tunerTarget ?? tuning.notes[0])}`;
+  autoBtn.title = auto
+    ? 'Follows whichever string of the tuning is nearest to what it hears'
+    : 'Stays on the pinned string, however far out it is';
 
   buildDialTicks();
   $('tunerTrack').setAttribute('d', dialArc(-50, 50, DIAL.r));
@@ -2012,27 +2262,86 @@ function renderTuner() {
         el('span', 'ts-index', `STR ${count - i}`)
       );
       b.dataset.midi = String(midi);
-      b.onclick = async () => {
-        state.tunerTarget = pinned ? null : midi;
-        if (tuner) tuner.setTarget(state.tunerTarget);
-        renderTuner();
-        if (await ensureAudio()) engine.pluckMelody({ midi, velocity: 0.8 });
+      b.onclick = () => {
+        // Pinning a string is what "manual" means, so tapping one switches to
+        // it; tapping the pinned string again hands the choice back to AUTO.
+        setTunerMode(pinned ? 'auto' : 'manual', midi);
+        soundReference(midi);
       };
       strings.appendChild(b);
     });
   }
 
-  const a4Row = $('tunerA4Row');
-  a4Row.replaceChildren();
-  for (const hz of [432, 436, 438, 440, 442, 444]) {
-    const b = el('button', `chip small${state.tunerA4 === hz ? ' active' : ''}`, String(hz));
-    b.onclick = () => {
-      state.tunerA4 = hz;
-      if (tuner) { tuner.a4 = hz; tuner.setNotes(tuning.notes, state.tunerTarget); }
+  chipRow(
+    'tunerModeRow',
+    [
+      { label: 'Auto', value: 'auto', title: 'Follows the nearest string in the tuning' },
+      { label: 'Manual', value: 'manual', title: 'Holds the string you pinned' },
+    ],
+    state.tunerMode,
+    (v) => setTunerMode(v)
+  );
+
+  chipRow(
+    'tunerRefRow',
+    TUNER_REFS.map((r) => ({ label: r.label, value: r.id, title: r.note })),
+    state.tunerRef,
+    (v) => {
+      stopReference();
+      state.tunerRef = v;
       renderTuner();
-    };
-    a4Row.appendChild(b);
-  }
+    }
+  );
+
+  chipRow(
+    'tunerChimeRow',
+    [
+      { label: 'On', value: true, title: 'A short two-note chime the moment a string settles' },
+      { label: 'Off', value: false, title: 'Silent — watch the dial' },
+    ],
+    state.tunerChime,
+    (v) => {
+      state.tunerChime = v;
+      applyTunerOptions();
+      renderTuner();
+    }
+  );
+
+  chipRow('tunerGateRow', TUNER_GATES, state.tunerGate, (v) => {
+    state.tunerGate = v;
+    applyTunerOptions();
+    renderTuner();
+  });
+
+  chipRow('tunerRespRow', TUNER_RESPONSES, state.tunerResp, (v) => {
+    state.tunerResp = v;
+    applyTunerOptions();
+    renderTuner();
+  });
+
+  chipRow('tunerStrictRow', TUNER_WINDOWS, state.tunerStrict, (v) => {
+    state.tunerStrict = v;
+    applyTunerOptions();
+    renderTuner();
+  });
+
+  chipRow(
+    'tunerA4Row',
+    [432, 436, 438, 440, 442, 444].map((hz) => ({ label: String(hz), value: hz })),
+    state.tunerA4,
+    (hz) => {
+      state.tunerA4 = hz;
+      if (refTone && refTone.playing) {
+        const midi = refTone.midi;
+        stopReference();
+        soundReference(midi);
+      }
+      if (tuner) { applyTunerOptions(); tuner.setNotes(tuning.notes, state.tunerTarget); }
+      renderTuner();
+    }
+  );
+
+  $('tunerOptNote').textContent = (TUNER_REF_BY_ID[state.tunerRef] || TUNER_REFS[0]).note;
 
   const blocked = micBlockedByHost();
   const btn = $('tunerMicBtn');
@@ -2052,6 +2361,7 @@ function renderTuner() {
   err.hidden = !state.tunerError;
   err.textContent = state.tunerError;
 
+  renderTunerRefState();
   renderTunerReadout();
 }
 
@@ -2165,8 +2475,11 @@ async function toggleTuner() {
         state.tunerReading = u;
         renderTunerReadout();
       };
+      tuner.onLock = () => {
+        if (engine.ready) playChime(engine.ctx, engine.master);
+      };
     }
-    tuner.a4 = state.tunerA4;
+    applyTunerOptions();
     const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
     tuner.setNotes(tuning.notes, state.tunerTarget);
     await tuner.start();
@@ -2187,6 +2500,7 @@ async function toggleTuner() {
 
 function stopTuner() {
   if (tuner) tuner.stop();
+  stopReference();
   state.tunerOn = false;
   state.tunerReading = null;
   renderTuner();
@@ -2729,25 +3043,14 @@ function wire() {
   $('tunerInstrument').onchange = (e) => {
     state.tunerInstrument = e.target.value;
     state.tunerTuning = INSTRUMENT_BY_ID[state.tunerInstrument].tunings[0].id;
-    state.tunerTarget = null;
-    state.tunerReading = null;
-    if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
-    renderTuner();
+    changeTuning();
   };
   $('tunerTuning').onchange = (e) => {
     state.tunerTuning = e.target.value;
-    state.tunerTarget = null;
-    state.tunerReading = null;
-    if (tuner) tuner.setNotes(findTuning(state.tunerInstrument, state.tunerTuning).notes, null);
-    renderTuner();
+    changeTuning();
   };
   $('tunerMicBtn').onclick = toggleTuner;
-  $('tunerAutoBtn').onclick = () => {
-    // Back to following whichever string is nearest.
-    state.tunerTarget = null;
-    if (tuner) tuner.setTarget(null);
-    renderTuner();
-  };
+  $('tunerAutoBtn').onclick = () => setTunerMode(state.tunerMode === 'auto' ? 'manual' : 'auto');
 
   // --- songs, saving, audio export ---
   $('saveProjectBtn').onclick = () => doSaveProject(false);
@@ -2762,7 +3065,6 @@ function wire() {
     render();
     toast('New song started.');
   };
-  $('exportBtn2').onclick = exportSong;
   $('importInput2').onchange = importSong;
 
   $('pickerCloseBtn').onclick = closePicker;
@@ -2898,7 +3200,6 @@ function wire() {
     setBars(makeBars(barCount()), barCount());
     renderTimeline();
   };
-  $('exportBtn').onclick = exportSong;
   $('importInput').onchange = importSong;
 
   document.addEventListener('keydown', (e) => {
@@ -2925,7 +3226,7 @@ function wire() {
 
 // ---------------------------------------------------------------- save/load
 
-/** The song as plain JSON — the one shape used by export, save and load. */
+/** The song as plain JSON — the one shape used by saving, loading and import. */
 function songData() {
   return {
     format: 'circlesong.v3',
@@ -2936,6 +3237,9 @@ function songData() {
     mode: modeId(),
     tone: state.tone,
     rhythm: state.rhythm,
+    feel: state.feel,
+    swing: state.swing,
+    humanize: state.humanize,
     tuning: state.tuningId,
     drums: { on: state.drumsOn, style: state.drumStyle, kit: state.drumKit, volume: state.drumVolume, fills: state.drumFills, pattern: state.drumPattern },
     activeSection: state.activeSection,
@@ -2954,17 +3258,6 @@ function songData() {
     keyName: `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`,
     barTotal: state.sections.reduce((n, sec) => n + sec.barCount, 0),
   };
-}
-
-function exportSong() {
-  const data = songData();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${state.projectTitle.replace(/[^\w-]+/g, '_') || 'circlesong'}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast('Exported song JSON.');
 }
 
 function importSong(e) {
@@ -3000,6 +3293,10 @@ function applySongData(data) {
       state.modeIdx = Math.max(0, MODE_IDS.indexOf(data.mode));
       state.tone = PRESETS[data.tone] ? data.tone : 'acoustic';
       state.rhythm = data.rhythm || 'straight8';
+      state.feel = FEELS.some((f) => f.id === data.feel) ? data.feel : 'straight';
+      // null is meaningful here — it means "whatever the pattern says".
+      state.swing = Number.isFinite(data.swing) ? data.swing : null;
+      state.humanize = Number.isFinite(data.humanize) ? data.humanize : 0.25;
       state.tuningId = TUNINGS[data.tuning] ? data.tuning : 'standard';
       state.degreeSpec = data.degreeSpec && typeof data.degreeSpec === 'object' ? data.degreeSpec : {};
 
@@ -3059,7 +3356,9 @@ function applySongData(data) {
 // The microphone is released whenever the page stops being visible, so it is
 // never held by a tab sitting in the background.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && state.tunerOn) stopTuner();
+  if (!document.hidden) return;
+  if (state.tunerOn) stopTuner();
+  stopReference();
 });
 
 // --------------------------------------------------------------------- boot
@@ -3097,6 +3396,8 @@ window.CircleSong = {
   sequencer,
   MODES,
   PRESETS,
+  RHYTHMS,
+  FEELS,
   /** Bars of the loop currently active — state.sections holds them all. */
   get bars() { return bars(); },
   activeSection,
@@ -3105,6 +3406,8 @@ window.CircleSong = {
   reresolveAll,
   /** The live Tuner, once listening has been switched on. */
   tunerInstance: () => tuner,
+  /** The held reference oscillator, once a string has been sounded. */
+  refToneInstance: () => refTone,
   // Exposed so tests can measure voice leading rather than eyeball it.
   progressionCost,
   voiceLeadCost,

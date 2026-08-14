@@ -204,6 +204,91 @@ export function rmsOf(buf) {
 }
 
 /**
+ * A sustained reference pitch.
+ *
+ * The source repo carried an oscillator for this and it is genuinely the right
+ * tool: a plucked note decays, and tuning by ear against something that is
+ * fading is harder than it needs to be. A held tone gives you as long as you
+ * want, and beating against it is audible long before a needle would settle.
+ *
+ * Two partials rather than one — a bare sine is hard to pitch against because
+ * there is nothing for the ear to lock onto.
+ */
+export class ReferenceTone {
+  constructor(ctx, destination) {
+    this.ctx = ctx;
+    this.destination = destination || ctx.destination;
+    this.nodes = null;
+  }
+
+  get playing() {
+    return !!this.nodes;
+  }
+
+  play(freq, { wave = 'sine', level = 0.12 } = {}) {
+    this.stop();
+    const t = this.ctx.currentTime;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(level, t + 0.05);
+    gain.connect(this.destination);
+
+    const oscs = [];
+    for (const [mult, mix] of [[1, 1], [2, 0.22]]) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = wave;
+      o.frequency.setValueAtTime(freq * mult, t);
+      g.gain.value = mix;
+      o.connect(g);
+      g.connect(gain);
+      o.start(t);
+      oscs.push(o);
+    }
+    this.nodes = { gain, oscs };
+  }
+
+  stop() {
+    if (!this.nodes) return;
+    const { gain, oscs } = this.nodes;
+    this.nodes = null;
+    const t = this.ctx.currentTime;
+    // Fade rather than cut: stopping an oscillator at full amplitude clicks.
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(gain.gain.value, t);
+    gain.gain.linearRampToValueAtTime(0.0001, t + 0.06);
+    for (const o of oscs) o.stop(t + 0.08);
+    setTimeout(() => gain.disconnect(), 200);
+  }
+}
+
+/**
+ * The short confirmation the source sounded when a string settled.
+ *
+ * Deliberately high and brief so it cannot be mistaken for the string itself,
+ * and so it does not colour the note you are still holding.
+ */
+export function playChime(ctx, destination, { level = 0.09 } = {}) {
+  const t = ctx.currentTime;
+  const out = destination || ctx.destination;
+  [1568, 2093].forEach((freq, i) => {
+    const at = t + i * 0.085;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.18);
+    o.connect(g);
+    g.connect(out);
+    o.start(at);
+    o.stop(at + 0.2);
+    setTimeout(() => g.disconnect(), 500);
+  });
+}
+
+/**
  * The tuner: microphone in, a settled reading out.
  *
  * Reports through `onUpdate` at roughly 30 Hz. Slower than a render loop on
@@ -230,6 +315,10 @@ export class Tuner {
     this.notes = [40, 45, 50, 55, 59, 64];
     this.targetMidi = null;   // null = follow whichever string is nearest
     this.onUpdate = null;
+    /** Sound a short chime the moment a string settles, as the source did. */
+    this.chimeOnLock = true;
+    this.onLock = null;
+    this._chimed = false;
 
     this._smoothCents = 0;
     this._lockStart = null;
@@ -253,6 +342,7 @@ export class Tuner {
     this._smoothCents = 0;
     this._lockStart = null;
     this._locked = false;
+    this._chimed = false;
   }
 
   /**
@@ -362,11 +452,19 @@ export class Tuner {
     const now = performance.now();
     if (Math.abs(this._smoothCents) <= this.snapCents) {
       if (this._lockStart === null) this._lockStart = now;
-      if (now - this._lockStart >= this.lockDelayMs) { this._locked = true; state = 'locked'; }
-      else state = this._smoothCents < 0 ? 'flat' : 'sharp';
+      if (now - this._lockStart >= this.lockDelayMs) {
+        this._locked = true;
+        state = 'locked';
+        // Once per lock, not once per frame.
+        if (this.chimeOnLock && !this._chimed) {
+          this._chimed = true;
+          if (this.onLock) this.onLock();
+        }
+      } else state = this._smoothCents < 0 ? 'flat' : 'sharp';
     } else {
       this._lockStart = null;
       this._locked = false;
+      this._chimed = false;
       state = this._smoothCents < 0 ? 'flat' : 'sharp';
     }
 
