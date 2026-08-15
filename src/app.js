@@ -2060,8 +2060,8 @@ const DIAL = { cx: 120, cy: 120, r: 96, sweep: 135 };
  */
 const TUNER_REFS = [
   { id: 'off', label: 'Off', note: 'Tapping a string pins it without sounding anything.' },
-  { id: 'sine', label: 'Sine', wave: 'sine', note: 'A held sine. Tap the same string again to silence it.' },
-  { id: 'warm', label: 'Warm', wave: 'triangle', note: 'A held triangle — gentler over a long session.' },
+  { id: 'sine', label: 'Sine', wave: 'sine', note: 'A clean sine, sounded once. Tap again to hear it again.' },
+  { id: 'warm', label: 'Warm', wave: 'triangle', note: 'A triangle — rounder, and easier to pitch against.' },
   { id: 'string', label: 'String', note: 'One pluck of the guitar itself, on the melody voices.' },
 ];
 const TUNER_REF_BY_ID = Object.fromEntries(TUNER_REFS.map((r) => [r.id, r]));
@@ -2154,11 +2154,9 @@ function changeTuning() {
 /**
  * Sound the reference pitch for a note.
  *
- * Every tap sounds. Tapping a note is how you ask what it sounds like, so
- * tapping the same one twice must answer twice — it used to toggle the tone off
- * instead, which meant every second tap was silent. Stopping is the STOP TONE
- * button's job now, and the tone stops by itself on everything that already
- * silenced it.
+ * Every tap sounds, and every note ends by itself. Tapping a note is how you
+ * ask what it sounds like — for tuning by ear, and for hearing the string you
+ * just picked in manual mode — so tapping the same one twice must answer twice.
  */
 async function soundReference(midi) {
   const mode = TUNER_REF_BY_ID[state.tunerRef];
@@ -2172,12 +2170,7 @@ async function soundReference(midi) {
     refTone = new ReferenceTone(engine.ctx, engine.master);
     refTone.onStop = () => { refTone.midi = null; renderTunerRefState(); };
   }
-  refTone.play(midiToFreq(midi, state.tunerA4), {
-    wave: mode.wave,
-    // While the microphone is open the tuner can hear the reference through the
-    // speakers and settle on it, so a tap answers and then gets out of the way.
-    stopAfter: state.tunerOn ? 3 : 0,
-  });
+  refTone.play(midiToFreq(midi, state.tunerA4), { wave: mode.wave });
   refTone.midi = midi;
   renderTunerRefState();
 }
@@ -2189,16 +2182,12 @@ function stopReference() {
   renderTunerRefState();
 }
 
-/** Mark whichever note is currently sounding, and offer a way to stop it. */
+/** Mark whichever note is sounding, for as long as it lasts. */
 function renderTunerRefState() {
   const sounding = refTone && refTone.playing ? refTone.midi : null;
   for (const b of document.querySelectorAll('#tunerStrings .tuner-string')) {
     b.classList.toggle('sounding', Number(b.dataset.midi) === sounding);
   }
-  const stop = $('tunerStopTone');
-  if (!stop) return;
-  stop.hidden = sounding === null;
-  if (sounding !== null) stop.textContent = `Stop ${midiLabel(sounding)}`;
 }
 
 /** Point on the dial for a cents value. */
@@ -3082,7 +3071,6 @@ function wire() {
     changeTuning();
   };
   $('tunerMicBtn').onclick = toggleTuner;
-  $('tunerStopTone').onclick = stopReference;
   $('tunerAutoBtn').onclick = () => setTunerMode(state.tunerMode === 'auto' ? 'manual' : 'auto');
 
   // --- songs, saving, audio export ---

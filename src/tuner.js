@@ -204,15 +204,81 @@ export function rmsOf(buf) {
 }
 
 /**
- * A sustained reference pitch.
+ * A-weighting, in dB, at a frequency.
  *
- * The source repo carried an oscillator for this and it is genuinely the right
- * tool: a plucked note decays, and tuning by ear against something that is
- * fading is harder than it needs to be. A held tone gives you as long as you
- * want, and beating against it is audible long before a needle would settle.
+ * The standard curve for how loud the ear finds a given frequency. Used here
+ * for the only thing it is really good at: telling you that two tones of equal
+ * amplitude are not equally loud.
+ */
+export function aWeightingDb(f) {
+  const f2 = f * f;
+  const num = 12194 * 12194 * f2 * f2;
+  const den =
+    (f2 + 20.6 * 20.6) *
+    Math.sqrt((f2 + 107.7 * 107.7) * (f2 + 737.9 * 737.9)) *
+    (f2 + 12194 * 12194);
+  return 20 * Math.log10(num / den) + 2.0;
+}
+
+/** Where the compensation is anchored — roughly the middle of a guitar's range. */
+const LOUDNESS_ANCHOR = 165;
+
+/**
+ * How much of the A-weighted difference the gain has to make up.
  *
- * Two partials rather than one — a bare sine is hard to pitch against because
- * there is nothing for the ear to lock onto.
+ * Not all of it: the low notes are built from more partials (see `partialsFor`),
+ * and those partials sit where the ear is more sensitive, so they already carry
+ * part of the correction. Applying the full curve on top over-shot by 3.7 dB at
+ * the low E and left the top E 3.8 dB short — measured, then fitted.
+ */
+const LOUDNESS_SHARE = 0.62;
+
+/**
+ * Gain that makes a tone at `freq` as loud as one at the anchor.
+ *
+ * A sine at 82 Hz and a sine at 330 Hz of identical amplitude are about 15 dB
+ * apart in perceived loudness, which is why the low E used to be inaudible while
+ * the top E was fine: the amplitude was the same for every string, so the
+ * loudness could not be. This spends that difference in both directions from
+ * the middle of the range rather than boosting the bottom alone, which keeps
+ * the peak level sane.
+ *
+ * Clamped because the correction runs away below the range of anything this is
+ * used for, and a tuner should not be able to ask for 20 dB of bass boost.
+ */
+export function loudnessGain(freq) {
+  const delta = aWeightingDb(LOUDNESS_ANCHOR) - aWeightingDb(Math.max(20, freq));
+  return Math.min(3.2, Math.max(0.3, Math.pow(10, (delta * LOUDNESS_SHARE) / 20)));
+}
+
+/**
+ * How many partials a reference note is built from.
+ *
+ * Low notes get more. Partly because it is what makes a pitch legible — the ear
+ * finds a fundamental from its harmonics even when the fundamental itself is
+ * weak — and partly because most devices this runs on cannot reproduce an 82 Hz
+ * sine at all. A phone speaker rolls off long before the low E, so a pure tone
+ * there is not quiet, it is absent.
+ */
+function partialsFor(freq) {
+  // Below a bass low E almost nothing can reproduce the fundamental at all, so
+  // it stops being the point: the harmonics carry the pitch, the ear supplies
+  // the missing root, and weakening the fundamental buys the headroom the
+  // harmonics need.
+  if (freq < 48) return [[1, 0.7], [2, 0.75], [3, 0.45], [4, 0.25], [5, 0.14]];
+  if (freq < 150) return [[1, 1], [2, 0.55], [3, 0.3], [4, 0.16]];
+  if (freq < 260) return [[1, 1], [2, 0.36], [3, 0.16]];
+  return [[1, 1], [2, 0.2]];
+}
+
+/**
+ * A reference pitch, sounded once.
+ *
+ * It has two jobs and they want the same thing: a note to tune by ear against,
+ * and the sound of whichever string you just picked in manual mode. Both are
+ * questions with an answer, so the note plays and ends — it used to hold until
+ * you tapped it again, which meant the app was droning at you while you worked.
+ * Tapping again simply asks again.
  */
 export class ReferenceTone {
   constructor(ctx, destination) {
@@ -229,23 +295,29 @@ export class ReferenceTone {
   }
 
   /**
-   * Sound a pitch.
+   * Sound a pitch once.
    *
-   * `stopAfter`, in seconds, ends the tone on its own. That matters when the
-   * microphone is open: a tone held through the speakers is heard by the tuner,
-   * which will happily settle on its own reference and report that everything
-   * is perfectly in tune.
+   * `duration` is the whole note including its fade. Level is compensated for
+   * frequency so every string is as loud as every other one, which is the
+   * difference between a reference you can hear and one you have to imagine.
    */
-  play(freq, { wave = 'sine', level = 0.12, stopAfter = 0 } = {}) {
+  play(freq, { wave = 'sine', level = 0.15, duration = 1.8 } = {}) {
     this.stop();
     const t = this.ctx.currentTime;
+    const peak = level * loudnessGain(freq);
+    const fade = Math.min(0.7, duration * 0.4);
+
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(level, t + 0.05);
+    gain.gain.linearRampToValueAtTime(peak, t + 0.03);
+    // Hold, then fade out. Exponential, because a linear fade audibly stalls at
+    // the end and then stops rather than disappearing.
+    gain.gain.setValueAtTime(peak, t + duration - fade);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
     gain.connect(this.destination);
 
     const oscs = [];
-    for (const [mult, mix] of [[1, 1], [2, 0.22]]) {
+    for (const [mult, mix] of partialsFor(freq)) {
       const o = this.ctx.createOscillator();
       const g = this.ctx.createGain();
       o.type = wave;
@@ -254,17 +326,18 @@ export class ReferenceTone {
       o.connect(g);
       g.connect(gain);
       o.start(t);
+      o.stop(t + duration + 0.05);
       oscs.push(o);
     }
     this.nodes = { gain, oscs };
 
     clearTimeout(this._timer);
-    if (stopAfter > 0) {
-      this._timer = setTimeout(() => {
-        this.stop();
-        if (this.onStop) this.onStop();
-      }, stopAfter * 1000);
-    }
+    this._timer = setTimeout(() => {
+      this.nodes = null;
+      gain.disconnect();
+      this._timer = null;
+      if (this.onStop) this.onStop();
+    }, (duration + 0.06) * 1000);
   }
 
   stop() {
