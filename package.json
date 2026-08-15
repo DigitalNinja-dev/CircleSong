@@ -1,7 +1,7 @@
 {
   "name": "circlesong",
   "version": "1.0.0",
-  "description": "CircleSong — an interactive, theory-guided guitar DAW and progression sequencer built on the Circle of Fifths.",
+  "description": "CircleSong — Theory-guided guitar workstation in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument.",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
