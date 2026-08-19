@@ -1,209 +1,34 @@
-# CircleSong 🎸⭕
-
-> **Turn Music Theory into Song Structures.**
-> CircleSong is an interactive, web-based Guitar tool designed to help musicians compose songs from scratch. By bridging the Circle of Fifths, smart chord inversions, customizable rhythm patterns, and real-time fretboard visualization, CircleSong makes songwriting intuitive, educational, and fun.
-
-by Nicolas Jean Pierre Figueroa
-
----
-
-## Running it
-
-**Easiest — no install, no server.** Download
-[`dist/circlesong.html`](dist/circlesong.html) and open it. It is the entire
-app in one self-contained file: no network, no dependencies, fonts and the
-audio engine included. Works offline, and works on a phone (the layout is
-mobile-first).
-
-**From source**, for development. The app is dependency-free static ES modules,
-but in this form it **must be served over HTTP** — ES modules and
-`AudioWorklet` both refuse `file://` origins.
-
-```bash
-npm start                 # or: npx http-server -p 8080 .
-# then open http://localhost:8080
-```
-
-Any static server works (`python3 -m http.server 8080`, `npx serve`, nginx…).
-
-Rebuild the single-file version after changing sources:
-
-```bash
-npm run build             # -> dist/circlesong.html
-npm run fonts             # refresh assets/fonts.css (needs network; rarely)
-```
-
-Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.1+.
-
----
-
-## Installing on a phone
-
-CircleSong is a PWA, so it installs from the browser — a launcher icon, no
-browser chrome, and it keeps working with no signal. No app store, no APK.
-
-**1. Publish it once.** In the repo: **Settings → Pages → Source: Deploy from a
-branch → `main` / `(root)` → Save**. After a minute it is live at:
-
-```
-https://digitalninja-dev.github.io/CircleSong/
-```
-
-**2. Install it on Android.** Open that URL in Chrome, then either tap the
-**Install** prompt Chrome offers, or **⋮ → Add to Home screen**. It lands in the
-app drawer with the CircleSong icon and opens fullscreen.
-
-**On iOS** the equivalent is Safari → **Share → Add to Home Screen**.
-
-Installation needs HTTPS, which GitHub Pages provides. To try it on a phone
-before publishing, run `npm start` and open your machine's LAN address
-(`http://192.168.x.x:8080`) — the app will run, but Android only offers to
-*install* over HTTPS or localhost.
-
-### Testing on a device over USB
-
-With the phone connected and USB debugging on, forward the port so the phone
-sees the dev server as localhost, which also satisfies the install requirement:
-
-```bash
-adb reverse tcp:8080 tcp:8080
-npm start
-```
-
-Then open `http://localhost:8080` on the phone. `chrome://inspect` on the
-desktop gives you the phone's console and DevTools.
-
-### Updating an installed copy
-
-The service worker serves the cached shell first, so an installed app keeps
-running the version it cached. After deploying changes, bump `CACHE` in
-`sw.js` — installed copies then fetch the new files on their next launch.
-
----
-
 ## Key Features
 
-- **Circle of Fifths Engine** — real-time harmonic mapping, mode selection, and
-  diatonic chord recommendations. Tap the outer ring for a major tonic, the
-  inner ring for its relative minor.
-- **Interactive Progression Timeline** — layer loops across 4, 8, 16, or 32 bars
-  with custom time signatures (4/4, 3/4, 6/8, 3/8, 12/8) and BPM control.
-  Bars can be split in half for two chords per bar. Drag chords in from the
-  Compose tab.
-- **Multiple loops per song** — build a verse, a chorus and a turnaround as
-  separate loops and switch between them while playing. A switch waits for the
-  bar line, so the change lands on the beat instead of cutting mid-phrase.
-- **Drum machine with a step sequencer** — thirty-five grooves in nine families:
-  rock, funk and soul, house/techno/breakbeat, reggae and soca, Latin (samba,
-  partido alto, two cumbias, bossa, merengue, son montuno, Afro-Cuban 6/8), jazz
-  and blues, folk, hip-hop and metal. Six kits, ten voices. Every groove loads
-  into an editable grid — tap a step to cycle it through soft, medium and hard —
-  with swing, humanise, a musical **Vary** button, and a live playhead driven
-  from the audio clock. Locked to the guitar bar for bar in any time signature.
-- **Dynamic Fretboard & Inversion Switcher** — exact fingerings with chord-tone
-  colouring, and instant auditioning of root position, 1st/2nd inversion,
-  Drop-2 and Drop-3 voicings. Cycle alternative shapes for any chord.
-- **Custom Tone & Strum Engine** — six modelled instruments (acoustic steel,
-  nylon classical, electric clean, crunch, jazz archtop, reggae) and eighteen
-  strum and picking patterns — folk D-DU-UDU, driving 16ths, muted
-  chucks, ska, Charleston comping, rumba clave, waltz, 6/8 ballad, Travis
-  picking and more — plus live control over sustain, brightness, and pick
-  position. Five tunings including Drop D, DADGAD and Open G.
-- **Predictable auditioning** — by default each chord you tap silences the one
-  before it, so rapid exploring never turns into overlapping mush. Toggle it
-  off under Tone → Playback, and set how much of a bar an audition plays
-  (1, 2, 3 beats or a full bar).
-- **Key lock + wheel explorer** — lock the key, then tap any wedge to hear it
-  and read how it relates: its scale degree and function if it belongs, or the
-  interval it sits at if it is borrowed. Choose whether a tap plays the full
-  chord or a single note. In chord mode you hear the key's own chord on that
-  root, so tapping D in C major gives Dm (ii), matching the caption.
-- **Modes lesson + ear trainer** — play any mode's scale and characteristic
-  vamp, see the degree strip showing exactly which notes it alters against the
-  major scale, then test yourself with the "guess the mode" quiz, which tracks
-  your streak and which modes you have identified.
-- **About panel** — tap the wordmark for what CircleSong is and who made it.
-- **Songwriting Assistant** — fourteen moods, six song sections with
-  twenty-three variants, and a **progression library of twenty-seven
-  templates** grouped by family: pop and rock, modal rock, minor keys, jazz,
-  blues, folk and country. Tap a card to hear it in your key, Apply to write it
-  to the timeline. Every template carries the mode it belongs in, so ♭VII
-  progressions land in Mixolydian rather than being mislabelled in Ionian, and
-  the roman numerals shown are computed from the chords that will actually
-  sound.
-- **Save / load** — export and re-import songs as JSON. Progressions are stored
-  as scale degrees, so re-importing into a different key transposes the song.
+- **Circle of Fifths engine** — real-time harmonic mapping, mode selection and
+  diatonic chords, with each wedge marked by its scale degree (I, ii, iii…),
+  following the key as you change it. Secondary dominants drawn as arrows to
+  the chord each one pulls into.
+- **Extended and altered chords** — five sizes (triad, 7th, 9th, 11th, 13th),
+  nine colours (dominant 7, sus4, sus2, 6th, add9, °7, ø7, augmented) and four
+  alterations (♭9, ♯9, ♯11, ♭13), per chord. Progressions are stored as scale
+  degrees, so they transpose with the key.
+- **Dynamic fretboard** — exact fingerings with chord-tone colouring; root
+  position, 1st and 2nd inversion, Drop-2 and Drop-3, in five tunings:
+  Standard, Drop D, DADGAD, Open G and E♭ Standard.
+- **Progression timeline** — loops of 4, 8, 16 or 32 bars in five time
+  signatures (4/4, 3/4, 6/8, 3/8, 12/8), bars splittable for two chords each,
+  and multiple loops per song that switch on the bar line.
+- **Songwriting assistant** — 14 moods, 6 song sections with 23 variants, and
+  56 progressions in 8 families, each carrying the mode it belongs in.
+- **Eight modelled instruments** — acoustic steel, nylon classical, electric
+  clean, electric crunch, jazz archtop, reggae, grand piano and electric piano,
+  with live control of sustain, brightness and pick position.
+- **34 strum and picking patterns** — 28 for guitar, 6 for the keyboard
+  presets — with Feel (double- and half-time), Swing and Humanize, and the
+  tempo range each pattern is written for.
+- **Drum machine** — 35 grooves, six kits, ten voices, in an editable step
+  grid with swing, humanise and a Vary button, locked to the guitar bar for bar.
+- **Tuner** — YIN pitch detection for 8 instruments and 26 tunings, with
+  reference notes, auto or manual target, an in-tune chime, and adjustable
+  sensitivity, response and in-tune window.
+- **Modes lesson and ear trainer** — scale, characteristic vamp, the degrees
+  each mode alters, and a "guess the mode" quiz.
+- **Saved songs** — projects save to browser storage and survive offline.
 
-Pressing play with an empty timeline runs the metronome, so you can find a
-tempo before committing chords.
-
-Keyboard: <kbd>Space</kbd> toggles playback, <kbd>1</kbd>–<kbd>7</kbd> select and
-audition scale degrees.
-
----
-
-## The sound
-
-Chords are rendered by a **six-string digital waveguide model** (extended
-Karplus–Strong) running in an `AudioWorklet`, not by oscillators: fractional
-delay tuning, frequency-dependent decay, pick position and hardness, velocity →
-brightness coupling, and sympathetic bridge coupling between strings. Each
-preset then convolves with a modelled instrument body or speaker cabinet.
-
-Strums are performed rather than triggered — sequential string contact, velocity
-and timing jitter, treble-side upstrokes that catch fewer strings, and real loop
-damping for palm mutes.
-
-See **[docs/AUDIO_QUALITY.md](docs/AUDIO_QUALITY.md)** for the full signal path,
-the measurements it is verified against, and the ordered roadmap for pushing it
-closer to a recorded guitar.
-
----
-
-## Project layout
-
-```
-index.html               app shell / markup
-styles.css               cyber-brutalist dark theme
-manifest.webmanifest     PWA metadata — name, icons, standalone display
-sw.js                    service worker — offline cache of the app shell
-assets/logo.svg          brand mark — swap this one file to change the artwork
-assets/fonts.css         webfont subsets, inlined so nothing loads from a CDN
-icons/                   launcher icons (generated by tools/make-icons.mjs)
-src/
-  app.js                 state, rendering, and event wiring
-  theory.js              pitch classes, modes, diatonic harmony, Circle of Fifths
-  fretboard.js           tunings, voicing search, inversions, Drop-2/Drop-3
-  patterns.js            strum and fingerpicking patterns
-  drum-patterns.js       drum grooves as step grids, by genre and metre
-  sequencer.js           lookahead transport, metronome, playhead
-  content.js             harmonic-function copy, mode lessons, templates
-  audio/
-    engine.js            AudioContext, presets, signal chain, strum performance
-    guitar-processor.js  AudioWorklet — the six string models
-    impulse.js           synthesised body, cabinet, and room impulse responses
-    drums.js             synthesised drum kit voices
-tools/
-  build-single.mjs       bundles everything into dist/circlesong.html
-  fetch-fonts.mjs        regenerates assets/fonts.css (inlined webfont subsets)
-  make-icons.mjs         renders icons/ from assets/logo.svg
-docs/
-  AUDIO_QUALITY.md       sound design notes and improvement roadmap
-dist/
-  circlesong.html        generated single-file build — do not edit by hand
-```
-
-Add `?theme=mono` to the URL for the monochrome amber accent set.
-
-### Branding
-
-The brand mark lives at `assets/logo.svg` and is referenced by the header and
-the About panel. Replace that one file to change the artwork — the build
-inlines it as a `data:` URI automatically, so `dist/circlesong.html` stays
-self-contained.
-
----
-
-## License
-
-See [LICENSE](LICENSE).
+- 
