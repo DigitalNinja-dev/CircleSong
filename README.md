@@ -30,5 +30,3 @@
 - **Modes lesson and ear trainer** — scale, characteristic vamp, the degrees
   each mode alters, and a "guess the mode" quiz.
 - **Saved songs** — projects save to browser storage and survive offline.
-
-- 
