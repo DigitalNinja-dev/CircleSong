@@ -66,6 +66,7 @@ import {
   midiLabel,
 } from './tuner.js';
 import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
+import { THEMES, THEME_IDS, applyTheme, storedTheme, saveTheme, watchSystemTheme, themeColor } from './theme.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
@@ -123,7 +124,16 @@ const TABS = [
 ];
 
 const params = new URLSearchParams(location.search);
-if (params.get('theme') === 'mono') document.documentElement.dataset.accent = 'mono';
+if (params.get('theme') === 'mono' || params.get('accent') === 'mono') {
+  document.documentElement.dataset.accent = 'mono';
+}
+
+// Before the first render, so the app never flashes the wrong theme on launch.
+// A URL parameter wins over the stored choice, which makes every theme
+// linkable and screenshottable without touching anyone's setting.
+const urlTheme = THEME_IDS.includes(params.get('theme')) ? params.get('theme') : null;
+const initialTheme = urlTheme || storedTheme();
+applyTheme(initialTheme);
 
 const state = {
   projectTitle: 'Untitled Song',
@@ -211,6 +221,8 @@ const state = {
   /** How much the strumming hand drifts off the grid, 0..1. */
   humanize: 0.25,
   showAbout: false,
+  /** Theme preference; 'system' resolves to light or dark and follows the OS. */
+  theme: initialTheme,
   // --- tuner ---
   tunerInstrument: 'guitar',
   tunerTuning: 'standard',
@@ -703,7 +715,7 @@ function renderTabs() {
 
 function glyph(kind, active) {
   const i = el('i');
-  const col = active ? 'var(--a)' : 'oklch(0.5 0.01 250)';
+  const col = active ? 'var(--a)' : themeColor('glyph-off');
   const styles = {
     circle: `width:16px;height:16px;border-radius:50%;border:2px solid ${col};`,
     square: `width:14px;height:14px;border:2px solid ${col};`,
@@ -752,6 +764,29 @@ function renderTransport() {
   if (document.activeElement !== title) title.value = state.projectTitle;
 }
 
+
+/**
+ * The numbers the wheel and the fretboard are painted with, read from whichever
+ * theme is active. They live in CSS because that is where the rest of the theme
+ * lives; a canvas or a conic-gradient cannot use `var()`, so it has to ask.
+ */
+function paintScheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const num = (k, d) => {
+    const v = parseFloat(cs.getPropertyValue(k));
+    return Number.isFinite(v) ? v : d;
+  };
+  return {
+    lRoot: num('--wheel-l-root', 0.68),
+    lDia: num('--wheel-l-dia', 0.56),
+    lOff: num('--wheel-l-off', 0.26),
+    cRoot: num('--wheel-c-root', 0.17),
+    cDia: num('--wheel-c-dia', 0.13),
+    cOff: num('--wheel-c-off', 0.035),
+    drop: num('--wheel-in-drop', 0.12),
+  };
+}
+
 function renderCircle() {
   const scaleSet = new Set(scalePitchClasses(state.rootPc, modeId()));
   const outerStops = [];
@@ -781,18 +816,22 @@ function renderCircle() {
     });
   });
 
+  const paint = paintScheme();
   CIRCLE.forEach((note, i) => {
     const hue = i * 30;
     const isRoot = note === state.rootPc;
     const isDia = scaleSet.has(note);
-    const oL = isRoot ? 0.68 : isDia ? 0.56 : 0.26;
-    const oC = isRoot ? 0.17 : isDia ? 0.13 : 0.035;
+    const oL = isRoot ? paint.lRoot : isDia ? paint.lDia : paint.lOff;
+    const oC = isRoot ? paint.cRoot : isDia ? paint.cDia : paint.cOff;
 
     const minorNote = (note + 9) % 12;
     const isRootMinor = minorNote === state.rootPc;
     const isDiaMinor = scaleSet.has(minorNote);
-    const iL = isRootMinor ? 0.56 : isDiaMinor ? 0.44 : 0.2;
-    const iC = isRootMinor ? 0.13 : isDiaMinor ? 0.1 : 0.025;
+    // The inner ring sits behind the outer one, so it steps away from the page
+    // by the same amount in either direction — darker on a dark theme, lighter
+    // on a light one.
+    const iL = (isRootMinor ? paint.lRoot : isDiaMinor ? paint.lDia : paint.lOff) - paint.drop;
+    const iC = (isRootMinor ? paint.cRoot : isDiaMinor ? paint.cDia : paint.cOff) * 0.78;
 
     outerStops.push(`oklch(${oL} ${oC} ${hue}) ${i * 30}deg ${i * 30 + 30}deg`);
     innerStops.push(`oklch(${iL} ${iC} ${hue}) ${i * 30}deg ${i * 30 + 30}deg`);
@@ -801,11 +840,11 @@ function renderCircle() {
     const ip = posAt(66, i);
     const outer = el('span', 'outer', CIRCLE_LABELS[i]);
     outer.style.cssText = `left:${op.x}px;top:${op.y}px;color:${
-      isRoot || isDia ? 'oklch(0.99 0.003 250)' : 'oklch(0.75 0.006 250 / 0.7)'
+      isRoot || isDia ? themeColor('wheel-ink-on') : themeColor('wheel-ink-off')
     };`;
     const inner = el('span', 'inner', MINOR_LABELS[i]);
     inner.style.cssText = `left:${ip.x}px;top:${ip.y}px;color:${
-      isRootMinor || isDiaMinor ? 'oklch(0.97 0.003 250)' : 'oklch(0.65 0.006 250 / 0.55)'
+      isRootMinor || isDiaMinor ? themeColor('wheel-ink-on-min') : themeColor('wheel-ink-off-min')
     };`;
     labels.append(outer, inner);
 
@@ -1618,7 +1657,7 @@ function renderDiagram(chord) {
     const t = document.createElementNS(NS, 'text');
     t.setAttribute('x', '140'); t.setAttribute('y', '105');
     t.setAttribute('text-anchor', 'middle');
-    t.setAttribute('fill', 'oklch(0.6 0.01 250)');
+    t.setAttribute('fill', themeColor('fret-text'));
     t.setAttribute('font-size', '13');
     t.textContent = 'No playable shape';
     svg.appendChild(t);
@@ -1647,17 +1686,17 @@ function renderDiagram(chord) {
     t.setAttribute('font-family', 'IBM Plex Mono, monospace');
     t.setAttribute('font-size', opts.size || 10);
     t.setAttribute('font-weight', '600');
-    t.setAttribute('fill', opts.fill || 'oklch(0.12 0.01 250)');
+    t.setAttribute('fill', opts.fill || themeColor('fret-ink'));
     t.textContent = str;
     svg.appendChild(t);
   };
 
-  FRET_Y.forEach((y, i) => line(20, y, 260, y, 'oklch(0.4 0.01 250)', i === 0 && position === 0 ? 3 : 1));
-  STRING_X.forEach((x) => line(x, 26, x, 190, 'oklch(0.45 0.01 250)', 1.5));
+  FRET_Y.forEach((y, i) => line(20, y, 260, y, themeColor('fret-line'), i === 0 && position === 0 ? 3 : 1));
+  STRING_X.forEach((x) => line(x, 26, x, 190, themeColor('fret-string'), 1.5));
 
   v.frets.forEach((f, s) => {
-    if (f === null) { text(STRING_X[s], 16, '×', { size: 13, fill: 'oklch(0.5 0.02 25)' }); return; }
-    if (f === 0) { text(STRING_X[s], 16, '○', { size: 12, fill: 'oklch(0.7 0.01 250)' }); return; }
+    if (f === null) { text(STRING_X[s], 16, '×', { size: 13, fill: themeColor('fret-mute') }); return; }
+    if (f === 0) { text(STRING_X[s], 16, '○', { size: 12, fill: themeColor('fret-open') }); return; }
     const row = f - position;
     if (row < 0 || row > 4) return;
     const y = FRET_Y[row] + 16;
@@ -1671,7 +1710,7 @@ function renderDiagram(chord) {
   // Note names under the diagram.
   v.midi.forEach((m, s) => {
     if (m === null) return;
-    text(STRING_X[s], 206, midiToName(m, preferFlats()), { size: 9, fill: 'oklch(0.6 0.01 250)' });
+    text(STRING_X[s], 206, midiToName(m, preferFlats()), { size: 9, fill: themeColor('fret-text') });
   });
 
   $('positionLabel').textContent = position === 0 ? 'Open Position' : `Position — ${position}fr`;
@@ -2527,7 +2566,48 @@ function stopTuner() {
   renderTuner();
 }
 
+/**
+ * The theme picker.
+ *
+ * Each swatch previews its own theme rather than describing it, because "Sepia"
+ * means nothing until you have seen it. The preview is drawn with that theme's
+ * own tokens via `data-swatch`, so it cannot drift from the real thing.
+ */
+function renderTheme() {
+  const row = $('themeRow');
+  if (!row) return;
+  row.replaceChildren();
+  for (const t of THEMES) {
+    const active = state.theme === t.id;
+    const b = el('button', `theme-btn${active ? ' active' : ''}`);
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(active));
+    b.title = t.note;
+
+    const sw = el('span', 'theme-swatch');
+    sw.dataset.swatch = t.id;
+    // Three bands: page, panel, accent — the three decisions a theme makes.
+    sw.append(el('i', 'sw-bg'), el('i', 'sw-panel'), el('i', 'sw-accent'));
+
+    b.append(sw, el('span', 'theme-name', t.label));
+    b.onclick = () => {
+      state.theme = t.id;
+      applyTheme(t.id);
+      saveTheme(t.id);
+      // The wheel and the fretboard are painted from JavaScript, so they have
+      // to be repainted rather than merely restyled.
+      render();
+    };
+    row.appendChild(b);
+  }
+  const chosen = THEMES.find((t) => t.id === state.theme) || THEMES[0];
+  const resolved = document.documentElement.dataset.theme;
+  $('themeNote').textContent =
+    state.theme === 'system' ? `${chosen.note} Currently ${resolved}.` : chosen.note;
+}
+
 function renderSongs() {
+  renderTheme();
   const secs = state.sections.length;
   const filled = state.sections.reduce(
     (n, sec) => n + sec.bars.filter((b) => b.slots.some(Boolean)).length,
@@ -3373,6 +3453,13 @@ function applySongData(data) {
     }
   }
 }
+
+// While the theme is "system", follow the device. Someone whose phone flips to
+// dark at sunset expects the app to flip with it, without being reopened.
+watchSystemTheme(
+  () => state.theme,
+  () => render()
+);
 
 // The microphone is released whenever the page stops being visible, so it is
 // never held by a tab sitting in the background.

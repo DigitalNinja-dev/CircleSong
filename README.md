@@ -145,6 +145,19 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   major scale, then test yourself with a "guess the mode" quiz that tracks your
   streak.
 
+### Appearance
+
+- **Five themes** — System, Dark, Light, High Contrast and Sepia, chosen under
+  Songs → Appearance and remembered. System follows the device and re-resolves
+  while the app is running, so a phone that flips to dark at sunset takes the
+  app with it.
+- Every colour in the app is a semantic token, so a theme is a set of values
+  rather than a second stylesheet — including the numbers the circle of fifths
+  and the fretboard are painted with, which are drawn from JavaScript and would
+  otherwise stay dark on a light page.
+- **All four rendered themes pass WCAG AA** on every one of the 461 text
+  elements in the app, measured rather than assumed — see Verifying it.
+
 Pressing play with an empty timeline runs the metronome, so you can find a tempo
 before committing chords.
 
@@ -196,7 +209,8 @@ headless Chromium and measuring what comes out**, because almost everything here
 is either audio or layout and a green assertion about neither is worthless. A
 check that counts zero of something is treated as a failure, not a pass.
 
-The standing checks cover: output level, peak and crest factor for every preset
+The standing checks cover: WCAG contrast for every visible text element in
+every theme; output level, peak and crest factor for every preset
 on the chord shapes that stress a guitar body's air mode; that every rhythm
 pattern schedules audible strokes in every meter it claims; that ska and reggae
 differ in position, ring, strings and mute; pitch-detector accuracy in cents on
