@@ -11,10 +11,11 @@
     "fonts": "node tools/fetch-fonts.mjs",
     "icons": "node tools/make-icons.mjs",
     "build:www": "node tools/build-www.mjs",
-    "android:sync": "npm run build:www && npx cap sync android",
+    "android:sync": "npm run build:www && node tools/check-android-res.mjs && npx cap sync android",
     "android:open": "npx cap open android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease"
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease",
+    "android:check": "node tools/check-android-res.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.0",

@@ -48,6 +48,11 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      # Android merges every res/values file into one table, so a name defined
+      # twice fails the build — several minutes into it. This is a second.
+      - name: Check Android resources
+        run: npm run android:check
+
       # The single-file build is checked here too: it shares the sources with
       # the app, and the build fails if a module was added without being
       # registered, which would ship an Android app that boots to a blank page.
