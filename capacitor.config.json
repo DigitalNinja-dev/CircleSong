@@ -1,0 +1,14 @@
+{
+  "appId": "dev.digitalninja.circlesong",
+  "appName": "CircleSong",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": false,
+    "webContentsDebuggingEnabled": true
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#0d0d0d"
+}

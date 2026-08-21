@@ -1,7 +1,7 @@
 {
   "name": "circlesong",
   "version": "1.0.0",
-  "description": "CircleSong — Theory-guided guitar workstation in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument.",
+  "description": "CircleSong \u2014 Theory-guided guitar workstation in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument.",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -9,6 +9,16 @@
     "start": "npx --yes http-server -p 8080 -c-1 .",
     "build": "node tools/build-single.mjs",
     "fonts": "node tools/fetch-fonts.mjs",
-    "icons": "node tools/make-icons.mjs"
+    "icons": "node tools/make-icons.mjs",
+    "build:www": "node tools/build-www.mjs",
+    "android:sync": "npm run build:www && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0"
   }
 }

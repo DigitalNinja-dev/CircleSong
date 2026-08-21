@@ -1,0 +1,19 @@
+# Installed rather than committed.
+node_modules/
+
+# Generated: `npm run build:www` assembles it, Capacitor copies it into the
+# native project. The sources it is built from are what live here.
+www/
+
+# Android build output and local machine state. The project itself is committed
+# so that signing config, the manifest and the icons are versioned.
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+*.apk
+*.aab
+*.keystore

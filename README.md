@@ -267,12 +267,66 @@ everything in the cached shell, so shipping a change always invalidates installe
 copies. This used to be a hand-written number, and forgetting it looked exactly
 like the new feature not working.
 
-### If you need a real APK
+---
 
-A PWA covers testing and everyday use. For a Play Store listing or a `.apk`,
-wrap the same URL in a Trusted Web Activity with
-[PWABuilder](https://www.pwabuilder.com/) or Google's Bubblewrap — both take the
-manifest already in this repo and emit a signed Android package.
+## The Android app
+
+CircleSong is packaged for Android with [Capacitor](https://capacitorjs.com/),
+which wraps the app's own files in a native shell. It needs no server: the whole
+app is inside the package, so it works with no signal from the first launch
+rather than after a first online visit.
+
+**No Capacitor plugins are used, deliberately.** A plugin would mean a bare
+import in the web sources, and the web app's one structural promise is that it
+has no runtime dependencies and builds to a single self-contained file. The
+native side is configured instead — `capacitor.config.json`, the manifest, and
+the theme resources — so `src/` is exactly the same code in the browser and in
+the app.
+
+```bash
+npm install                # the Capacitor CLI, dev-time only
+npm run build:www          # assemble www/ — the files that go in the package
+npm run android:sync       # copy them into the native project
+npm run android:apk        # -> android/app/build/outputs/apk/debug/*.apk
+npm run android:open       # or open the project in Android Studio
+```
+
+Building locally needs the **Android SDK** and a JDK 21. If you would rather not
+install a toolchain, you do not have to:
+[`.github/workflows/android.yml`](.github/workflows/android.yml) builds a debug
+APK on every push and attaches it to the run — download it from the Actions tab
+and sideload it.
+
+For the Play Store, tag a release (`v1.0.0`) and the same workflow builds a
+signed App Bundle, provided four repository secrets exist:
+`ANDROID_KEYSTORE_BASE64` (`base64 -w0 your.keystore`), `ANDROID_STORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them the tag build skips
+the bundle rather than failing — an unsigned release is of no use to anyone. The
+keystore never enters the repository; `android/app/build.gradle` reads the
+signing config from the environment.
+
+### What the app declares, and why
+
+- **`RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS`** — the tuner. Capacitor's
+  WebChromeClient asks for these at the moment `getUserMedia` runs, but a
+  runtime request only succeeds if the permission is declared in the manifest
+  first.
+- **`android.hardware.microphone` is `required="false"`** — everything except
+  the tuner works without one, so a device that has no microphone should still
+  be offered the app.
+- **`androidScheme: "https"`** — the WebView serves the app from
+  `https://localhost`, which is a secure context, so the service worker,
+  `AudioWorklet` and `getUserMedia` all behave exactly as they do on the web.
+- **minSdk 24** (Android 7). `AudioWorklet` needs a Chromium WebView 66 or
+  newer, which is a system component updated through the Play Store rather than
+  tied to the OS version.
+
+### Alternatively, a PWA
+
+None of the above is required for everyday use. The app installs straight from
+the browser — see below — and for a thin Play Store wrapper around the hosted
+site, [PWABuilder](https://www.pwabuilder.com/) or Bubblewrap will take the
+manifest already in this repo and emit a Trusted Web Activity.
 
 ---
 
@@ -295,6 +349,7 @@ src/
   drum-patterns.js       drum grooves as step grids, by genre and metre
   sequencer.js           lookahead transport, feel, metronome, playhead
   tuner.js               YIN pitch detection, instrument tunings, reference tones
+  theme.js               resolving, storing and applying the five themes
   projects.js            saved songs in browser storage
   content.js             harmonic-function copy, mode lessons, progressions
   audio/
@@ -302,8 +357,11 @@ src/
     guitar-processor.js  AudioWorklet — ten string models
     impulse.js           synthesised body, cabinet, and room impulse responses
     drums.js             synthesised drum kit voices
+capacitor.config.json    native shell config — app id, web directory, scheme
+android/                 the Android project (Capacitor); build output ignored
 tools/
   build-single.mjs       bundles everything into dist/circlesong.html
+  build-www.mjs          assembles www/ — the files the Android package ships
   fetch-fonts.mjs        regenerates assets/fonts.css (inlined webfont subsets)
   make-icons.mjs         renders icons/ from assets/logo.svg
 docs/
@@ -311,6 +369,7 @@ docs/
   screenshots/           the images at the top of this file
 .github/workflows/
   pages.yml              deploys to GitHub Pages on push to main
+  android.yml            builds the APK, and a signed bundle on a tag
 dist/
   circlesong.html        generated single-file build — do not edit by hand
 ```
