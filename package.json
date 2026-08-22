@@ -1,7 +1,7 @@
 {
   "name": "circlesong",
   "version": "1.0.0",
-  "description": "CircleSong \u2014 Theory-guided guitar workstation in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument.",
+  "description": "CircleSong \u2014 Theory-guided guitar tool in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument.",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",

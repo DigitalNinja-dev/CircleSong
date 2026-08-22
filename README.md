@@ -1,7 +1,7 @@
 # CircleSong 🎸⭕
 
 > **Turn music theory into song structures.**
-> A theory-guided guitar workstation that runs in a browser: compose on the
+> A theory-guided guitar tool that runs in a browser: compose on the
 > Circle of Fifths, hear every chord on a physically modelled guitar, build
 > loops into songs, and tune the instrument you are playing — offline, with no
 > dependencies and no build step.
@@ -391,7 +391,7 @@ page.
 **Description**
 
 ```
-Theory-guided guitar workstation in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument. Zero dependencies, installable, works offline.
+Theory-guided guitar tool in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument. Zero dependencies, installable, works offline.
 ```
 
 **Website**: `https://digitalninja-dev.github.io/CircleSong/`

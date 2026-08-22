@@ -23,7 +23,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d0d0d">
 <title>CircleSong</title>
-<meta name="description" content="CircleSong — Theory-guided guitar tool in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument. Zero dependencies, installable, works offline.">
+<meta name="description" content="CircleSong — an interactive, theory-guided guitar DAW and progression sequencer built on the Circle of Fifths.">
 <!-- Fonts are served from the repo, not a CDN: the app must work offline once
      installed, and a font CDN is exactly the request that fails on a phone with
      no signal. Regenerate with `npm run fonts`. -->
@@ -54,7 +54,6 @@
         <span class="version">VERSION 1.0</span>
         <p>CircleSong is a circle-of-fifths powered composition tool for guitar players. It maps the theory behind keys, modes, and chord progressions onto an instrument you already play, so you can build song structures — verses, choruses, bridges — by ear and by understanding, not guesswork.</p>
         <p>Pick a key, hear every diatonic chord and its inversions instantly, sequence them into a loop, and get progression ideas grounded in real theory and well-known songs. The Learn tab and ear trainer build your fluency in modes as you write — so composing and studying happen in the same place.</p>
-        <p>Everything the instrument needs is here: eight modelled tones from acoustic steel to grand piano, thirty-four strum and picking patterns, a drum machine, a tuner for eight instruments, and songs you can save. It runs entirely on your device, installs to your home screen, and keeps working with no signal.</p>
         <p class="credit">by Nicolás Raul Jean-Pierre Figueroa</p>
         <p class="licence">
           Copyright &copy; 2026. Free software under the
@@ -180,36 +179,10 @@
 
       <h2 class="mt">/03 STRUM_&amp;_RHYTHM</h2>
       <div class="row gap-xs mb-s">
-        <span class="micro-label">STYLE</span>
+        <span class="micro-label">FEEL</span>
         <select id="rhythmFamilySelect" class="select grow" aria-label="Rhythm family"></select>
       </div>
       <div id="rhythmList"></div>
-
-      <div class="card flat mt-s" id="feelCard">
-        <div class="row between wrap gap-xs">
-          <span class="micro-label">NOW PLAYING</span>
-          <span id="rhythmTempoHint" class="setting-note"></span>
-        </div>
-        <p id="rhythmNowPlaying" class="mono-strong"></p>
-        <button id="setTempoBtn" class="chip small" hidden></button>
-
-        <div class="row gap-xs mt-s">
-          <span class="micro-label">FEEL</span>
-          <div class="row gap-xs grow" id="feelRow"></div>
-        </div>
-        <p id="feelNote" class="setting-note"></p>
-
-        <div class="slider-row">
-          <label for="swingSlider">SWING</label>
-          <input type="range" id="swingSlider" class="grow" min="0" max="0.6" step="0.02">
-          <output id="swingOut"></output>
-        </div>
-        <div class="slider-row">
-          <label for="humanizeSlider">HUMANIZE</label>
-          <input type="range" id="humanizeSlider" class="grow" min="0" max="1" step="0.05">
-          <output id="humanizeOut"></output>
-        </div>
-      </div>
 
     </section>
 
@@ -379,7 +352,8 @@
       </div>
       <div class="row gap-s mt">
         <button id="clearTimelineBtn" class="chip small">Clear all</button>
-        <label class="chip small file-label">Import a song file<input id="importInput" type="file" accept="application/json" hidden></label>
+        <button id="exportBtn" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput" type="file" accept="application/json" hidden></label>
       </div>
     </section>
 
@@ -494,9 +468,6 @@
         </div>
       </div>
 
-      <p id="tunerChromaticNote" class="tuner-mic-note" hidden>
-        Chromatic — play any note and it will be named. Tap one to hear it.
-      </p>
       <div id="tunerStrings" class="tuner-strings"></div>
 
       <button id="tunerMicBtn" class="tuner-listen" aria-pressed="false">
@@ -505,40 +476,10 @@
       <p id="tunerMicNote" class="tuner-mic-note"></p>
       <p id="tunerError" class="tuner-err" hidden></p>
 
-      <details id="tunerOptions" class="tuner-options">
-        <summary><span>OPTIONS</span><span class="opt-caret">▾</span></summary>
-        <div class="tuner-opt-body">
-          <div class="tuner-opt">
-            <span class="micro-label">TARGET</span>
-            <div class="row gap-xs wrap" id="tunerModeRow"></div>
-          </div>
-          <div class="tuner-opt">
-            <span class="micro-label">REFERENCE TONE</span>
-            <div class="row gap-xs wrap" id="tunerRefRow"></div>
-          </div>
-          <div class="tuner-opt">
-            <span class="micro-label">CHIME WHEN IN TUNE</span>
-            <div class="row gap-xs wrap" id="tunerChimeRow"></div>
-          </div>
-          <div class="tuner-opt">
-            <span class="micro-label">SENSITIVITY</span>
-            <div class="row gap-xs wrap" id="tunerGateRow"></div>
-          </div>
-          <div class="tuner-opt">
-            <span class="micro-label">RESPONSE</span>
-            <div class="row gap-xs wrap" id="tunerRespRow"></div>
-          </div>
-          <div class="tuner-opt">
-            <span class="micro-label">IN-TUNE WINDOW</span>
-            <div class="row gap-xs wrap" id="tunerStrictRow"></div>
-          </div>
-          <div class="tuner-opt">
-            <span class="micro-label">REFERENCE A4</span>
-            <div class="row gap-xs wrap" id="tunerA4Row"></div>
-          </div>
-          <p class="tuner-opt-note" id="tunerOptNote"></p>
-        </div>
-      </details>
+      <div class="row gap-xs mt-s">
+        <span class="micro-label">REFERENCE A4</span>
+        <div class="row gap-xs grow" id="tunerA4Row"></div>
+      </div>
     </section>
 
     <!-- /08 SONGS -->
@@ -558,14 +499,8 @@
       <p id="projectsEmpty" class="hint block" hidden>Nothing saved yet. Save the current song to start a library.</p>
       <div class="stack" id="projectList"></div>
       <div class="row gap-s mt">
-        <label class="chip small file-label">Import a song file<input id="importInput2" type="file" accept="application/json" hidden></label>
-      </div>
-
-      <h3>// APPEARANCE</h3>
-      <div class="card flat">
-        <span class="micro-label">THEME</span>
-        <div class="theme-grid" id="themeRow" role="radiogroup" aria-label="Theme"></div>
-        <p id="themeNote" class="setting-note"></p>
+        <button id="exportBtn2" class="chip small">Export JSON</button>
+        <label class="chip small file-label">Import<input id="importInput2" type="file" accept="application/json" hidden></label>
       </div>
     </section>
 

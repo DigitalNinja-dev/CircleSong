@@ -1,7 +1,7 @@
 {
-  "name": "CircleSong — Guitar DAW",
+  "name": "CircleSong — Guitar Tool",
   "short_name": "CircleSong",
-  "description": "Theory-guided guitar workstation in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument. Works offline.",
+  "description": "Theory-guided guitar tool in the browser: compose on the Circle of Fifths, hear it on a physically modelled guitar, sequence loops into songs, and tune your instrument. Works offline.",
   "id": "circlesong",
   "start_url": "./",
   "scope": "./",
