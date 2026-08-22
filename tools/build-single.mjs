@@ -56,6 +56,7 @@ const MODULES = [
   'src/harmony.js',
   'src/projects.js',
   'src/tuner.js',
+  'src/theme.js',
   'src/content.js',
   'src/audio/impulse.js',
   'src/audio/drums.js',

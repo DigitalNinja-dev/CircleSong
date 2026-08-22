@@ -1,0 +1,33 @@
+CircleSong - Interactive Music Theory & Composition Engine
+Copyright (C) 2026 Nicolás Raul Jean-Pierre Figueroa
+https://github.com/DigitalNinja-dev/CircleSong
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+----------------------------------------------------------------------
+
+Section 13: running it over a network
+
+CircleSong is a web application, so most people will use it without ever
+downloading it. Section 13 of the AGPL exists for exactly that case: anyone
+interacting with this program remotely over a network must be offered the
+corresponding source of the version they are using.
+
+The app satisfies this with a "Source Code (AGPL v3.0)" link in its About
+panel and in its footer, both pointing at the repository above. If you deploy
+a modified copy, that link must point at *your* modified source.
+
+This notice used to live at the top of LICENSE. It was moved here so that
+LICENSE is the verbatim text of the GNU AGPL v3 and licence detectors can
+recognise it; nothing about the terms changed.
