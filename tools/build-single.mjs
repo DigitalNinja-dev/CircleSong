@@ -49,6 +49,12 @@ const artifactPath = artifactFlag !== -1 ? process.argv[artifactFlag + 1] : null
 
 // Dependency order — each module may only reference those above it.
 const MODULES = [
+  // Locales first: they are plain data with no imports, and the translator
+  // reads them at module scope.
+  'src/locales/es.js',
+  'src/locales/hi.js',
+  'src/locales/de.js',
+  'src/i18n.js',
   'src/theory.js',
   'src/fretboard.js',
   'src/patterns.js',
@@ -62,6 +68,9 @@ const MODULES = [
   'src/audio/drums.js',
   'src/audio/engine.js',
   'src/sequencer.js',
+  // After every table it rewrites — it snapshots them at module scope, so any
+  // module it reads has to have been evaluated already.
+  'src/i18n-data.js',
   'src/app.js',
 ];
 

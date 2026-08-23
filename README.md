@@ -158,6 +158,24 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 - **All four rendered themes pass WCAG AA** on every one of the 461 text
   elements in the app, measured rather than assumed — see Verifying it.
 
+### Language
+
+- **Four languages** — English, Español, हिन्दी and Deutsch, complete rather
+  than partial: **816 strings**, including the mode lessons, all 56 progression
+  notes, the harmonic analysis the app writes about your loop, and the tuner's
+  microphone errors. Not a word of the interface is left in English.
+- **A globe in the transport bar**, on every screen. Someone who has just put
+  the app into a language they cannot read has to be able to get back out, and
+  at that moment a settings menu is unreadable and a picture is not. Every
+  language is listed in its own script, so you can find yours on sight.
+- The language is remembered, and on a first visit it is taken from the
+  device — `es-419` and `de-AT` both land somewhere useful. `?lang=de` on the
+  URL overrides both, which makes every language linkable and screenshottable.
+- Note letters (C, D, E…) are deliberately not translated: German notation
+  calls B natural "H", and renaming every chord symbol and fretboard marker
+  would be a correctness change rather than a translation. The words *about*
+  the notes are translated; the letters on the instrument are not.
+
 Pressing play with an empty timeline runs the metronome, so you can find a tempo
 before committing chords.
 
@@ -218,6 +236,20 @@ every string of every tuning; reference-note loudness across the range; that the
 microphone is released when the tab is left; and that the single-file build boots
 from `file://`, under a strict CSP, and offline after the service worker has
 installed.
+
+Translation coverage is measured the same way. `npm run i18n` drives the app
+through every panel in a real browser and asks it which strings it looked
+up — the only honest catalogue, since a grep would miss everything that lives
+in a data table and a hand-kept list goes stale the first time a sentence is
+edited — then merges that with every literal handed to `t()` in the source, so
+the strings only an error path reaches are counted too. It reports coverage per
+language and fails on an orphan, which is what an edited English string leaves
+behind. `npm run i18n:dump` writes the catalogue out for a translator.
+
+Each language is also driven through all nine panels, asserting that every one
+renders non-empty, differs from English, and returns to English exactly when
+switched back — plus that the layout survives translation on a 360 px phone,
+which is how the drum row's four buttons were found to overflow in German.
 
 ---
 
@@ -350,6 +382,11 @@ src/
   sequencer.js           lookahead transport, feel, metronome, playhead
   tuner.js               YIN pitch detection, instrument tunings, reference tones
   theme.js               resolving, storing and applying the five themes
+  i18n.js                t(), language resolution, and translating the markup
+  i18n-data.js           rewrites the data tables into the chosen language
+  locales/es.js          Spanish
+  locales/hi.js          Hindi
+  locales/de.js          German
   projects.js            saved songs in browser storage
   content.js             harmonic-function copy, mode lessons, progressions
   audio/
@@ -364,6 +401,7 @@ tools/
   build-www.mjs          assembles www/ — the files the Android package ships
   fetch-fonts.mjs        regenerates assets/fonts.css (inlined webfont subsets)
   make-icons.mjs         renders icons/ from assets/logo.svg
+  i18n-check.mjs         measures translation coverage against the live app
 docs/
   AUDIO_QUALITY.md       sound design notes and improvement roadmap
   screenshots/           the images at the top of this file

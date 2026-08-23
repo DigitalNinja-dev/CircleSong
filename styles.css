@@ -1487,3 +1487,37 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 [data-theme='contrast'] button:focus-visible,
 [data-theme='contrast'] select:focus-visible,
 [data-theme='contrast'] input:focus-visible { outline-width: 3px; }
+
+/* ---------- language ----------
+   The globe sits in the transport bar rather than in Settings, because the one
+   moment it is needed most is the moment the app is in a language the reader
+   cannot navigate: at that point every route to a settings screen is unreadable
+   and only a picture is not. */
+.icon-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  background: transparent; border: 1px solid var(--border-soft); border-radius: 8px;
+  color: var(--text-5); cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--a); color: var(--a); }
+.lang-globe { color: var(--a); flex: none; }
+.lang-sheet .wordmark { font-size: 13px; line-height: 1.5; }
+
+.lang-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px; margin-top: 8px;
+}
+.lang-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: 8px;
+  background: var(--flat); color: var(--text-5); text-align: left; cursor: pointer;
+}
+.lang-btn:hover { border-color: var(--a); }
+.lang-btn.active { border-color: var(--a); color: var(--a); box-shadow: 0 0 0 1px var(--a-35); }
+/* The name in its own script is the line that matters, so it is the larger of
+   the two; the English name underneath is for anyone arriving from English. */
+.lang-native { font: 600 14px var(--sans); }
+.lang-english { font: 500 10px var(--mono); letter-spacing: 0.04em; color: var(--dim-lo); }
+.lang-btn.active .lang-english { color: inherit; opacity: 0.8; }
+[data-theme='contrast'] .lang-btn,
+[data-theme='contrast'] .icon-btn { border-width: 2px; }

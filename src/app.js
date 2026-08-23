@@ -67,6 +67,11 @@ import {
 } from './tuner.js';
 import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
 import { THEMES, THEME_IDS, applyTheme, storedTheme, saveTheme, watchSystemTheme, themeColor } from './theme.js';
+import {
+  LANGUAGES, LANG_IDS, t, plural, lang, langInfo, REQUESTED, dictFor,
+  resolveLang, storedLang, saveLang, setLanguage, translateDom,
+} from './i18n.js';
+import { localiseTables, tableStrings } from './i18n-data.js';
 import { DrumKit, DRUM_KITS, DRUM_VOICES } from './audio/drums.js';
 import { DRUM_STYLE_BY_ID, stylesForMeter, styleToPattern, stylesByFamily, varyPattern } from './drum-patterns.js';
 import {
@@ -135,8 +140,16 @@ const urlTheme = THEME_IDS.includes(params.get('theme')) ? params.get('theme') :
 const initialTheme = urlTheme || storedTheme();
 applyTheme(initialTheme);
 
+// Language, on the same terms as the theme: a URL parameter wins so every
+// language is linkable and screenshottable, then the stored choice, then the
+// device's own languages. Resolved before the first render, because the tables
+// have to be in the right language before anything reads them.
+const urlLang = LANG_IDS.includes(params.get('lang')) ? params.get('lang') : null;
+const initialLang = setLanguage(urlLang || storedLang() || resolveLang(null));
+localiseTables();
+
 const state = {
-  projectTitle: 'Untitled Song',
+  projectTitle: t('Untitled Song'),
   /** Which saved project this song came from, so Save overwrites it. */
   projectId: null,
   bpm: 96,
@@ -223,6 +236,8 @@ const state = {
   showAbout: false,
   /** Theme preference; 'system' resolves to light or dark and follows the OS. */
   theme: initialTheme,
+  lang: initialLang,
+  showLang: false,
   // --- tuner ---
   tunerInstrument: 'guitar',
   tunerTuning: 'standard',
@@ -347,12 +362,12 @@ async function ensureAudio() {
 
 let toastTimer = null;
 function toast(msg, isError = false) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.classList.toggle('error', isError);
-  t.hidden = false;
+  const node = $('toast');
+  node.textContent = msg;
+  node.classList.toggle('error', isError);
+  node.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, isError ? 6000 : 2200);
+  toastTimer = setTimeout(() => { node.hidden = true; }, isError ? 6000 : 2200);
 }
 
 // ------------------------------------------------------------ theory helpers
@@ -500,7 +515,7 @@ async function previewDegree(degree) {
   const chord = chordForDegree(degree);
   const list = voicingList(chord);
   const v = list.length ? list[state.voicingIndex % list.length] : null;
-  if (!v) { toast('No playable shape for that chord in this tuning.'); return; }
+  if (!v) { toast(t('No playable shape for that chord in this tuning.')); return; }
   await playChordNow(chord, v);
 }
 
@@ -551,7 +566,7 @@ async function togglePlay() {
     // An empty timeline still plays: the metronome runs, which is what you
     // want when working out a tempo or a feel before committing chords.
     if (!bars().some((b) => b.slots.some(Boolean)) && !state.metronome) {
-      toast('Timeline is empty — add chords, or switch the metronome on.');
+      toast(t('Timeline is empty — add chords, or switch the metronome on.'));
     }
     sequencer.start();
     state.playing = true;
@@ -641,7 +656,7 @@ function applyDegrees(degrees, seventh, mode = null) {
   setBars(nextBars, size);
   state.activeTab = 'timeline';
   render();
-  toast(`Loaded ${degrees.length} chords into ${size} bars.`);
+  toast(t('Loaded {chords} chords into {bars} bars.', { chords: degrees.length, bars: size }));
 }
 
 /**
@@ -689,27 +704,27 @@ function render() {
 function renderTabs() {
   const bar = $('tabbar');
   bar.replaceChildren();
-  for (const t of TABS) {
-    const active = t.id === state.activeTab;
+  for (const tab of TABS) {
+    const active = tab.id === state.activeTab;
     const b = el('button', active ? 'active' : '');
-    b.appendChild(glyph(t.glyph, active));
-    b.appendChild(el('span', '', t.label));
+    b.appendChild(glyph(tab.glyph, active));
+    b.appendChild(el('span', '', t(tab.label)));
     b.onclick = () => {
       // Holding a microphone open on a screen you have navigated away from is
       // both a battery drain and a thing users are right to distrust.
-      if (state.activeTab === 'tuner' && t.id !== 'tuner') {
+      if (state.activeTab === 'tuner' && tab.id !== 'tuner') {
         if (state.tunerOn) stopTuner();
         // A held reference tone would otherwise drone under every other screen.
         stopReference();
       }
-      state.activeTab = t.id;
+      state.activeTab = tab.id;
       render();
     };
     bar.appendChild(b);
   }
-  for (const t of TABS) {
-    const panel = $(`tab-${t.id}`);
-    if (panel) panel.hidden = t.id !== state.activeTab;
+  for (const tab of TABS) {
+    const panel = $(`tab-${tab.id}`);
+    if (panel) panel.hidden = tab.id !== state.activeTab;
   }
 }
 
@@ -740,14 +755,14 @@ function renderTransport() {
   const led = $('armedLed');
   led.classList.toggle('armed', engine.ready && !audioError);
   led.title = audioError
-    ? `Audio unavailable — ${audioError}`
+    ? t('Audio unavailable — {error}', { error: audioError })
     : engine.ready
-      ? 'Audio engine ready'
-      : 'Tap anything to start audio';
+      ? t('Audio engine ready')
+      : t('Tap anything to start audio');
 
   const play = $('playBtn');
   play.classList.toggle('playing', sequencer.playing);
-  play.setAttribute('aria-label', sequencer.playing ? 'Stop' : 'Play');
+  play.setAttribute('aria-label', sequencer.playing ? t('Stop') : t('Play'));
 
   $('bpmValue').textContent = state.bpm;
   const bpm = $('bpm');
@@ -858,13 +873,13 @@ function renderCircle() {
     const grade = gradeAt.get(`${note}:maj`);
     if (grade) {
       const g = el('i', `grade fn-${grade.fn.toLowerCase()}`, grade.numeral);
-      g.title = `${grade.chord.symbol} — ${functionLabel(grade.fn)}`;
+      g.title = `${grade.chord.symbol} — ${t(functionLabel(grade.fn))}`;
       outer.appendChild(g);
     }
     const gradeMinor = gradeAt.get(`${minorNote}:min`);
     if (gradeMinor) {
       const g = el('i', `grade fn-${gradeMinor.fn.toLowerCase()}`, gradeMinor.numeral);
-      g.title = `${gradeMinor.chord.symbol} — ${functionLabel(gradeMinor.fn)}`;
+      g.title = `${gradeMinor.chord.symbol} — ${t(functionLabel(gradeMinor.fn))}`;
       inner.appendChild(g);
     }
   });
@@ -880,7 +895,9 @@ function renderCircle() {
 
   const lock = $('lockBtn');
   lock.setAttribute('aria-pressed', String(state.rootLocked));
-  lock.textContent = state.rootLocked ? '🔒 Key Locked — tap wheel to explore' : '🔓 Lock Key to Explore';
+  lock.textContent = state.rootLocked
+    ? t('🔒 Key Locked — tap wheel to explore')
+    : t('🔓 Lock Key to Explore');
 
   // The chord/note choice only means anything while locked, so it appears with
   // the mode it belongs to instead of sitting there inert.
@@ -890,7 +907,7 @@ function renderCircle() {
   $('exploreModeRow').hidden = false;
   const modeBtns = $('exploreModeBtns');
   modeBtns.replaceChildren();
-  for (const [id, label] of [['chord', 'Chord'], ['note', 'Note']]) {
+  for (const [id, label] of [['chord', t('Chord')], ['note', t('Note')]]) {
     const b = el('button', `chip small grow${state.exploreMode === id ? ' active' : ''}`, label);
     b.setAttribute('aria-pressed', String(state.exploreMode === id));
     b.onclick = () => {
@@ -919,7 +936,9 @@ function renderCircle() {
       el('span', 'strip-note', noteName(pc, preferFlats())),
       el('span', 'strip-grade', chord.numeral)
     );
-    b.title = `${noteName(pc, preferFlats())} — degree ${i + 1} of the key (${chord.numeral})`;
+    b.title = t('{note} — degree {n} of the key ({numeral})', {
+      note: noteName(pc, preferFlats()), n: i + 1, numeral: chord.numeral,
+    });
     b.onclick = async () => {
       if (!(await ensureAudio())) return;
       // Always one note, whatever the wheel's Chord/Note switch says. This
@@ -1029,7 +1048,8 @@ function renderSecondaryDominants(posAt) {
     };
     row.appendChild(b);
   }
-  $('secDomHint').textContent = 'Tap one to hear it resolve. Each arrow points at the chord that chord pulls into.';
+  $('secDomHint').textContent =
+    t('Tap one to hear it resolve. Each arrow points at the chord that chord pulls into.');
 }
 
 /**
@@ -1062,8 +1082,13 @@ function exploreTarget() {
   const keyName = noteName(state.rootPc, flats);
   const text =
     degree >= 0
-      ? `${displayName} is the ${FUNCTION_NAMES[degree]} (${chords[degree].numeral}) of ${keyName} — a ${INTERVAL_NAMES[interval]} above the root.`
-      : `${displayName} sits a ${INTERVAL_NAMES[interval]} from ${keyName} — outside the current key, a borrowed or chromatic color.`;
+      ? t('{chord} is the {function} ({numeral}) of {key} — a {interval} above the root.', {
+          chord: displayName, function: FUNCTION_NAMES[degree],
+          numeral: chords[degree].numeral, key: keyName, interval: INTERVAL_NAMES[interval],
+        })
+      : t('{chord} sits a {interval} from {key} — outside the current key, a borrowed or chromatic color.', {
+          chord: displayName, interval: INTERVAL_NAMES[interval], key: keyName,
+        });
 
   return { note, chord, displayName, text };
 }
@@ -1152,7 +1177,7 @@ function renderTone() {
   ];
   for (const d of defs) {
     const row = el('div', 'slider-row');
-    const lab = el('label', '', d.label);
+    const lab = el('label', '', t(d.label));
     const input = document.createElement('input');
     input.type = 'range';
     input.min = d.min; input.max = d.max; input.step = d.step; input.value = d.value;
@@ -1172,25 +1197,25 @@ function renderTone() {
 
   const retrigger = $('retriggerBtn');
   retrigger.setAttribute('aria-pressed', String(state.cutOnRetrigger));
-  retrigger.textContent = state.cutOnRetrigger ? 'On' : 'Off';
+  retrigger.textContent = state.cutOnRetrigger ? t('On') : t('Off');
 
   const lenRow = $('previewLengthRow');
   lenRow.replaceChildren();
   const { beats } = parseTimeSig(state.timeSig);
   for (let n = 1; n <= 4; n++) {
     const isBar = n >= beats;
-    const b = el('button', `chip small${state.previewBeats === n ? ' active' : ''}`, isBar ? '1 bar' : `${n}`);
-    b.title = isBar ? 'Play a full bar' : `Play ${n} beat${n > 1 ? 's' : ''}`;
+    const b = el('button', `chip small${state.previewBeats === n ? ' active' : ''}`, isBar ? t('1 bar') : `${n}`);
+    b.title = isBar ? t('Play a full bar') : plural(n, 'Play {n} beat', 'Play {n} beats');
     b.onclick = () => { state.previewBeats = n; renderTone(); previewDegree(state.activeDegree); };
     lenRow.appendChild(b);
   }
 
   const sel = $('tuningSelect');
   if (!sel.options.length) {
-    for (const [id, t] of Object.entries(TUNINGS)) {
+    for (const [id, tuning] of Object.entries(TUNINGS)) {
       const o = document.createElement('option');
       o.value = id;
-      o.textContent = t.label;
+      o.textContent = tuning.label;
       sel.appendChild(o);
     }
     sel.onchange = () => {
@@ -1230,14 +1255,18 @@ const KEYBOARD_RHYTHMS = RHYTHMS.filter((r) => r.tag === 'keys').map((r) => r.id
 
 function renderRhythms() {
   const sel = $('rhythmFamilySelect');
-  if (!sel.options.length) {
-    const all = el('option', '', `All feels (${RHYTHMS.length})`);
+  if (!sel.options.length || sel.dataset.lang !== lang()) {
+    sel.replaceChildren();
+    sel.dataset.lang = lang();
+    const all = el('option', '', t('All feels ({n})', { n: RHYTHMS.length }));
     all.value = 'All';
     sel.appendChild(all);
     for (const f of RHYTHM_FAMILIES) {
       const n = RHYTHMS.filter((r) => f.tags.includes(r.tag)).length;
       if (!n) continue;
-      const o = el('option', '', `${f.label} (${n})`);
+      // The value stays the English label so a language change does not orphan
+      // the current selection.
+      const o = el('option', '', `${t(f.label)} (${n})`);
       o.value = f.label;
       sel.appendChild(o);
     }
@@ -1262,7 +1291,7 @@ function renderRhythms() {
       const b = el('button', `rhythm-btn${state.rhythm === r.id ? ' active' : ''}`);
       const range = patternTempo(r.id);
       b.append(el('span', 'name', r.label), el('span', 'tag', range ? `${range[0]}–${range[1]} BPM` : r.tag));
-      if (range) b.title = `Written for ${range[0]}–${range[1]} BPM`;
+      if (range) b.title = t('Written for {lo}–{hi} BPM', { lo: range[0], hi: range[1] });
       b.onclick = () => {
         state.rhythm = r.id;
         // Each pattern has its own idea of how much it swings, so a new choice
@@ -1295,8 +1324,8 @@ function renderFeel() {
 
   $('rhythmNowPlaying').textContent = current ? current.label : state.rhythm;
   $('rhythmTempoHint').textContent = range
-    ? `written for ${range[0]}–${range[1]} BPM`
-    : 'any tempo';
+    ? t('written for {lo}–{hi} BPM', { lo: range[0], hi: range[1] })
+    : t('any tempo');
 
   // Suggest the tempo; never move the transport without being asked.
   const setBtn = $('setTempoBtn');
@@ -1304,8 +1333,10 @@ function renderFeel() {
   setBtn.hidden = inRange;
   if (!inRange) {
     const target = Math.round((range[0] + range[1]) / 2);
-    setBtn.textContent = `Set ${target} BPM`;
-    setBtn.title = `You are at ${state.bpm}; this feel is written for ${range[0]}–${range[1]}`;
+    setBtn.textContent = t('Set {bpm} BPM', { bpm: target });
+    setBtn.title = t('You are at {bpm}; this feel is written for {lo}–{hi}', {
+      bpm: state.bpm, lo: range[0], hi: range[1],
+    });
     setBtn.onclick = () => {
       state.bpm = target;
       renderTransport();
@@ -1343,7 +1374,9 @@ function renderFeel() {
 
   const human = $('humanizeSlider');
   human.value = state.humanize;
-  $('humanizeOut').textContent = state.humanize ? `${Math.round(state.humanize * 100)}%` : 'machine';
+  $('humanizeOut').textContent = state.humanize
+    ? `${Math.round(state.humanize * 100)}%`
+    : t('machine');
   human.oninput = () => {
     state.humanize = Number(human.value);
     renderFeel();
@@ -1402,12 +1435,12 @@ function renderDrums() {
   for (const id of ['drumsBtn', 'drumsQuickBtn']) {
     const b = $(id);
     b.setAttribute('aria-pressed', String(state.drumsOn));
-    if (id === 'drumsBtn') b.textContent = state.drumsOn ? 'On' : 'Off';
+    if (id === 'drumsBtn') b.textContent = state.drumsOn ? t('On') : t('Off');
   }
 
   const fills = $('drumFillBtn');
   fills.setAttribute('aria-pressed', String(state.drumFills));
-  fills.textContent = state.drumFills ? 'On' : 'Off';
+  fills.textContent = state.drumFills ? t('On') : t('Off');
 
   const kitSel = $('drumKitSelect');
   if (!kitSel.options.length) {
@@ -1457,7 +1490,7 @@ function renderDrums() {
     const lane = pattern.lanes[voice.id] || new Array(pattern.steps).fill(0);
 
     const name = el('button', 'seq-name', voice.label);
-    name.title = `Preview ${voice.label}`;
+    name.title = t('Preview {voice}', { voice: voice.label });
     name.onclick = async () => {
       if (!(await ensureAudio())) return;
       engine.drums.hit(voice.id, engine.currentTime + 0.02, 0.9);
@@ -1470,7 +1503,7 @@ function renderDrums() {
       cell.dataset.step = String(i);
       cell.dataset.voice = voice.id;
       if (vel) cell.dataset.level = vel >= 9 ? 'hard' : vel >= 6 ? 'med' : 'soft';
-      cell.setAttribute('aria-label', `${voice.label} step ${i + 1}`);
+      cell.setAttribute('aria-label', t('{voice} step {n}', { voice: voice.label, n: i + 1 }));
       cell.onclick = async () => {
         lane[i] = nextStepLevel(lane[i]);
         pattern.lanes[voice.id] = lane;
@@ -1485,7 +1518,7 @@ function renderDrums() {
     grid.appendChild(row);
 
     const clear = el('button', 'seq-clear', '✕');
-    clear.title = `Clear ${voice.label}`;
+    clear.title = t('Clear {voice}', { voice: voice.label });
     clear.onclick = () => { pattern.lanes[voice.id] = new Array(pattern.steps).fill(0); renderDrums(); };
     grid.appendChild(clear);
   }
@@ -1568,7 +1601,7 @@ function renderChordBuilder() {
   sizeRow.replaceChildren();
   for (const [size, label, title] of CHORD_SIZE_LABELS) {
     const b = el('button', `chip small${spec.size === size ? ' active' : ''}`, label);
-    b.title = title;
+    b.title = t(title);
     b.onclick = () => {
       setDegreeSpec(state.activeDegree, { size });
       state.voicingIndex = 0;
@@ -1602,7 +1635,9 @@ function renderChordBuilder() {
     const on = spec.alterations.includes(a.id);
     const b = el('button', `chip small${on ? ' active' : ''}`, a.label);
     b.disabled = !canAlter;
-    b.title = canAlter ? `Add a ${a.label}` : 'Alterations need a seventh — pick 7 or larger first.';
+    b.title = canAlter
+      ? t('Add a {alteration}', { alteration: a.label })
+      : t('Alterations need a seventh — pick 7 or larger first.');
     if (on) { b.style.background = 'var(--c)'; b.style.borderColor = 'var(--c)'; }
     b.onclick = () => {
       const alterations = on
@@ -1622,7 +1657,7 @@ function renderChordBuilder() {
   const anyVaried = Array.from({ length: 7 }, (_, d) => degreeIsVaried(d)).some(Boolean);
   const resetRow = $('chordResetRow');
   resetRow.replaceChildren();
-  const one = el('button', 'chip small', 'Reset this chord');
+  const one = el('button', 'chip small', t('Reset this chord'));
   one.disabled = !varied;
   one.onclick = () => {
     setDegreeSpec(state.activeDegree, null);
@@ -1630,7 +1665,7 @@ function renderChordBuilder() {
     render();
     previewDegree(state.activeDegree);
   };
-  const all = el('button', 'chip small', 'Reset all');
+  const all = el('button', 'chip small', t('Reset all'));
   all.disabled = !anyVaried;
   all.onclick = () => {
     state.degreeSpec = {};
@@ -1642,8 +1677,11 @@ function renderChordBuilder() {
 
   $('chordBuilderHint').textContent = describeSpec(state.rootPc, modeId(), spec);
   const sc = scaleForChord(spec, state.rootPc, modeId());
-  const avoid = sc.avoidPc === null ? '' : ` Careful with ${noteName(sc.avoidPc, preferFlats())}.`;
-  $('chordScaleHint').textContent = `Solo with ${sc.name}. ${sc.why}${avoid}`;
+  const avoid = sc.avoidPc === null
+    ? ''
+    : ` ${t('Careful with {note}.', { note: noteName(sc.avoidPc, preferFlats()) })}`;
+  $('chordScaleHint').textContent =
+    `${t('Solo with {scale}.', { scale: sc.name })} ${sc.why}${avoid}`;
 }
 
 function renderDiagram(chord) {
@@ -1654,13 +1692,13 @@ function renderDiagram(chord) {
   const list = voicingList(chord);
   const v = list.length ? list[state.voicingIndex % list.length] : null;
   if (!v) {
-    const t = document.createElementNS(NS, 'text');
-    t.setAttribute('x', '140'); t.setAttribute('y', '105');
-    t.setAttribute('text-anchor', 'middle');
-    t.setAttribute('fill', themeColor('fret-text'));
-    t.setAttribute('font-size', '13');
-    t.textContent = 'No playable shape';
-    svg.appendChild(t);
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', '140'); label.setAttribute('y', '105');
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('fill', themeColor('fret-text'));
+    label.setAttribute('font-size', '13');
+    label.textContent = t('No playable shape');
+    svg.appendChild(label);
     $('positionLabel').textContent = '—';
     $('shapeLabel').textContent = '';
     return;
@@ -1680,15 +1718,15 @@ function renderDiagram(chord) {
     svg.appendChild(l);
   };
   const text = (x, y, str, opts = {}) => {
-    const t = document.createElementNS(NS, 'text');
-    t.setAttribute('x', x); t.setAttribute('y', y);
-    t.setAttribute('text-anchor', 'middle');
-    t.setAttribute('font-family', 'IBM Plex Mono, monospace');
-    t.setAttribute('font-size', opts.size || 10);
-    t.setAttribute('font-weight', '600');
-    t.setAttribute('fill', opts.fill || themeColor('fret-ink'));
-    t.textContent = str;
-    svg.appendChild(t);
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', x); label.setAttribute('y', y);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-family', 'IBM Plex Mono, monospace');
+    label.setAttribute('font-size', opts.size || 10);
+    label.setAttribute('font-weight', '600');
+    label.setAttribute('fill', opts.fill || themeColor('fret-ink'));
+    label.textContent = str;
+    svg.appendChild(label);
   };
 
   FRET_Y.forEach((y, i) => line(20, y, 260, y, themeColor('fret-line'), i === 0 && position === 0 ? 3 : 1));
@@ -1713,7 +1751,8 @@ function renderDiagram(chord) {
     text(STRING_X[s], 206, midiToName(m, preferFlats()), { size: 9, fill: themeColor('fret-text') });
   });
 
-  $('positionLabel').textContent = position === 0 ? 'Open Position' : `Position — ${position}fr`;
+  $('positionLabel').textContent =
+    position === 0 ? t('Open Position') : t('Position — {fret}fr', { fret: position });
   $('shapeLabel').textContent = `${voicingToString(v)}  ·  ${state.voicingIndex % list.length + 1}/${list.length}`;
 }
 
@@ -1745,10 +1784,10 @@ function renderSectionTabs() {
     const b = el('button', `chip small${active ? ' active' : ''}${queued ? ' queued' : ''}`);
     b.append(el('span', '', sec.name));
     b.append(el('span', 'tag', `${filled}/${sec.barCount}`));
-    b.title = queued ? 'Starts at the next bar' : `Loop ${sec.name}`;
+    b.title = queued ? t('Starts at the next bar') : t('Loop {name}', { name: sec.name });
     b.onclick = () => selectSection(i);
     b.ondblclick = () => {
-      const name = prompt('Loop name', sec.name);
+      const name = prompt(t('Loop name'), sec.name);
       if (name) { sec.name = name.slice(0, 12); renderTimeline(); }
     };
     tabs.appendChild(b);
@@ -1782,7 +1821,7 @@ function renderTimeline() {
       s.setAttribute('role', 'button');
       s.append(
         el('span', 'main', slot ? slot.label : '+'),
-        el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : `Bar ${idx + 1}`)
+        el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : t('Bar {n}', { n: idx + 1 }))
       );
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('dragover'); };
       s.ondragleave = () => s.classList.remove('dragover');
@@ -1799,7 +1838,7 @@ function renderTimeline() {
       }
       if (slot) {
         const x = el('button', 'clear', '✕');
-        x.title = 'Clear';
+        x.title = t('Clear');
         x.onclick = (e) => { e.stopPropagation(); clearSlot(idx, slotIdx); };
         s.appendChild(x);
         // How far the hand travels to reach this chord from the one before it.
@@ -1810,8 +1849,8 @@ function renderTimeline() {
           const move = Math.max(0, Math.round(voiceLeadCost(prev.voicing, slot.voicing)));
           const tag = el('span', `move${move > 9 ? ' far' : ''}`, `↔${move}`);
           tag.title = move > 9
-            ? 'A big jump from the previous chord — try Smooth voicings.'
-            : 'Fret movement from the previous chord.';
+            ? t('A big jump from the previous chord — try Smooth voicings.')
+            : t('Fret movement from the previous chord.');
           s.appendChild(tag);
         }
       }
@@ -1820,7 +1859,7 @@ function renderTimeline() {
 
     if (n === 1) {
       const add = el('button', 'add-half', '+');
-      add.title = 'Split bar into two chords';
+      add.title = t('Split bar into two chords');
       add.onclick = () => addHalfBar(idx);
       inner.appendChild(add);
     }
@@ -1920,7 +1959,9 @@ function renderAnalysis() {
   for (const n of a.notes) notes.appendChild(el('li', n.level, n.text));
 
   const cost = progressionCost(list.map((e) => e.slot.voicing).filter(Boolean));
-  notes.appendChild(el('li', 'idea', `Total fret movement across the loop: ${cost}.`));
+  notes.appendChild(
+    el('li', 'idea', t('Total fret movement across the loop: {cost}.', { cost }))
+  );
 }
 
 function openPicker(barIdx, slotIdx) {
@@ -1952,7 +1993,12 @@ function renderPicker() {
   const slot = bar.slots[slotIdx];
   const role = section().role || 'verse';
   $('pickerTitle').textContent =
-    bar.slots.length === 2 ? `BAR ${barIdx + 1} · ${slotIdx === 0 ? 'FIRST' : 'SECOND'} HALF` : `BAR ${barIdx + 1}`;
+    bar.slots.length === 2
+      ? t('BAR {n} · {half} HALF', {
+          n: barIdx + 1,
+          half: slotIdx === 0 ? t('FIRST') : t('SECOND'),
+        })
+      : t('BAR {n}', { n: barIdx + 1 });
 
   // Everything written before this position is the context for the suggestion.
   const list = filledSlots();
@@ -2007,8 +2053,8 @@ function renderPicker() {
   const reset = $('pickerResetBtn');
   reset.disabled = !slot.override;
   reset.title = slot.override
-    ? 'Drop this bar\'s own setting and follow the chord variation from Compose.'
-    : 'This bar already follows the chord variation set in Compose.';
+    ? t('Drop this bar’s own setting and follow the chord variation from Compose.')
+    : t('This bar already follows the chord variation set in Compose.');
 
   const sizeRow = $('pickerSizeRow');
   sizeRow.replaceChildren();
@@ -2027,7 +2073,9 @@ function renderPicker() {
   for (const c of CHORD_COLOURS) {
     const on = (spec.colour ?? null) === c.id;
     const b = el('button', `chip small${on ? ' active' : ''}${idiomatic.has(c.id) ? ' idiomatic' : ''}`, c.label);
-    b.title = idiomatic.has(c.id) ? `${c.hint} — idiomatic on this degree.` : c.hint;
+    b.title = idiomatic.has(c.id)
+      ? t('{hint} — idiomatic on this degree.', { hint: c.hint })
+      : c.hint;
     b.onclick = () => {
       setSlotSpec(barIdx, slotIdx, { ...spec, colour: on ? null : c.id });
       previewSlot(barIdx, slotIdx);
@@ -2053,7 +2101,8 @@ function renderPicker() {
   }
 
   const sc = scaleForChord(spec, state.rootPc, modeId());
-  $('pickerHint').textContent = `${describeSpec(state.rootPc, modeId(), spec)} Solo with ${sc.name}.`;
+  $('pickerHint').textContent =
+    `${describeSpec(state.rootPc, modeId(), spec)} ${t('Solo with {scale}.', { scale: sc.name })}`;
 }
 
 function setSlotSpec(barIdx, slotIdx, spec) {
@@ -2129,8 +2178,8 @@ function chipRow(id, items, current, onPick) {
   if (!row) return;
   row.replaceChildren();
   for (const it of items) {
-    const b = el('button', `chip small${it.value === current ? ' active' : ''}`, it.label);
-    if (it.title) b.title = it.title;
+    const b = el('button', `chip small${it.value === current ? ' active' : ''}`, t(it.label));
+    if (it.title) b.title = t(it.title);
     b.onclick = () => onPick(it.value);
     row.appendChild(b);
   }
@@ -2278,26 +2327,28 @@ function renderTuner() {
   const inst = INSTRUMENT_BY_ID[state.tunerInstrument] || INSTRUMENTS[0];
   const tunSel = $('tunerTuning');
   tunSel.replaceChildren();
-  for (const t of inst.tunings) {
+  for (const tuning of inst.tunings) {
     // The pill is narrow, so it carries the tuning's name without the spelling.
-    const o = el('option', '', t.label.split('—')[0].trim().toUpperCase());
-    o.value = t.id;
-    o.title = t.label;
+    const o = el('option', '', tuning.label.split('—')[0].trim().toUpperCase());
+    o.value = tuning.id;
+    o.title = tuning.label;
     tunSel.appendChild(o);
   }
   const tuning = findTuning(state.tunerInstrument, state.tunerTuning);
   tunSel.value = tuning.id;
 
-  $('tunerA4Label').textContent = `A4 = ${state.tunerA4} Hz`;
+  $('tunerA4Label').textContent = t('A4 = {hz} Hz', { hz: state.tunerA4 });
 
   const autoBtn = $('tunerAutoBtn');
   const auto = state.tunerMode === 'auto';
   autoBtn.setAttribute('aria-pressed', String(auto));
   autoBtn.classList.toggle('on', auto);
-  autoBtn.textContent = auto ? 'AUTO' : `MANUAL · ${midiLabel(state.tunerTarget ?? tuning.notes[0])}`;
+  autoBtn.textContent = auto
+    ? t('AUTO')
+    : t('MANUAL · {note}', { note: midiLabel(state.tunerTarget ?? tuning.notes[0]) });
   autoBtn.title = auto
-    ? 'Follows whichever string of the tuning is nearest to what it hears'
-    : 'Stays on the pinned string, however far out it is';
+    ? t('Follows whichever string of the tuning is nearest to what it hears')
+    : t('Stays on the pinned string, however far out it is');
 
   buildDialTicks();
   $('tunerTrack').setAttribute('d', dialArc(-50, 50, DIAL.r));
@@ -2344,7 +2395,7 @@ function renderTuner() {
 
   chipRow(
     'tunerRefRow',
-    TUNER_REFS.map((r) => ({ label: r.label, value: r.id, title: r.note })),
+    TUNER_REFS.map((r) => ({ label: t(r.label), value: r.id, title: t(r.note) })),
     state.tunerRef,
     (v) => {
       stopReference();
@@ -2401,20 +2452,21 @@ function renderTuner() {
     }
   );
 
-  $('tunerOptNote').textContent = (TUNER_REF_BY_ID[state.tunerRef] || TUNER_REFS[0]).note;
+  $('tunerOptNote').textContent = t((TUNER_REF_BY_ID[state.tunerRef] || TUNER_REFS[0]).note);
 
   const blocked = micBlockedByHost();
   const btn = $('tunerMicBtn');
   btn.setAttribute('aria-pressed', String(state.tunerOn));
   btn.classList.toggle('on', state.tunerOn);
   btn.disabled = blocked;
-  $('tunerMicLabel').textContent = state.tunerOn ? 'STOP LISTENING' : 'START LISTENING';
+  $('tunerMicLabel').textContent = state.tunerOn ? t('STOP LISTENING') : t('START LISTENING');
   $('tunerMicNote').textContent = blocked
-    ? 'Listening is unavailable here — the page CircleSong is embedded in withholds the microphone.'
-    : 'Uses the microphone. Nothing is recorded or sent anywhere.';
+    ? t('Listening is unavailable here — the page CircleSong is embedded in withholds the microphone.')
+    : t('Uses the microphone. Nothing is recorded or sent anywhere.');
   if (blocked && !state.tunerError) {
-    state.tunerError =
-      'Open CircleSong at its own address to listen. Tap a string to hear its exact pitch and tune by ear — that works anywhere.';
+    state.tunerError = t(
+      'Open CircleSong at its own address to listen. Tap a string to hear its exact pitch and tune by ear — that works anywhere.'
+    );
   }
 
   const err = $('tunerError');
@@ -2449,8 +2501,8 @@ function renderTunerReadout() {
 
   if (idle) {
     note.textContent = state.tunerTarget !== null ? midiLabel(state.tunerTarget) : '—';
-    cents.textContent = state.tunerOn ? 'listening' : '';
-    $('tunerFreq').textContent = 'Freq: —';
+    cents.textContent = state.tunerOn ? t('listening') : '';
+    $('tunerFreq').textContent = t('Freq: —');
     $('tunerSignal').textContent = state.tunerOn ? `${Math.round((r && r.level ? r.level : 0) * 400)}%` : '—';
     stateEl.textContent = state.tunerOn ? 'WAITING' : 'OFF';
     arc.setAttribute('d', '');
@@ -2461,9 +2513,10 @@ function renderTunerReadout() {
   const c = Math.max(-50, Math.min(50, r.cents));
   note.textContent = midiLabel(r.midi);
   cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
-  $('tunerFreq').textContent = `Freq: ${r.freq.toFixed(1)}Hz`;
+  $('tunerFreq').textContent = t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
   $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
-  stateEl.textContent = r.state === 'locked' ? 'LOCKED' : r.state === 'flat' ? 'FLAT' : 'SHARP';
+  stateEl.textContent =
+    r.state === 'locked' ? t('LOCKED') : r.state === 'flat' ? t('FLAT') : t('SHARP');
 
   // Fill from dead centre out to wherever the note actually is, so the arc
   // itself shows how far off it is rather than only the pointer.
@@ -2511,20 +2564,22 @@ async function toggleTuner() {
   }
   state.tunerError = '';
   if (!(await ensureAudio())) {
-    state.tunerError = 'Audio could not start, so the tuner cannot listen.';
+    state.tunerError = t('Audio could not start, so the tuner cannot listen.');
     renderTuner();
     return;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    state.tunerError = 'This browser does not offer microphone access to the page.';
+    state.tunerError = t('This browser does not offer microphone access to the page.');
     renderTuner();
     return;
   }
   if (micBlockedByHost()) {
     state.tunerError =
-      'The page CircleSong is embedded in has not granted it the microphone, so it cannot even ask. '
-      + 'Open CircleSong from its own address — the installed app, or the copy served from GitHub — and listening will work. '
-      + 'Meanwhile you can tune by ear: tap a string above to hear its exact pitch.';
+      t('The page CircleSong is embedded in has not granted it the microphone, so it cannot even ask.')
+      + ' '
+      + t('Open CircleSong from its own address — the installed app, or the copy served from GitHub — and listening will work.')
+      + ' '
+      + t('Meanwhile you can tune by ear: tap a string above to hear its exact pitch.');
     renderTuner();
     return;
   }
@@ -2550,10 +2605,12 @@ async function toggleTuner() {
     state.tunerOn = false;
     state.tunerError =
       e && e.name === 'NotAllowedError'
-        ? 'Microphone access was refused. Allow it for this page in your browser\u2019s site settings, then switch Listen on again. You can tune by ear in the meantime — tap a string above to hear its pitch.'
+        ? t('Microphone access was refused. Allow it for this page in your browser\u2019s site settings, then switch Listen on again. You can tune by ear in the meantime — tap a string above to hear its pitch.')
         : e && e.name === 'NotFoundError'
-          ? 'No microphone was found on this device. Tap a string above to hear its pitch and tune by ear.'
-          : `The microphone could not be opened — ${e && e.message ? e.message : 'unknown error'}.`;
+          ? t('No microphone was found on this device. Tap a string above to hear its pitch and tune by ear.')
+          : t('The microphone could not be opened — {error}.', {
+              error: e && e.message ? e.message : t('unknown error'),
+            });
   }
   renderTuner();
 }
@@ -2577,44 +2634,111 @@ function renderTheme() {
   const row = $('themeRow');
   if (!row) return;
   row.replaceChildren();
-  for (const t of THEMES) {
-    const active = state.theme === t.id;
+  for (const theme of THEMES) {
+    const active = state.theme === theme.id;
     const b = el('button', `theme-btn${active ? ' active' : ''}`);
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(active));
-    b.title = t.note;
+    b.title = theme.note;
 
     const sw = el('span', 'theme-swatch');
-    sw.dataset.swatch = t.id;
+    sw.dataset.swatch = theme.id;
     // Three bands: page, panel, accent — the three decisions a theme makes.
     sw.append(el('i', 'sw-bg'), el('i', 'sw-panel'), el('i', 'sw-accent'));
 
-    b.append(sw, el('span', 'theme-name', t.label));
+    b.append(sw, el('span', 'theme-name', theme.label));
     b.onclick = () => {
-      state.theme = t.id;
-      applyTheme(t.id);
-      saveTheme(t.id);
+      state.theme = theme.id;
+      applyTheme(theme.id);
+      saveTheme(theme.id);
       // The wheel and the fretboard are painted from JavaScript, so they have
       // to be repainted rather than merely restyled.
       render();
     };
     row.appendChild(b);
   }
-  const chosen = THEMES.find((t) => t.id === state.theme) || THEMES[0];
+  const chosen = THEMES.find((theme) => theme.id === state.theme) || THEMES[0];
+  // Name the resolved theme with its own label rather than its id, so the
+  // sentence reads "Currently Dark." in every language without a second table
+  // of theme names to keep in step.
   const resolved = document.documentElement.dataset.theme;
+  const resolvedLabel = (THEMES.find((theme) => theme.id === resolved) || {}).label || resolved;
   $('themeNote').textContent =
-    state.theme === 'system' ? `${chosen.note} Currently ${resolved}.` : chosen.note;
+    state.theme === 'system'
+      ? `${chosen.note} ${t('Currently {theme}.', { theme: resolvedLabel })}`
+      : chosen.note;
+}
+
+/**
+ * The language picker, drawn into both places it appears — the sheet behind the
+ * globe and the row in Appearance — from one function, so they cannot disagree.
+ *
+ * Every entry is written in its own language and never only in English. That is
+ * the whole point: someone who has landed in a language they do not read has to
+ * recognise their own on sight, and "German" does not help them where "Deutsch"
+ * does.
+ */
+function renderLanguage() {
+  for (const id of ['langList', 'langRow']) {
+    const row = $(id);
+    if (!row) continue;
+    row.replaceChildren();
+    for (const info of LANGUAGES) {
+      const active = state.lang === info.id;
+      const b = el('button', `lang-btn${active ? ' active' : ''}`);
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(active));
+      b.lang = info.id;
+      b.append(
+        el('span', 'lang-native', info.native),
+        el('span', 'lang-english', info.english)
+      );
+      b.onclick = () => chooseLanguage(info.id);
+      row.appendChild(b);
+    }
+  }
+  const note = $('langNote');
+  if (note) {
+    note.textContent = t('Everything the app says, including the lessons and the progression notes.');
+  }
+}
+
+/**
+ * Switch language.
+ *
+ * Three things have to happen in this order: the lookup changes, the data
+ * tables are rewritten from their pristine English, and only then is anything
+ * drawn — a render against half-translated tables would show a mix.
+ */
+function chooseLanguage(id) {
+  // A song the user never named is a placeholder, not their words, so it
+  // follows the language. One they did name is theirs and is left alone.
+  const untitled = state.projectTitle === t('Untitled Song');
+  state.lang = setLanguage(id);
+  if (untitled) {
+    state.projectTitle = t('Untitled Song');
+    $('projectTitle').value = state.projectTitle;
+  }
+  saveLang(state.lang);
+  localiseTables();
+  translateDom();
+  // Selects are filled from the tables, and the tables have just changed.
+  fillStaticSelects();
+  render();
 }
 
 function renderSongs() {
   renderTheme();
+  renderLanguage();
   const secs = state.sections.length;
   const filled = state.sections.reduce(
     (n, sec) => n + sec.bars.filter((b) => b.slots.some(Boolean)).length,
     0
   );
   $('songsCurrent').textContent =
-    `${state.projectTitle} · ${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]} · ${state.bpm} BPM · ${secs} loop${secs === 1 ? '' : 's'} · ${filled} bars written`;
+    `${state.projectTitle} · ${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`
+    + ` · ${state.bpm} BPM · ${plural(secs, '{n} loop', '{n} loops')}`
+    + ` · ${plural(filled, '{n} bar written', '{n} bars written')}`;
 
 
   $('saveProjectBtn').disabled = !storageAvailable();
@@ -2629,18 +2753,22 @@ function renderSongs() {
     const info = el('div', 'project-info');
     info.append(
       el('span', 'project-title', p.title),
-      el('span', 'project-meta', `${p.key || ''} · ${p.bpm || '?'} BPM · ${p.sections || 1} loop${p.sections === 1 ? '' : 's'} · ${timeAgo(p.savedAt)}`)
+      el(
+        'span',
+        'project-meta',
+        `${p.key || ''} · ${p.bpm || '?'} BPM · ${plural(p.sections || 1, '{n} loop', '{n} loops')} · ${timeAgo(p.savedAt)}`
+      )
     );
     const actions = el('div', 'row gap-xs');
-    const open = el('button', 'chip small', 'Open');
+    const open = el('button', 'chip small', t('Open'));
     open.onclick = () => openProject(p.id);
-    const del = el('button', 'chip small', 'Delete');
+    const del = el('button', 'chip small', t('Delete'));
     del.onclick = () => {
-      if (!confirm(`Delete “${p.title}”? This cannot be undone.`)) return;
+      if (!confirm(t('Delete “{name}”? This cannot be undone.', { name: p.title }))) return;
       deleteProject(p.id);
       if (state.projectId === p.id) state.projectId = null;
       renderSongs();
-      toast('Project deleted.');
+      toast(t('Project deleted.'));
     };
     actions.append(open, del);
     row.append(info, actions);
@@ -2649,33 +2777,35 @@ function renderSongs() {
 }
 
 function timeAgo(ts) {
-  if (!ts) return 'saved';
+  if (!ts) return t('saved');
   const secs = Math.max(0, (Date.now() - ts) / 1000);
-  if (secs < 60) return 'just now';
-  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)} h ago`;
-  return new Date(ts).toLocaleDateString();
+  if (secs < 60) return t('just now');
+  if (secs < 3600) return t('{n} min ago', { n: Math.floor(secs / 60) });
+  if (secs < 86400) return t('{n} h ago', { n: Math.floor(secs / 3600) });
+  // The date itself is a locale matter rather than a translation one, so it is
+  // formatted for the chosen language and not for the device's.
+  return new Date(ts).toLocaleDateString(lang());
 }
 
 function openProject(id) {
   const data = loadProject(id);
-  if (!data) { toast('That project could not be read.', true); return; }
+  if (!data) { toast(t('That project could not be read.'), true); return; }
   applySongData(data);
   state.projectId = id;
   render();
-  toast(`Opened “${state.projectTitle}”.`);
+  toast(t('Opened “{name}”.', { name: state.projectTitle }));
 }
 
 function doSaveProject(asNew = false) {
   if (!storageAvailable()) {
-    toast('This browser will not let the app save locally.', true);
+    toast(t('This browser will not let the app save locally.'), true);
     return;
   }
   const result = saveProject(songData(), asNew ? null : state.projectId);
   if (result.error) { toast(result.error, true); return; }
   state.projectId = result.id;
   renderSongs();
-  toast(`Saved “${state.projectTitle}”.`);
+  toast(t('Saved “{name}”.', { name: state.projectTitle }));
 }
 
 function renderLearn() {
@@ -2709,16 +2839,16 @@ function renderLearn() {
 
   const q = state.quiz;
   $('quizScore').textContent = `${q.score} / ${q.total}`;
-  $('quizStreak').textContent = `Streak: ${q.streak} (best ${q.bestStreak})`;
+  $('quizStreak').textContent = t('Streak: {n} (best {best})', { n: q.streak, best: q.bestStreak });
 
   const dots = $('masteryDots');
   dots.replaceChildren();
   MODE_NAMES.forEach((label, i) => {
     const dot = el('i', q.mastered.includes(i) ? 'on' : '');
-    dot.title = `${label}${q.mastered.includes(i) ? ' — identified' : ''}`;
+    dot.title = q.mastered.includes(i) ? t('{mode} — identified', { mode: label }) : label;
     dots.appendChild(dot);
   });
-  $('quizStartBtn').textContent = q.modeIdx !== null ? '↻ New Round' : '▶ Start';
+  $('quizStartBtn').textContent = q.modeIdx !== null ? t('↻ New Round') : t('▶ Start');
   $('quizReplayBtn').hidden = q.modeIdx === null;
 
   const opts = $('quizOptions');
@@ -2735,7 +2865,9 @@ function renderLearn() {
     opts.appendChild(b);
   }
   $('quizFeedback').textContent = q.answered
-    ? q.correct ? 'Correct! 🎧' : `Not quite — that was ${MODE_NAMES[q.modeIdx]}`
+    ? q.correct
+      ? t('Correct! 🎧')
+      : t('Not quite — that was {mode}', { mode: MODE_NAMES[q.modeIdx] })
     : '';
 }
 
@@ -2812,8 +2944,8 @@ function renderAssist() {
   const keyName = `${noteName(state.rootPc, preferFlats())} ${MODE_NAMES[state.modeIdx]}`;
   $('assistKeyName').textContent = keyName;
   $('assistKeyLock').textContent = state.rootLocked
-    ? '🔒 locked — suggestions stay in this key'
-    : 'unlocked — a suggestion may bring its own mode';
+    ? t('🔒 locked — suggestions stay in this key')
+    : t('unlocked — a suggestion may bring its own mode');
   $('assistKeyBanner').classList.toggle('locked', state.rootLocked);
 
   const moodRow = $('moodRow');
@@ -2850,7 +2982,7 @@ function renderAssist() {
       const card = el('div', 'variant-card');
       const head = el('div', 'row between');
       head.append(el('span', 'label', v.label));
-      const apply = el('button', 'chip', 'Apply');
+      const apply = el('button', 'chip', t('Apply'));
       apply.onclick = () => applyDegrees(v.degrees, v.seventh);
       head.appendChild(apply);
       card.append(head);
@@ -2875,11 +3007,11 @@ function renderAssist() {
 function renderTemplateLibrary() {
   const sel = $('templateFamilySelect');
   if (!sel.options.length) {
-    const all = el('option', '', `All families (${TEMPLATES.length})`);
+    const all = el('option', '', t('All families ({n})', { n: TEMPLATES.length }));
     all.value = 'All';
     sel.appendChild(all);
     for (const fam of TEMPLATE_FAMILIES) {
-      const n = TEMPLATES.filter((t) => t.family === fam).length;
+      const n = TEMPLATES.filter((tpl) => tpl.family === fam).length;
       const o = el('option', '', `${fam} (${n})`);
       o.value = fam;
       sel.appendChild(o);
@@ -2899,92 +3031,99 @@ function renderTemplateLibrary() {
 
   const wanted = state.templateFamily && state.templateFamily !== 'All' ? state.templateFamily : null;
   const q = (state.templateSearch || '').trim().toLowerCase();
-  const matches = TEMPLATES.filter((t) => {
-    if (wanted && t.family !== wanted) return false;
+  const matches = TEMPLATES.filter((tpl) => {
+    if (wanted && tpl.family !== wanted) return false;
     if (!q) return true;
     // Search the words a person would actually reach for: the name, the family,
     // the numerals as displayed, and the songs it is known from.
     const hay = [
-      t.label,
-      t.family,
-      t.blurb,
-      numeralsFor(t.degrees, t.seventh, t.mode),
-      chordNamesFor(t.degrees, t.seventh, t.mode),
-      ...(t.songs || []),
+      tpl.label,
+      tpl.family,
+      tpl.blurb,
+      numeralsFor(tpl.degrees, tpl.seventh, tpl.mode),
+      chordNamesFor(tpl.degrees, tpl.seventh, tpl.mode),
+      ...(tpl.songs || []),
     ].join(' ').toLowerCase();
     return hay.includes(q);
   });
 
   $('templateCount').textContent =
-    `${matches.length} PROGRESSION${matches.length === 1 ? '' : 'S'}${q ? ` MATCHING “${state.templateSearch.trim()}”` : ''}`;
+    plural(matches.length, '{n} PROGRESSION', '{n} PROGRESSIONS') +
+    (q ? ` ${t('MATCHING “{query}”', { query: state.templateSearch.trim() })}` : '');
 
-  const tpl = $('templateList');
-  tpl.replaceChildren();
+  const list = $('templateList');
+  list.replaceChildren();
   if (!matches.length) {
-    tpl.appendChild(el('p', 'body-copy', 'Nothing matches that. Try a song name, a chord, or clear the search.'));
+    list.appendChild(
+      el('p', 'body-copy', t('Nothing matches that. Try a song name, a chord, or clear the search.'))
+    );
     return;
   }
 
-  for (const t of matches) {
-    const open = state.templateOpen === t.id;
-    const card = el('div', `template-card${open ? ' open' : ''}${state.templateId === t.id ? ' active' : ''}`);
+  for (const tpl of matches) {
+    const open = state.templateOpen === tpl.id;
+    const card = el('div', `template-card${open ? ' open' : ''}${state.templateId === tpl.id ? ' active' : ''}`);
 
     // The collapsed row: enough to recognise the progression, nothing more.
     const head = el('button', 'template-head');
     head.setAttribute('aria-expanded', String(open));
     head.append(
-      el('span', 'label', t.label),
-      el('span', 'template-numerals', numeralsFor(t.degrees, t.seventh, t.mode)),
+      el('span', 'label', tpl.label),
+      el('span', 'template-numerals', numeralsFor(tpl.degrees, tpl.seventh, tpl.mode)),
       el('span', 'caret', open ? '▾' : '▸')
     );
     head.onclick = () => {
-      state.templateOpen = open ? null : t.id;
+      state.templateOpen = open ? null : tpl.id;
       renderTemplateLibrary();
-      if (!open) previewProgression(t);
+      if (!open) previewProgression(tpl);
     };
     card.appendChild(head);
 
     if (open) {
       const body = el('div', 'template-body');
-      body.append(el('span', 'template-chords', chordNamesFor(t.degrees, t.seventh, t.mode)));
+      body.append(el('span', 'template-chords', chordNamesFor(tpl.degrees, tpl.seventh, tpl.mode)));
 
       // Name the mode it will actually be heard in, which is the locked one when
       // the key is locked — not the mode the template was written in.
-      const shownMode = suggestionMode(t.mode);
-      const recast = state.rootLocked && shownMode !== t.mode;
-      body.append(el('p', '', t.blurb));
+      const shownMode = suggestionMode(tpl.mode);
+      const recast = state.rootLocked && shownMode !== tpl.mode;
+      body.append(el('p', '', tpl.blurb));
       body.append(
         el(
           'span',
           'template-meta',
-          `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${recast ? ` (written in ${MODE_NAMES[MODE_IDS.indexOf(t.mode)]})` : ''} · ${t.degrees.length} bars · ${t.family}`
+          `${MODE_NAMES[MODE_IDS.indexOf(shownMode)]}${
+            recast
+              ? ` ${t('(written in {mode})', { mode: MODE_NAMES[MODE_IDS.indexOf(tpl.mode)] })}`
+              : ''
+          } · ${plural(tpl.degrees.length, '{n} bar', '{n} bars')} · ${tpl.family}`
         )
       );
 
       // Songs built on this progression. A roman numeral means little until you
       // recognise something you already know inside it, so where the source
       // names examples they are shown rather than kept in a data file.
-      if (t.songs && t.songs.length) {
+      if (tpl.songs && tpl.songs.length) {
         const songs = el('ul', 'song-list');
-        for (const s of t.songs) songs.appendChild(el('li', '', s));
-        body.append(el('span', 'micro-label', 'HEARD IN'), songs);
+        for (const s of tpl.songs) songs.appendChild(el('li', '', s));
+        body.append(el('span', 'micro-label', t('HEARD IN')), songs);
       }
 
       const actions = el('div', 'row gap-xs mt-s');
-      const hear = el('button', 'chip small', '▶ Hear it');
-      hear.onclick = () => previewProgression(t);
-      const apply = el('button', 'chip small filled-a', 'Apply to timeline');
+      const hear = el('button', 'chip small', t('▶ Hear it'));
+      hear.onclick = () => previewProgression(tpl);
+      const apply = el('button', 'chip small filled-a', t('Apply to timeline'));
       apply.onclick = () => {
-        state.templateId = t.id;
+        state.templateId = tpl.id;
         state.moodId = null;
-        applyDegrees(t.degrees, t.seventh, t.mode);
+        applyDegrees(tpl.degrees, tpl.seventh, tpl.mode);
       };
       actions.append(hear, apply);
       body.appendChild(actions);
       card.appendChild(body);
     }
 
-    tpl.appendChild(card);
+    list.appendChild(card);
   }
 }
 
@@ -2992,11 +3131,11 @@ function renderTemplateLibrary() {
  * Audition a progression without committing it — hear before you overwrite the
  * timeline. Chords are scheduled back to back at the current tempo.
  */
-async function previewProgression(t) {
+async function previewProgression(tpl) {
   if (!(await ensureAudio())) return;
-  if (sequencer.playing) { toast('Stop playback to preview a progression.'); return; }
+  if (sequencer.playing) { toast(t('Stop playback to preview a progression.')); return; }
 
-  const chords = chordsForSuggestion(t.degrees, t.seventh, t.mode).slice(0, 8);
+  const chords = chordsForSuggestion(tpl.degrees, tpl.seventh, tpl.mode).slice(0, 8);
   const dur = barDuration(state.timeSig, state.bpm);
   const t0 = auditionStart();
 
@@ -3014,7 +3153,7 @@ async function previewProgression(t) {
     });
   });
   engine.damp(t0 + chords.length * dur);
-  toast(`Previewing ${t.label} — tap Apply to keep it.`);
+  toast(t('Previewing {name} — tap Apply to keep it.', { name: tpl.label }));
 }
 
 // ------------------------------------------------------------ static wiring
@@ -3028,6 +3167,23 @@ function fillSelect(sel, labels, values) {
     o.textContent = label;
     sel.appendChild(o);
   });
+}
+
+/**
+ * The <select>s whose options come from a translated table.
+ *
+ * They are filled once at boot and again on a language change, rather than on
+ * every render, because refilling a select while it is open closes it.
+ */
+function fillStaticSelects() {
+  const timeSig = $('timeSigSelect');
+  const keep = timeSig.value;
+  fillSelect(timeSig, TIME_SIGS);
+  if (keep) timeSig.value = keep;
+
+  const modeSel = $('modeSelect');
+  fillSelect(modeSel, MODE_NAMES, MODE_NAMES.map((_, i) => i));
+  modeSel.value = String(state.modeIdx);
 }
 
 function wire() {
@@ -3044,7 +3200,6 @@ function wire() {
   // they open the platform picker on touch devices, and they are keyboard- and
   // screen-reader-accessible for free.
   const timeSig = $('timeSigSelect');
-  fillSelect(timeSig, TIME_SIGS);
   timeSig.onchange = () => {
     state.timeSig = timeSig.value;
     renderTransport();
@@ -3056,7 +3211,6 @@ function wire() {
   };
 
   const modeSel = $('modeSelect');
-  fillSelect(modeSel, MODE_NAMES, MODE_NAMES.map((_, i) => i));
   modeSel.onchange = () => {
     state.modeIdx = Number(modeSel.value);
     state.activeDegree = 0;
@@ -3114,6 +3268,20 @@ function wire() {
   overlay.onclick = (e) => { if (e.target === overlay) closeAbout(); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showAbout) closeAbout(); });
 
+  // Language sheet. Reachable from every tab, because the globe is in the
+  // transport bar rather than inside Settings.
+  const langOverlay = $('langOverlay');
+  const closeLang = () => { state.showLang = false; langOverlay.hidden = true; };
+  $('langBtn').onclick = () => {
+    state.showLang = true;
+    langOverlay.hidden = false;
+    renderLanguage();
+    $('langCloseBtn').focus();
+  };
+  $('langCloseBtn').onclick = closeLang;
+  langOverlay.onclick = (e) => { if (e.target === langOverlay) closeLang(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.showLang) closeLang(); });
+
   $('previewBtn').onclick = () => previewDegree(state.activeDegree);
   $('nextVoicingBtn').onclick = () => {
     state.voicingIndex += 1;
@@ -3157,14 +3325,14 @@ function wire() {
   $('saveProjectBtn').onclick = () => doSaveProject(false);
   $('saveAsProjectBtn').onclick = () => doSaveProject(true);
   $('newProjectBtn').onclick = () => {
-    if (!confirm('Start a new song? Anything unsaved will be lost.')) return;
+    if (!confirm(t('Start a new song? Anything unsaved will be lost.'))) return;
     state.projectId = null;
-    state.projectTitle = 'Untitled Song';
+    state.projectTitle = t('Untitled Song');
     state.degreeSpec = {};
     state.sections = [{ id: 1, name: 'A', barCount: 8, bars: makeBars(8), role: 'verse', smooth: false }];
     state.activeSection = 0;
     render();
-    toast('New song started.');
+    toast(t('New song started.'));
   };
   $('importInput2').onchange = importSong;
 
@@ -3369,14 +3537,14 @@ function importSong(e) {
     try {
       const data = JSON.parse(String(reader.result));
       if (!String(data.format || '').startsWith('circlesong.v')) {
-        throw new Error('Unrecognised file format');
+        throw new Error(t('Unrecognised file format'));
       }
       applySongData(data);
       state.projectId = null;
       render();
-      toast(`Loaded "${state.projectTitle}".`);
+      toast(t('Loaded “{name}”.', { name: state.projectTitle }));
     } catch (err) {
-      toast(`Could not read that file — ${err.message}`, true);
+      toast(t('Could not read that file — {error}', { error: err.message }), true);
     }
   };
   reader.readAsText(file);
@@ -3387,7 +3555,7 @@ function importSong(e) {
 function applySongData(data) {
   {
     {
-      state.projectTitle = data.title || 'Untitled Song';
+      state.projectTitle = data.title || t('Untitled Song');
       state.bpm = Number(data.bpm) || 96;
       state.timeSig = TIME_SIGS.includes(data.timeSig) ? data.timeSig : '4/4';
       state.rootPc = Number(data.rootPc) || 0;
@@ -3472,6 +3640,8 @@ document.addEventListener('visibilitychange', () => {
 // --------------------------------------------------------------------- boot
 
 wire();
+translateDom();
+fillStaticSelects();
 render();
 
 // Arm the audio engine on the first interaction anywhere, so the very first
@@ -3519,4 +3689,13 @@ window.CircleSong = {
   // Exposed so tests can measure voice leading rather than eyeball it.
   progressionCost,
   voiceLeadCost,
+  /** Translation, for the coverage tool: what was asked for, and what exists. */
+  i18n: {
+    lang,
+    setLanguage: chooseLanguage,
+    requested: REQUESTED,
+    tableStrings,
+    dict: dictFor,
+    languages: LANGUAGES,
+  },
 };
