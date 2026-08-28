@@ -66,7 +66,10 @@ import {
   midiLabel,
 } from './tuner.js';
 import { listProjects, saveProject, loadProject, deleteProject, storageAvailable } from './projects.js';
-import { THEMES, THEME_IDS, applyTheme, storedTheme, saveTheme, watchSystemTheme, themeColor } from './theme.js';
+import {
+  THEMES, THEME_IDS, applyTheme, storedTheme, saveTheme, watchSystemTheme,
+  themeColor, readableInk,
+} from './theme.js';
 import {
   LANGUAGES, LANG_IDS, t, plural, lang, langInfo, REQUESTED, dictFor,
   resolveLang, storedLang, saveLang, setLanguage, translateDom,
@@ -237,6 +240,8 @@ const state = {
   /** Theme preference; 'system' resolves to light or dark and follows the OS. */
   theme: initialTheme,
   lang: initialLang,
+  /** Which wedge the keyboard is on. The wheel is one tab stop, not 24. */
+  wheelFocus: { wedge: 0, minor: false },
   showLang: false,
   // --- tuner ---
   tunerInstrument: 'guitar',
@@ -809,10 +814,16 @@ function renderCircle() {
   const labels = $('wheelLabels');
   labels.replaceChildren();
 
+  // Positions are worked out on a 280-unit circle and expressed as a fraction
+  // of it, so the wheel can be any size the stylesheet asks for. It is 280px on
+  // a phone and larger on a tablet or a desktop, where the circle of fifths is
+  // the centrepiece rather than something squeezed above the fold.
+  const WHEEL = 280;
   const posAt = (r, i) => {
     const a = (i * 30 * Math.PI) / 180;
-    return { x: 140 + r * Math.sin(a), y: 140 - r * Math.cos(a) };
+    return { x: WHEEL / 2 + r * Math.sin(a), y: WHEEL / 2 - r * Math.cos(a) };
   };
+  const pct = (v) => `${(v / WHEEL) * 100}%`;
 
   // Which degree of the key each pitch class is.
   //
@@ -827,6 +838,7 @@ function renderCircle() {
     gradeAt.set(`${chord.root}:${minorish ? 'min' : 'maj'}`, {
       numeral: chord.numeral,
       chord,
+      degree: d,
       fn: degreeFunction(d, modeId()),
     });
   });
@@ -853,14 +865,43 @@ function renderCircle() {
 
     const op = posAt(115, i);
     const ip = posAt(66, i);
-    const outer = el('span', 'outer', CIRCLE_LABELS[i]);
-    outer.style.cssText = `left:${op.x}px;top:${op.y}px;color:${
-      isRoot || isDia ? themeColor('wheel-ink-on') : themeColor('wheel-ink-off')
-    };`;
-    const inner = el('span', 'inner', MINOR_LABELS[i]);
-    inner.style.cssText = `left:${ip.x}px;top:${ip.y}px;color:${
-      isRootMinor || isDiaMinor ? themeColor('wheel-ink-on-min') : themeColor('wheel-ink-off-min')
-    };`;
+
+    // Buttons rather than spans. The wedges themselves are a conic gradient
+    // with nothing to focus, so before this the wheel — the main control of the
+    // app — could only be operated by aiming at it. The labels are what people
+    // aim at anyway, so making them the controls costs nothing visually and
+    // makes the whole wheel reachable by keyboard and announceable by a screen
+    // reader.
+    const focused = state.wheelFocus;
+    const wedgeBtn = (cls, text, p, colour, minor) => {
+      const b = el('button', cls, text);
+      b.type = 'button';
+      b.dataset.wedge = String(i);
+      b.dataset.ring = minor ? 'minor' : 'major';
+      b.tabIndex = focused.wedge === i && focused.minor === minor ? 0 : -1;
+      b.style.cssText = `left:${pct(p.x)};top:${pct(p.y)};color:${colour};`;
+      b.onclick = () => selectWedge(i, minor);
+      return b;
+    };
+    // Ink polarity is decided per wedge, against the wedge.
+    //
+    // Twelve hues at one OKLCH lightness look equally light and are not: the
+    // yellow wedge has four times the relative luminance of the blue one at
+    // the same L. A single pale ink was therefore legible on some wedges and
+    // not on others — measurably below AA on about half of them — and no
+    // choice of one colour could have fixed that. The dimmer pair is used for
+    // wedges outside the key, so those labels still recede without becoming
+    // unreadable.
+    const wedgeInk = (bg, dim) =>
+      dim
+        ? readableInk(bg, 'wheel-ink-light-dim', 'wheel-ink-dark-dim')
+        : readableInk(bg, 'wheel-ink-light', 'wheel-ink-dark');
+    const outerBg = `oklch(${oL} ${oC} ${hue})`;
+    const innerBg = `oklch(${iL} ${iC} ${hue})`;
+    const outer = wedgeBtn('outer', CIRCLE_LABELS[i], op,
+      wedgeInk(outerBg, !(isRoot || isDia)), false);
+    const inner = wedgeBtn('inner', MINOR_LABELS[i], ip,
+      wedgeInk(innerBg, !(isRootMinor || isDiaMinor)), true);
     labels.append(outer, inner);
 
     // Grade markers. Every wedge that belongs to the key gets its roman
@@ -882,6 +923,19 @@ function renderCircle() {
       g.title = `${gradeMinor.chord.symbol} — ${t(functionLabel(gradeMinor.fn))}`;
       inner.appendChild(g);
     }
+
+    // "C" read aloud on its own says nothing. Name the chord and, where the
+    // wedge is in the key, the job it does there — which is the information the
+    // numeral badge gives a sighted reader.
+    // "the mediant", not "the tonic": FUNCTION_NAMES names the degree, where
+    // functionLabel names the wider job it does. Both are true of iii, and the
+    // degree is the one that tells you which chord you are on.
+    const name = (label, g) =>
+      g ? t('{chord} — {numeral}, the {degree}', {
+        chord: label, numeral: g.numeral, degree: FUNCTION_NAMES[g.degree].toLowerCase(),
+      }) : t('{chord} — outside this key', { chord: label });
+    outer.setAttribute('aria-label', name(CIRCLE_LABELS[i], grade));
+    inner.setAttribute('aria-label', name(MINOR_LABELS[i], gradeMinor));
   });
 
   $('wheelOuter').style.background = `conic-gradient(from -15deg, ${outerStops.join(', ')})`;
@@ -1091,6 +1145,54 @@ function exploreTarget() {
         });
 
   return { note, chord, displayName, text };
+}
+
+/**
+ * Act on a wedge, however it was reached.
+ *
+ * `wedge` indexes CIRCLE — fifths order, which is the order the wheel is drawn
+ * in — and `minor` says which of the two rings. Both the pointer handler and
+ * the keyboard buttons come through here, so a tap and a press cannot end up
+ * meaning different things.
+ */
+async function selectWedge(wedge, minor) {
+  const note = CIRCLE[wedge];
+  state.wheelFocus = { wedge, minor };
+  // Selecting redraws the wheel, which throws away the button that was focused.
+  // Put the focus back where it was, but only if it was there to begin with —
+  // a tap should not steal it from wherever the pointer user actually is.
+  const hadFocus = $('wheelLabels').contains(document.activeElement);
+  const restore = () => { if (hadFocus) focusWheel(); };
+
+  // Locked: explore instead of navigate. Sound the wedge and explain it.
+  if (state.rootLocked) {
+    state.exploreNote = minor ? (note + 9) % 12 : note;
+    state.exploreIsMinor = minor;
+    renderExplore();
+    restore();
+    await playExplore();
+    return;
+  }
+
+  if (!minor) { state.rootPc = note; state.modeIdx = 0; }
+  else { state.rootPc = (note + 9) % 12; state.modeIdx = 5; }
+  state.activeDegree = 0;
+  state.voicingIndex = 0;
+  state.exploreNote = null;
+  reresolveAll();
+  render();
+  restore();
+  previewDegree(0);
+}
+
+/** Move the keyboard focus to whichever wedge `state.wheelFocus` names. */
+function focusWheel() {
+  const { wedge, minor } = state.wheelFocus;
+  for (const b of $('wheelLabels').querySelectorAll('button')) {
+    const here = Number(b.dataset.wedge) === wedge && (b.dataset.ring === 'minor') === minor;
+    b.tabIndex = here ? 0 : -1;
+    if (here) b.focus();
+  }
 }
 
 function renderExplore() {
@@ -1708,7 +1810,12 @@ function renderDiagram(chord) {
   const FRET_Y = [30, 62, 94, 126, 158, 190];
   const position = voicingPosition(v);
   const roles = voicingRoles(v, chord);
-  const roleColor = { R: 'var(--a)', 3: 'var(--b)', 5: 'var(--c)', 7: 'var(--d)' };
+  // Resolved here rather than left as `var(--a)`: the ink for each dot is
+  // chosen by measuring the dot's colour, and a canvas cannot resolve a custom
+  // property. The diagram is redrawn on every theme change anyway.
+  const roleColor = {
+    R: themeColor('a'), 3: themeColor('b'), 5: themeColor('c'), 7: themeColor('d'),
+  };
 
   const line = (x1, y1, x2, y2, stroke, w) => {
     const l = document.createElementNS(NS, 'line');
@@ -1740,9 +1847,14 @@ function renderDiagram(chord) {
     const y = FRET_Y[row] + 16;
     const c = document.createElementNS(NS, 'circle');
     c.setAttribute('cx', STRING_X[s]); c.setAttribute('cy', y); c.setAttribute('r', '12');
-    c.setAttribute('fill', roleColor[roles[s]] || 'var(--d)');
+    const fill = roleColor[roles[s]] || themeColor('d');
+    c.setAttribute('fill', fill);
     svg.appendChild(c);
-    text(STRING_X[s], y + 4, roles[s]);
+    // The dot is coloured by the note's role, and the four role colours are
+    // four different hues at four different luminances. One fixed ink over all
+    // of them was legible on the green and all but invisible on the blue, so
+    // the ink is chosen against the dot it is actually printed on.
+    text(STRING_X[s], y + 4, roles[s], { fill: readableInk(fill, 'fret-ink', 'fret-ink-alt') });
   });
 
   // Note names under the diagram.
@@ -3223,7 +3335,13 @@ function wire() {
   $('loopBtn').onclick = () => { state.loop = !state.loop; renderTransport(); };
   $('retriggerBtn').onclick = () => { state.cutOnRetrigger = !state.cutOnRetrigger; renderTone(); };
 
-  $('wheel').onclick = async (e) => {
+  // Pointer: work out which wedge was hit from where the finger landed. The
+  // wheel is painted as a conic gradient rather than as twelve elements, so
+  // there is nothing to attach a listener to but the geometry.
+  $('wheel').onclick = (e) => {
+    // A label is a real button and handles itself; without this the same tap
+    // would be counted twice, once by the button and once by the geometry.
+    if (e.target.closest('.wheel-labels button')) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const scale = rect.width / 280;
     const dx = (e.clientX - (rect.left + rect.width / 2)) / scale;
@@ -3232,26 +3350,25 @@ function wire() {
     if (dist > 140 || dist < 42) return;
     let angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
     if (angle < 0) angle += 360;
-    const note = CIRCLE[Math.floor(((angle + 15) % 360) / 30)];
-    const isMinorRing = dist <= 90;
+    const wedge = Math.floor(((angle + 15) % 360) / 30);
+    selectWedge(wedge, dist <= 90);
+  };
 
-    // Locked: explore instead of navigate. Sound the wedge and explain it.
-    if (state.rootLocked) {
-      state.exploreNote = isMinorRing ? (note + 9) % 12 : note;
-      state.exploreIsMinor = isMinorRing;
-      renderExplore();
-      await playExplore();
-      return;
-    }
-
-    if (!isMinorRing) { state.rootPc = note; state.modeIdx = 0; }
-    else { state.rootPc = (note + 9) % 12; state.modeIdx = 5; }
-    state.activeDegree = 0;
-    state.voicingIndex = 0;
-    state.exploreNote = null;
-    reresolveAll();
-    render();
-    previewDegree(0);
+  // Keyboard: the labels are the twelve buttons of each ring, and the group is
+  // one tab stop with the arrows moving inside it — the same shape a radio
+  // group has, because that is what this is. Left and right walk the circle of
+  // fifths; up and down cross between the major ring and its relative minors,
+  // which is exactly the relationship the two rings encode.
+  $('wheelLabels').onkeydown = (e) => {
+    const step = { ArrowRight: 1, ArrowDown: 0, ArrowLeft: -1, ArrowUp: 0 }[e.key];
+    if (step === undefined && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    const f = state.wheelFocus;
+    if (e.key === 'Home') f.wedge = 0;
+    else if (e.key === 'End') f.wedge = CIRCLE.length - 1;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') f.minor = e.key === 'ArrowDown';
+    else f.wedge = (f.wedge + step + CIRCLE.length) % CIRCLE.length;
+    focusWheel();
   };
 
   $('lockBtn').onclick = () => {

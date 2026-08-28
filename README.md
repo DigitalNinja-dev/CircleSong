@@ -155,8 +155,21 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   rather than a second stylesheet — including the numbers the circle of fifths
   and the fretboard are painted with, which are drawn from JavaScript and would
   otherwise stay dark on a light page.
-- **All four rendered themes pass WCAG AA** on every one of the 461 text
-  elements in the app, measured rather than assumed — see Verifying it.
+- **Responsive, and not merely wider.** Below 700px the phone layout is
+  untouched — pixel-for-pixel, which is checked. Above it the extra room goes
+  to the things that were actually cramped: seven degrees in one row instead of
+  two shelves, sixteen drum steps at a readable size, the circle of fifths at
+  420px instead of 280. On a desktop the nav becomes a left rail, which also
+  fixes a bug — the fixed bottom bar used to float on top of the panel it
+  belonged to on a short, wide window — and the progression library goes to two
+  columns, fitting all 56 in half the height.
+- **The wheel is operable from the keyboard.** The wedges are a conic gradient
+  with nothing to focus, so the labels are the buttons: one tab stop, arrow
+  keys around the circle of fifths, up and down between a key and its relative
+  minor, Enter to choose. Each is named for a screen reader — "Em — iii, the
+  mediant" — and focus survives the redraw that choosing causes.
+- **All four themes pass WCAG AA**, measured rather than assumed — see
+  Verifying it.
 
 ### Language
 
@@ -227,8 +240,9 @@ headless Chromium and measuring what comes out**, because almost everything here
 is either audio or layout and a green assertion about neither is worthless. A
 check that counts zero of something is treated as a failure, not a pass.
 
-The standing checks cover: WCAG contrast for every visible text element in
-every theme; output level, peak and crest factor for every preset
+The standing checks cover: WCAG contrast for every text element that sits on a
+CSS background, in every theme — the wheel does not, and has its own check
+below; output level, peak and crest factor for every preset
 on the chord shapes that stress a guitar body's air mode; that every rhythm
 pattern schedules audible strokes in every meter it claims; that ska and reggae
 differ in position, ring, strings and mute; pitch-detector accuracy in cents on
@@ -250,6 +264,26 @@ Each language is also driven through all nine panels, asserting that every one
 renders non-empty, differs from English, and returns to English exactly when
 switched back — plus that the layout survives translation on a 360 px phone,
 which is how the drum row's four buttons were found to overflow in German.
+
+The wheel gets its own check, `npm run wheel:contrast`, because it is the
+hardest surface in the app to measure and the easiest to get a false pass on.
+Its wedges are a conic gradient built in JavaScript, so there is no
+`background-color` on any ancestor: an audit that walks the DOM for one finds
+the page *behind* the wheel and reports every label as fine. Both colours are
+known, though — the wedge is `oklch(L C hue)` from the same tokens the painter
+reads, and the ink is a theme token — so the tool composites the ink (several
+are translucent) over the wedge and computes the ratio exactly, for all twelve
+hues in all three states on both rings in all four themes.
+
+Doing that found a real defect. Twelve hues at one OKLCH lightness *look*
+equally light and are not: a yellow and a blue at L 0.56 differ fourfold in
+relative luminance. A single pale ink was therefore legible on some wedges and
+not on others, and **107 of the 288 wedge/ink pairs were below AA** — including
+labels in the default key. No single colour could have fixed it, so the ink is
+now chosen per wedge by measuring it (`readableInk` in `src/theme.js`), with a
+dimmer pair for wedges outside the key so they still recede. All 288 pairs now
+pass, the worst at 4.52:1. The fretboard dots pick their ink the same way,
+which changes nothing today and stops the next palette edit from breaking them.
 
 ---
 
@@ -402,6 +436,7 @@ tools/
   fetch-fonts.mjs        regenerates assets/fonts.css (inlined webfont subsets)
   make-icons.mjs         renders icons/ from assets/logo.svg
   i18n-check.mjs         measures translation coverage against the live app
+  wheel-contrast.mjs     checks every wedge/ink pair on the wheel against AA
 docs/
   AUDIO_QUALITY.md       sound design notes and improvement roadmap
   screenshots/           the images at the top of this file

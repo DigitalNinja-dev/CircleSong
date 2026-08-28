@@ -112,6 +112,10 @@ export const LOCALE_HI = {
   'Source Code (AGPL v3.0)': 'स्रोत कोड (AGPL v3.0)',
 
   // ---------------------------------------------------------------- circle
+  'Circle of fifths — arrow keys move around the wheel':
+    'पंचम चक्र — तीर कुंजियों से चक्र में घूमिए',
+  '{chord} — {numeral}, the {degree}': '{chord} — {numeral}, {degree}',
+  '{chord} — outside this key': '{chord} — इस कुंजी के बाहर',
   'Mode': 'मोड',
   'WHEEL TAP PLAYS': 'चक्र पर टैप करने से बजेगा',
   'Chord': 'कॉर्ड',

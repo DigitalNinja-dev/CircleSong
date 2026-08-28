@@ -142,3 +142,62 @@ export function themeColor(token, fallback = '#888') {
   const v = getComputedStyle(document.documentElement).getPropertyValue(`--${token}`).trim();
   return v || fallback;
 }
+
+// One 1x1 canvas, reused. Painting a colour into it and reading the pixel back
+// is how a colour in any notation becomes numbers: Chromium reports authored
+// values in their own space, so `oklch(0.62 0.19 265)` comes back as that
+// string and cannot be compared with anything.
+let probe = null;
+function toRgb(css, over = '#000') {
+  if (!probe) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    probe = c.getContext('2d', { willReadFrequently: true });
+  }
+  probe.clearRect(0, 0, 1, 1);
+  probe.fillStyle = over;
+  probe.fillRect(0, 0, 1, 1);
+  probe.fillStyle = css;
+  probe.fillRect(0, 0, 1, 1);
+  const d = probe.getImageData(0, 0, 1, 1).data;
+  return [d[0], d[1], d[2]];
+}
+
+/** WCAG relative luminance. */
+function luminance(rgb) {
+  const f = rgb.map((v) => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+}
+
+/**
+ * WCAG contrast ratio between `ink` drawn on `paper`.
+ *
+ * `ink` is composited over `paper` first, because several of these inks are
+ * translucent and a translucent colour is not the colour it says it is — the
+ * ratio that matters is against what ends up on the screen.
+ */
+export function contrastRatio(ink, paper) {
+  const bg = toRgb(paper);
+  const fg = toRgb(ink, `rgb(${bg[0]},${bg[1]},${bg[2]})`);
+  const [hi, lo] = [luminance(fg), luminance(bg)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Pick whichever ink is readable on `background`.
+ *
+ * The fretboard dots and the wheel wedges are coloured by *hue* — the root is
+ * green, the third amber, and so on — and hue is not lightness. In OKLCH two
+ * colours at the same L look equally light and have wildly different relative
+ * luminance: a yellow at L 0.7 is four times as bright as a blue at L 0.7. One
+ * fixed ink over all of them therefore cannot be legible over all of them, and
+ * measuring is the only way to know which one is.
+ */
+export function readableInk(background, inkA, inkB) {
+  const a = themeColor(inkA);
+  const b = themeColor(inkB);
+  return contrastRatio(a, background) >= contrastRatio(b, background) ? a : b;
+}

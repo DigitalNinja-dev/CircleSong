@@ -110,6 +110,10 @@ export const LOCALE_ES = {
   'Source Code (AGPL v3.0)': 'Código fuente (AGPL v3.0)',
 
   // ---------------------------------------------------------------- circle
+  'Circle of fifths — arrow keys move around the wheel':
+    'Círculo de quintas — las flechas del teclado recorren la rueda',
+  '{chord} — {numeral}, the {degree}': '{chord} — {numeral}, la {degree}',
+  '{chord} — outside this key': '{chord} — fuera de esta tonalidad',
   'Mode': 'Modo',
   'WHEEL TAP PLAYS': 'AL TOCAR LA RUEDA SUENA',
   'Chord': 'Acorde',
