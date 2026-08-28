@@ -31,7 +31,7 @@
  * says otherwise — which looks exactly like the new feature not working.
  */
 
-const CACHE = 'circlesong-1aca8cc7';
+const CACHE = 'circlesong-7246dce4';
 
 const SHELL = [
   './',
@@ -96,24 +96,40 @@ self.addEventListener('fetch', (event) => {
   // offline opens the app rather than the browser's error page.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
+      fetch(request).catch(() =>
+        caches
+          .open(CACHE)
+          .then((cache) => cache.match('./index.html').then((r) => r || cache.match('./')))
+      )
     );
     return;
   }
 
+  // Only ever this build's cache.
+  //
+  // `caches.match(request)` without a cache name searches *every* cache this
+  // origin has, superseded ones included — and a superseded cache is only
+  // deleted once the new worker activates. That leaves a window in which
+  // navigations come fresh from the network while everything else comes from
+  // the previous build, and the page runs new markup against old code. It is a
+  // silent failure that looks exactly like a new feature not working: the
+  // button the new HTML draws has no handler, because the handler is in the
+  // JavaScript that did not come.
   event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request).then((response) => {
-          // Cache successful same-origin responses as they are first requested.
-          if (response.ok && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-    )
+    caches
+      .open(CACHE)
+      .then((cache) =>
+        cache.match(request).then(
+          (cached) =>
+            cached ||
+            fetch(request).then((response) => {
+              // Cache successful same-origin responses as they are requested.
+              if (response.ok && response.type === 'basic') {
+                cache.put(request, response.clone());
+              }
+              return response;
+            })
+        )
+      )
   );
 });

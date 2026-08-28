@@ -37,6 +37,39 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="CircleSong">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<!--
+  Recover from a half-updated app.
+
+  Navigations are network-first and everything else is served from the service
+  worker's cache, so the first load after an update runs *this* file — fresh
+  from the network — against the previous build's JavaScript, until the new
+  worker has installed, activated and claimed the page. For that one load the
+  app is new markup driven by old code: a button the new HTML draws has no
+  handler on it, which reads as a feature that does not work rather than as a
+  cache that has not caught up.
+
+  So the fix has to live somewhere that cannot itself be stale, which is here
+  and nowhere else. It reloads once, when control passes to the new worker and
+  only if a worker was already in charge — a first registration has nothing
+  stale behind it — and not again within ten seconds, because a reload loop
+  would be worse than the thing it fixes.
+-->
+<script>
+(function () {
+  if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  var hadController = !!navigator.serviceWorker.controller;
+  var KEY = 'circlesong.swreload';
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!hadController) return;
+    var last = 0;
+    try { last = Number(sessionStorage.getItem(KEY)) || 0; } catch (e) {}
+    if (Date.now() - last < 10000) return;
+    try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    location.reload();
+  });
+})();
+</script>
 </head>
 <body>
 <div class="stage">

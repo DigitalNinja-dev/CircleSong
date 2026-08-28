@@ -3775,6 +3775,8 @@ if (
   document.querySelector('link[rel="manifest"]') &&
   location.protocol.startsWith('http')
 ) {
+  // Registration only. The reload that recovers from a stale cache lives in
+  // index.html, because this file is one of the things that can be stale.
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       /* Offline support is an enhancement; the app runs fine without it. */
