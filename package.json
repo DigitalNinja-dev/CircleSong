@@ -15,11 +15,15 @@
     "android:open": "npx cap open android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease",
-    "android:check": "node tools/check-android-res.mjs"
+    "android:check": "node tools/check-android-res.mjs",
+    "i18n": "node tools/i18n-check.mjs",
+    "i18n:dump": "node tools/i18n-check.mjs --dump",
+    "wheel:contrast": "node tools/wheel-contrast.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
-    "@capacitor/core": "^8.5.0"
+    "@capacitor/core": "^8.5.0",
+    "playwright": "^1.62.1"
   }
 }

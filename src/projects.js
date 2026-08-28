@@ -28,6 +28,8 @@
 // song under its own. That keeps listing cheap when there are many songs, and
 // means one corrupt project cannot take the rest of the library with it.
 
+import { t } from './i18n.js';
+
 const INDEX_KEY = 'circlesong.projects';
 const SONG_PREFIX = 'circlesong.song.';
 
@@ -78,12 +80,12 @@ export function listProjects() {
  */
 export function saveProject(data, id = null) {
   const s = store();
-  if (!s) return { error: 'This browser will not let the app store anything locally.' };
+  if (!s) return { error: t('This browser will not let the app store anything locally.') };
 
   const projectId = id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const entry = {
     id: projectId,
-    title: data.title || 'Untitled Song',
+    title: data.title || t('Untitled Song'),
     bpm: data.bpm,
     key: data.keyName || '',
     bars: data.barTotal || 0,
@@ -96,7 +98,7 @@ export function saveProject(data, id = null) {
   } catch {
     // Quota is the realistic failure here, and it needs to say so plainly
     // rather than looking like the save silently worked.
-    return { error: 'No room left in this browser\'s storage. Delete a project and try again.' };
+    return { error: t('No room left in this browser\'s storage. Delete a project and try again.') };
   }
 
   const list = readIndex(s).filter((p) => p.id !== projectId);

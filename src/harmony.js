@@ -31,6 +31,7 @@
 // suggestion a guitarist cannot explain teaches nothing.
 
 import { MODES, chordForSpec, noteName, keySignaturePrefersFlats } from './theory.js';
+import { t } from './i18n.js';
 
 /** The three jobs a chord can hold in a key. */
 export const FUNCTION = { TONIC: 'T', SUBDOMINANT: 'S', DOMINANT: 'D' };
@@ -78,14 +79,14 @@ export function functionLabel(fn) {
 export function rootMotion(fromDegree, toDegree) {
   const step = ((toDegree - fromDegree) % 7 + 7) % 7;
   switch (step) {
-    case 0: return { weight: 0, name: 'same chord' };
-    case 3: return { weight: 10, name: 'down a fifth — the strongest move there is' };
-    case 5: return { weight: 8, name: 'down a third — two notes stay put' };
-    case 1: return { weight: 7, name: 'up a step' };
-    case 6: return { weight: 6, name: 'down a step' };
-    case 2: return { weight: 4, name: 'up a third' };
-    case 4: return { weight: 3, name: 'up a fifth — a step backwards, used deliberately' };
-    default: return { weight: 3, name: 'a move' };
+    case 0: return { weight: 0, name: t('same chord') };
+    case 3: return { weight: 10, name: t('down a fifth — the strongest move there is') };
+    case 5: return { weight: 8, name: t('down a third — two notes stay put') };
+    case 1: return { weight: 7, name: t('up a step') };
+    case 6: return { weight: 6, name: t('down a step') };
+    case 2: return { weight: 4, name: t('up a third') };
+    case 4: return { weight: 3, name: t('up a fifth — a step backwards, used deliberately') };
+    default: return { weight: 3, name: t('a move') };
   }
 }
 
@@ -96,6 +97,20 @@ export function rootMotion(fromDegree, toDegree) {
  * end the section the way the section wants to end. A pre-chorus that resolves
  * has thrown away its job; a chorus that does not resolve never lands.
  */
+/**
+ * The cadence a section wants, named for a reader rather than for the code.
+ *
+ * A separate table because it is the only place a section role's `cadence` id
+ * becomes a word on screen, and it has to be translatable without the id
+ * changing.
+ */
+export const CADENCE_WORD = {
+  authentic: 'perfect',
+  plagal: 'plagal',
+  half: 'half',
+  any: 'any',
+};
+
 export const SECTION_ROLES = {
   intro: {
     label: 'Intro',
@@ -156,46 +171,46 @@ export function idiomaticColours(degree, modeId) {
   const add = (size, colour, why) => out.push({ size, colour, why });
 
   if (quality === 'dim') {
-    add(4, 'm7b5', 'Half-diminished is how this degree is normally voiced — it heads for the dominant.');
-    add(4, 'dim7', 'Fully diminished, as a passing chord between two neighbours.');
-    add(3, null, 'The bare diminished triad, which is harsher and rarely held.');
+    add(4, 'm7b5', t('Half-diminished is how this degree is normally voiced — it heads for the dominant.'));
+    add(4, 'dim7', t('Fully diminished, as a passing chord between two neighbours.'));
+    add(3, null, t('The bare diminished triad, which is harsher and rarely held.'));
     return out;
   }
 
   if (fn === 'D') {
-    add(4, 'dom', 'A true dominant 7th — the pull home.');
-    add(5, 'dom', 'Add the 9th for warmth without losing the pull.');
-    add(7, 'dom', 'A 13th: the full dominant sound.');
-    add(4, 'sus4', 'Suspend the third, then release it into the 3rd.');
-    add(5, 'dom', 'With a ♭9 this is the classic minor-key dominant.');
+    add(4, 'dom', t('A true dominant 7th — the pull home.'));
+    add(5, 'dom', t('Add the 9th for warmth without losing the pull.'));
+    add(7, 'dom', t('A 13th: the full dominant sound.'));
+    add(4, 'sus4', t('Suspend the third, then release it into the 3rd.'));
+    add(5, 'dom', t('With a ♭9 this is the classic minor-key dominant.'));
     out[4].alterations = ['b9'];
     return out;
   }
 
   if (fn === 'S') {
     if (quality === 'min') {
-      add(4, null, 'The m7 — this is the ii of a ii–V, and it wants the dominant.');
-      add(5, null, 'A m9: the same function, more air.');
-      add(4, 'sus4', 'Suspended, which delays the move.');
+      add(4, null, t('The m7 — this is the ii of a ii–V, and it wants the dominant.'));
+      add(5, null, t('A m9: the same function, more air.'));
+      add(4, 'sus4', t('Suspended, which delays the move.'));
     } else {
-      add(4, null, 'A maj7 on the subdominant — soft, and it floats.');
-      add(3, '6', 'A 6th chord, the settled vintage sound.');
-      add(3, 'add9', 'add9 keeps it a triad but opens it up.');
+      add(4, null, t('A maj7 on the subdominant — soft, and it floats.'));
+      add(3, '6', t('A 6th chord, the settled vintage sound.'));
+      add(3, 'add9', t('add9 keeps it a triad but opens it up.'));
     }
     return out;
   }
 
   // Tonic
   if (quality === 'min' || minorKey) {
-    add(3, null, 'The plain minor triad — the most direct statement of home.');
-    add(4, null, 'A m7 tonic: home, but still moving.');
-    add(5, null, 'A m9 tonic, which is where a lot of neo-soul lives.');
-    add(3, '6', 'm6 — brighter than it looks, because of the raised 6th.');
+    add(3, null, t('The plain minor triad — the most direct statement of home.'));
+    add(4, null, t('A m7 tonic: home, but still moving.'));
+    add(5, null, t('A m9 tonic, which is where a lot of neo-soul lives.'));
+    add(3, '6', t('m6 — brighter than it looks, because of the raised 6th.'));
   } else {
-    add(3, null, 'The plain triad — nothing is clearer than this.');
-    add(4, null, 'maj7 makes the tonic dreamier and less final.');
-    add(5, '6', 'A 6/9 chord: resolved, but not a full stop.');
-    add(3, 'add9', 'add9 — a triad with light on it.');
+    add(3, null, t('The plain triad — nothing is clearer than this.'));
+    add(4, null, t('maj7 makes the tonic dreamier and less final.'));
+    add(5, '6', t('A 6/9 chord: resolved, but not a full stop.'));
+    add(3, 'add9', t('add9 — a triad with light on it.'));
   }
   return out;
 }
@@ -247,9 +262,9 @@ export function suggestNext(ctx) {
       const rank = shape.openOn.indexOf(degree);
       if (rank >= 0) {
         score += 12 - rank * 3;
-        reasons.push(`opens a ${shape.label.toLowerCase()} well`);
+        reasons.push(t('opens a {section} well', { section: shape.label.toLowerCase() }));
       }
-      if (degree === 0) { score += 6; reasons.push('the tonic, which states the key outright'); }
+      if (degree === 0) { score += 6; reasons.push(t('the tonic, which states the key outright')); }
     } else {
       const motion = rootMotion(prev.degree, degree);
       score += motion.weight;
@@ -257,20 +272,27 @@ export function suggestNext(ctx) {
 
       // Functional succession: away from home, then back.
       const prevFn = degreeFunction(prev.degree, modeId);
-      if (prevFn === 'D' && fn === 'T') { score += 8; reasons.push('resolves the dominant'); }
-      else if (prevFn === 'S' && fn === 'D') { score += 7; reasons.push('subdominant into dominant — the standard approach'); }
-      else if (prevFn === 'T' && fn === 'D') { score += 8; reasons.push('home straight to the dominant, which is how half a songbook works'); }
-      else if (prevFn === 'T' && fn === 'S') { score += 5; reasons.push('steps away from home'); }
-      else if (prevFn === 'D' && fn === 'S') { score -= 4; reasons.push('pulls back from the dominant, which loosens the tension'); }
+      if (prevFn === 'D' && fn === 'T') { score += 8; reasons.push(t('resolves the dominant')); }
+      else if (prevFn === 'S' && fn === 'D') { score += 7; reasons.push(t('subdominant into dominant — the standard approach')); }
+      else if (prevFn === 'T' && fn === 'D') { score += 8; reasons.push(t('home straight to the dominant, which is how half a songbook works')); }
+      else if (prevFn === 'T' && fn === 'S') { score += 5; reasons.push(t('steps away from home')); }
+      else if (prevFn === 'D' && fn === 'S') { score -= 4; reasons.push(t('pulls back from the dominant, which loosens the tension')); }
       if (degree === prev.degree) score -= 14;
     }
 
     if (isLast) {
       const rank = shape.closeOn.indexOf(degree);
-      if (rank >= 0) { score += 10 - rank * 3; reasons.push(`ends a ${shape.label.toLowerCase()} the way it should`); }
+      if (rank >= 0) {
+        score += 10 - rank * 3;
+        reasons.push(t('ends a {section} the way it should', { section: shape.label.toLowerCase() }));
+      }
       if (shape.avoidClose.includes(degree)) {
         score -= 10;
-        reasons.push(`resolving here would spend the tension the ${shape.label.toLowerCase()} is building`);
+        reasons.push(
+          t('resolving here would spend the tension the {section} is building', {
+            section: shape.label.toLowerCase(),
+          })
+        );
       }
     }
 
@@ -292,8 +314,10 @@ export function suggestNext(ctx) {
       spec,
       chord: chordForSpec(tonicPc, modeId, spec),
       score,
-      tag: functionLabel(fn),
-      reason: reasons.length ? capitalise(reasons.join('; ')) : `${functionLabel(fn)} chord in this key.`,
+      tag: t(functionLabel(fn)),
+      reason: reasons.length
+        ? capitalise(reasons.join('; '))
+        : t('{function} chord in this key.', { function: t(functionLabel(fn)) }),
     });
   }
 
@@ -307,7 +331,7 @@ export function suggestNext(ctx) {
         spec: target.spec,
         chord: target.chord,
         score: target.isOwnDominant ? 11 : prev && rootMotion(prev.degree, target.fromDegree).weight >= 6 ? 9 : 6,
-        tag: 'Borrowed',
+        tag: t('Borrowed'),
         reason: target.why,
       });
     }
@@ -320,7 +344,7 @@ export function suggestNext(ctx) {
   for (const s of out.sort((a, b) => b.score - a.score)) {
     const existing = bySymbol.get(s.chord.symbol);
     if (!existing) { bySymbol.set(s.chord.symbol, s); continue; }
-    if (s.tag === 'Borrowed' && existing.tag !== 'Borrowed') existing.reason = s.reason;
+    if (s.tag === t('Borrowed') && existing.tag !== t('Borrowed')) existing.reason = s.reason;
   }
   return [...bySymbol.values()];
 }
@@ -362,8 +386,12 @@ export function secondaryDominants(tonicPc, modeId) {
       targetNumeral: targetChord.numeral,
       label: `${chord.symbol}→${targetChord.symbol}`,
       why: isOwnDominant
-        ? `The key's own v is minor and cannot pull home. Raising its third makes ${chord.symbol}, which can.`
-        : `The V7 of ${noteName(targetChord.root, flats)} — it borrows a note from outside the key to point at the ${targetChord.numeral} chord.`,
+        ? t('The key’s own v is minor and cannot pull home. Raising its third makes {chord}, which can.', {
+            chord: chord.symbol,
+          })
+        : t('The V7 of {target} — it borrows a note from outside the key to point at the {numeral} chord.', {
+            target: noteName(targetChord.root, flats), numeral: targetChord.numeral,
+          }),
     });
   }
   return out;
@@ -381,7 +409,7 @@ export function analyseProgression(specs, tonicPc, modeId, role = 'verse') {
   const shape = SECTION_ROLES[role] || SECTION_ROLES.verse;
   const notes = [];
   if (written.length < 2) {
-    return { cadence: null, notes, summary: 'Add another chord to hear a progression.' };
+    return { cadence: null, notes, summary: t('Add another chord to hear a progression.') };
   }
 
   // A chord held over two bars is one chord as far as the cadence is concerned,
@@ -397,27 +425,34 @@ export function analyseProgression(specs, tonicPc, modeId, role = 'verse') {
   const prevFn = degreeFunction(prev.degree, modeId);
 
   let cadence = null;
-  if (prevFn === 'D' && last.degree === 0) cadence = { id: 'authentic', label: 'Perfect cadence', note: 'Dominant to tonic — the section lands.' };
-  else if (prev.degree === 3 && last.degree === 0) cadence = { id: 'plagal', label: 'Plagal cadence', note: 'IV to I — the "amen" ending, softer than a perfect cadence.' };
-  else if (lastFn === 'D') cadence = { id: 'half', label: 'Half cadence', note: 'Ends on the dominant, unresolved — it hands over to whatever comes next.' };
-  else if (prevFn === 'D' && last.degree === 5) cadence = { id: 'deceptive', label: 'Deceptive cadence', note: 'The dominant resolves to vi instead of I — the ending is dodged on purpose.' };
+  if (prevFn === 'D' && last.degree === 0) cadence = { id: 'authentic', label: t('Perfect cadence'), note: t('Dominant to tonic — the section lands.') };
+  else if (prev.degree === 3 && last.degree === 0) cadence = { id: 'plagal', label: t('Plagal cadence'), note: t('IV to I — the "amen" ending, softer than a perfect cadence.') };
+  else if (lastFn === 'D') cadence = { id: 'half', label: t('Half cadence'), note: t('Ends on the dominant, unresolved — it hands over to whatever comes next.') };
+  else if (prevFn === 'D' && last.degree === 5) cadence = { id: 'deceptive', label: t('Deceptive cadence'), note: t('The dominant resolves to vi instead of I — the ending is dodged on purpose.') };
 
   if (cadence && shape.cadence !== 'any' && cadence.id !== shape.cadence) {
     notes.push({
       level: 'hint',
-      text: `A ${shape.label.toLowerCase()} usually ends with a ${shape.cadence} cadence; this one ends with a ${cadence.label.toLowerCase()}.`,
+      text: t(
+        'A {section} usually ends with a {expected} cadence; this one ends with a {actual}.',
+        {
+          section: shape.label.toLowerCase(),
+          expected: CADENCE_WORD[shape.cadence] || shape.cadence,
+          actual: cadence.label.toLowerCase(),
+        }
+      ),
     });
   }
-  if (!cadence) notes.push({ level: 'hint', text: 'No clear cadence — the section stops rather than ends.' });
+  if (!cadence) notes.push({ level: 'hint', text: t('No clear cadence — the section stops rather than ends.') });
 
   // A loop with no dominant anywhere never generates tension.
   if (!written.some((s) => degreeFunction(s.degree, modeId) === 'D' || s.colour === 'dom')) {
-    notes.push({ level: 'hint', text: 'Nothing here acts as a dominant, so the loop stays flat. Try a V7 before the turn.' });
+    notes.push({ level: 'hint', text: t('Nothing here acts as a dominant, so the loop stays flat. Try a V7 before the turn.') });
   }
   // Every chord the same size is a texture, not always a problem, but worth saying.
   const sizes = new Set(written.map((s) => s.size || 3));
   if (written.length >= 4 && sizes.size === 1 && [...sizes][0] === 3) {
-    notes.push({ level: 'idea', text: 'All plain triads. A 7th or 9th on one chord will give the loop a centre of gravity.' });
+    notes.push({ level: 'idea', text: t('All plain triads. A 7th or 9th on one chord will give the loop a centre of gravity.') });
   }
 
   const summary = written
@@ -446,23 +481,23 @@ export function scaleForChord(spec, tonicPc, modeId) {
 
   if (spec.colour === 'dom') {
     if (alt.includes('b9') || alt.includes('#9')) {
-      return scale('Altered (super-locrian)', [0, 1, 3, 4, 6, 8, 10], null,
-        'Every tension is raised or lowered — this is the scale the ♭9 is asking for.');
+      return scale(t('Altered (super-locrian)'), [0, 1, 3, 4, 6, 8, 10], null,
+        t('Every tension is raised or lowered — this is the scale the ♭9 is asking for.'));
     }
     if (alt.includes('#11')) {
-      return scale('Lydian dominant', [0, 2, 4, 6, 7, 9, 10], null,
-        'A dominant with a raised 4th, which is exactly the ♯11.');
+      return scale(t('Lydian dominant'), [0, 2, 4, 6, 7, 9, 10], null,
+        t('A dominant with a raised 4th, which is exactly the ♯11.'));
     }
     return scale('Mixolydian', [0, 2, 4, 5, 7, 9, 10], 5,
-      'The dominant scale. The 4th clashes with the chord\'s 3rd — pass through it, do not land on it.');
+      t('The dominant scale. The 4th clashes with the chord\'s 3rd — pass through it, do not land on it.'));
   }
   if (spec.colour === 'dim7') {
-    return scale('Diminished (half–whole)', [0, 1, 3, 4, 6, 7, 9, 10], null,
-      'Symmetrical, like the chord — it works from any of the four notes.');
+    return scale(t('Diminished (half–whole)'), [0, 1, 3, 4, 6, 7, 9, 10], null,
+      t('Symmetrical, like the chord — it works from any of the four notes.'));
   }
   if (spec.colour === 'm7b5') {
-    return scale('Locrian ♮2', [0, 2, 3, 5, 6, 8, 10], null,
-      'Locrian with the 2nd raised, which keeps the 9th usable.');
+    return scale(t('Locrian ♮2'), [0, 2, 3, 5, 6, 8, 10], null,
+      t('Locrian with the 2nd raised, which keeps the 9th usable.'));
   }
 
   // Diatonic chords take the mode built on their own root — the key's notes,
@@ -480,10 +515,10 @@ export function scaleForChord(spec, tonicPc, modeId) {
   // A perfect 4th over a major third is the one note that fights the chord.
   const avoid = quality === 'maj' && offsets.includes(5) ? 5 : null;
   return scale(
-    `${noteName(root, keySignaturePrefersFlats(tonicPc, modeId))} ${MODE_OF_DEGREE[parentIdx]}`,
+    `${noteName(root, keySignaturePrefersFlats(tonicPc, modeId))} ${t(MODE_OF_DEGREE[parentIdx])}`,
     offsets.map((o) => ((o % 12) + 12) % 12),
     avoid,
-    'The key\'s own notes, starting from this chord\'s root.'
+    t('The key\'s own notes, starting from this chord\'s root.')
   );
 }
 

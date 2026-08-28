@@ -20,6 +20,8 @@
 // Music-theory core for CircleSong: pitch classes, modes, diatonic harmony,
 // and the Circle of Fifths layout that drives the main wheel.
 
+import { t } from './i18n.js';
+
 export const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 export const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
@@ -454,7 +456,7 @@ function numeralForSpec(diatonic, colour, symbol) {
   return `${base}${symbol}`;
 }
 
-const SIZE_NOTE = {
+export const SIZE_NOTE = {
   3: 'Plain triad — the chord at its most direct.',
   4: 'Seventh added: the chord gains a direction to move in.',
   5: 'Ninth on top — warmth and colour without changing the function.',
@@ -462,7 +464,7 @@ const SIZE_NOTE = {
   7: 'Thirteenth — the full stack, the sound of a jazz voicing.',
 };
 
-const DEGREE_ROLE = [
+export const DEGREE_ROLE = [
   'home', 'a step away from home', 'the tonic\'s shadow', 'the lift',
   'the pull back home', 'the relative minor', 'the approach chord',
 ];
@@ -491,31 +493,39 @@ export function describeSpec(tonicPc, modeId, spec = {}) {
     const targetName = noteName(targetPc, flats);
     parts.push(
       targetDegree >= 0
-        ? `Secondary dominant — the V7 of ${targetName}, so it pulls to the ${ROMAN[targetDegree]} chord.`
-        : `Borrowed dominant pulling to ${targetName}, which sits outside this key.`
+        ? t('Secondary dominant — the V7 of {target}, so it pulls to the {numeral} chord.', {
+            target: targetName, numeral: ROMAN[targetDegree],
+          })
+        : t('Borrowed dominant pulling to {target}, which sits outside this key.', {
+            target: targetName,
+          })
     );
   } else if (colour === 'dom') {
-    parts.push('The key\'s own dominant, made a true V7 — the strongest pull to the tonic.');
+    parts.push(t('The key\'s own dominant, made a true V7 — the strongest pull to the tonic.'));
   } else if (colour === 'sus4' || colour === 'sus2') {
-    parts.push('No third, so it is neither major nor minor — it wants the chord after it.');
+    parts.push(t('No third, so it is neither major nor minor — it wants the chord after it.'));
   } else if (colour === 'dim7') {
-    parts.push('Symmetrical: it can resolve up a semitone into almost anything.');
+    parts.push(t('Symmetrical: it can resolve up a semitone into almost anything.'));
   } else if (colour === 'm7b5') {
-    parts.push('Half-diminished — the ii of a minor ii–V–i, heading for the dominant.');
+    parts.push(t('Half-diminished — the ii of a minor ii–V–i, heading for the dominant.'));
   } else if (colour === '6') {
-    parts.push('A sixth instead of a seventh: settled rather than in motion.');
+    parts.push(t('A sixth instead of a seventh: settled rather than in motion.'));
   } else if (colour === 'add9') {
-    parts.push('A ninth over a plain triad — colour with no seventh to resolve.');
+    parts.push(t('A ninth over a plain triad — colour with no seventh to resolve.'));
   } else if (colour === 'aug') {
-    parts.push('The raised fifth leans upward into the next chord\'s root or third.');
+    parts.push(t('The raised fifth leans upward into the next chord\'s root or third.'));
   } else {
-    parts.push(`Diatonic — ${DEGREE_ROLE[degree]} in this key.`);
+    parts.push(t('Diatonic — {role} in this key.', { role: DEGREE_ROLE[degree] }));
     if (size > 3) parts.push(SIZE_NOTE[size]);
   }
 
   if (alterations.length) {
-    const labels = alterations.map((id) => ALT_BY_ID[id]?.label).filter(Boolean).join(' and ');
-    parts.push(`The ${labels} tightens the tension — resolve it by step into the next chord.`);
+    const labels = alterations.map((id) => ALT_BY_ID[id]?.label).filter(Boolean).join(t(' and '));
+    parts.push(
+      t('The {alterations} tightens the tension — resolve it by step into the next chord.', {
+        alterations: labels,
+      })
+    );
   }
   return parts.join(' ');
 }
