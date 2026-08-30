@@ -16,10 +16,33 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // Signing comes from the environment, never from the repository. The whole
-    // block is conditional so that a checkout without the secrets still builds
-    // a debug APK, which is what anyone sideloading wants anyway.
     signingConfigs {
+        // The debug key is committed, on purpose, and is not a secret.
+        //
+        // Without it Gradle signs debug builds with ~/.android/debug.keystore,
+        // which it generates on the spot when there is none — and a CI runner
+        // is a fresh machine every time. Every build would then carry a
+        // different signature, and Android refuses to install an APK over one
+        // signed by a different key: the second test build fails with
+        // INSTALL_FAILED_UPDATE_INCOMPATIBLE and the app has to be uninstalled
+        // first. Pinning one key makes a test build an update rather than a
+        // reinstall, which is the whole point of handing someone an APK twice.
+        //
+        // It carries Android's own published debug credentials and is only ever
+        // used for `assembleDebug`. It must never sign a release: that key is
+        // the app's identity on Play forever, it lives outside this repository,
+        // and it reaches the build through the environment below.
+        debug {
+            storeFile file('../debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+
+        // Release signing comes from the environment, never from the
+        // repository. The whole block is conditional so that a checkout without
+        // the secrets still builds a debug APK, which is what anyone sideloading
+        // wants anyway.
         release {
             def storeFilePath = System.getenv("CIRCLESONG_STORE_FILE")
             if (storeFilePath) {
@@ -32,6 +55,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

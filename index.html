@@ -88,7 +88,10 @@
           </svg>
           <!-- Titled in every language at once, so this dialog is readable no
                matter which one the app is currently in. -->
-          <span id="langTitle" class="wordmark lg">Language · Idioma · भाषा · Sprache</span>
+          <!-- One word per script, not one per language: Spanish and Portuguese
+               spell it the same, and printing "Idioma" twice reads as a mistake
+               rather than as thoroughness. -->
+          <span id="langTitle" class="wordmark lg">Language · Idioma · भाषा · Sprache · Bahasa · Язык · Ngôn ngữ</span>
         </div>
         <div class="lang-grid" id="langList" role="radiogroup" aria-label="Language" data-i18n-attr="aria-label"></div>
         <button id="langCloseBtn" class="about-close" data-i18n>CLOSE</button>
@@ -255,7 +258,7 @@
 
         <div class="row gap-xs mt-s">
           <span class="micro-label" data-i18n>FEEL</span>
-          <div class="row gap-xs grow" id="feelRow"></div>
+          <div class="row gap-xs wrap grow" id="feelRow"></div>
         </div>
         <p id="feelNote" class="setting-note"></p>
 
@@ -440,7 +443,7 @@
         </div>
         <button id="smoothBtn" class="chip toggle solid" aria-pressed="false" data-i18n>Off</button>
       </div>
-      <div class="row gap-s mt">
+      <div class="row gap-s wrap mt">
         <button id="clearTimelineBtn" class="chip small" data-i18n>Clear all</button>
         <label class="chip small file-label"><span data-i18n>Import a song file</span><input id="importInput" type="file" accept="application/json" hidden></label>
       </div>

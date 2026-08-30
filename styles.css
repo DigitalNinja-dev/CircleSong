@@ -803,7 +803,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+/* minmax(0, 1fr) rather than 1fr: a plain 1fr track cannot shrink below the
+   min-content of what is in it, so a long word in a translation — "Compasso"
+   where English has "Bar" — widens the whole row past the frame. */
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .stack { display: flex; flex-direction: column; gap: 4px; }
 .chip-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; }
 
@@ -909,7 +912,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .bar-cell.playhead { border-color: var(--a); background: var(--info-bg-veil); }
 .bar-row { display: flex; gap: 3px; }
 .slot {
-  position: relative; flex: 1; display: flex; flex-direction: column;
+  position: relative; flex: 1; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 2px;
   min-height: 54px; padding: 4px 3px; cursor: pointer;
   border: 1.5px solid var(--border); background: var(--raised-lo);
@@ -917,8 +921,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 }
 .slot.filled { border-color: var(--hairline-2); background: var(--raised-2); color: var(--text-2); }
 .slot.dragover { border-color: var(--a); background: var(--info-bg); }
-.slot .main { font: 600 12px var(--display); }
-.slot .sub { font: 400 8px var(--mono); opacity: 0.85; }
+.slot .main { font: 600 12px var(--display); max-width: 100%; }
+/* The bar label under an empty slot is a translated word, and some languages
+   make it far longer than "Bar". Break it rather than let it push the grid. */
+.slot .sub { font: 400 8px var(--mono); opacity: 0.85; max-width: 100%;
+  line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
 .slot .clear {
   position: absolute; top: 1px; right: 2px; background: none; border: none;
   color: var(--dim); font-size: 10px; cursor: pointer; padding: 2px; line-height: 1;
@@ -1545,7 +1552,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 }
 .icon-btn:hover { border-color: var(--a); color: var(--a); }
 .lang-globe { color: var(--a); flex: none; }
-.lang-sheet .wordmark { font-size: 13px; line-height: 1.5; }
+/* The title names this dialog in every language it offers, so it grows with
+   them and has to be allowed to wrap — `.wordmark` is `nowrap` everywhere else,
+   which is right for a logotype and wrong for a sentence. Keeping all of the
+   words rather than trimming the list is the point: someone stranded in a
+   script they cannot read needs to recognise one of them. */
+.lang-sheet .wordmark {
+  font-size: 12px; line-height: 1.55;
+  white-space: normal;
+}
 
 .lang-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

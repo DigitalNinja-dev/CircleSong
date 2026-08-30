@@ -39,7 +39,7 @@ import { createServer } from 'node:http';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dump = process.argv.includes('--dump');
-const LANGS = ['es', 'hi', 'de'];
+const LANGS = ['es', 'hi', 'de', 'id', 'pt', 'ru', 'vi'];
 
 /**
  * Chord suffixes, which are notation rather than language.
