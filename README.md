@@ -173,10 +173,14 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 
 ### Language
 
-- **Four languages** — English, Español, हिन्दी and Deutsch, complete rather
-  than partial: **816 strings**, including the mode lessons, all 56 progression
-  notes, the harmonic analysis the app writes about your loop, and the tuner's
-  microphone errors. Not a word of the interface is left in English.
+- **Eight languages** — English, Español, हिन्दी, Deutsch, Bahasa Indonesia,
+  Português, Русский and Tiếng Việt, complete rather than partial: **819
+  strings** in each, including the mode lessons, all 56 progression notes, the
+  harmonic analysis the app writes about your loop, and the tuner's microphone
+  errors. Not a word of the interface is left in English. Note letters and chord
+  suffixes (`C`, `maj7`, `sus4`) stay as they are in every language: the
+  fretboard, the chord symbols and the tuner all draw letters, so renaming them
+  would be a correctness change rather than a translation.
 - **A globe in the transport bar**, on every screen. Someone who has just put
   the app into a language they cannot read has to be able to get back out, and
   at that moment a settings menu is unreadable and a picture is not. Every
@@ -357,11 +361,52 @@ npm run android:apk        # -> android/app/build/outputs/apk/debug/*.apk
 npm run android:open       # or open the project in Android Studio
 ```
 
+Always go through `npm run android:apk` rather than calling Gradle directly.
+`android/app/src/main/assets/public/` is a synced copy of the web app, and a
+Gradle build does not refresh it — running `./gradlew assembleDebug` on its own
+packages whatever was last synced, which is how you end up debugging a missing
+module rather than the app.
+
 Building locally needs the **Android SDK** and a JDK 21. If you would rather not
-install a toolchain, you do not have to:
-[`.github/workflows/android.yml`](.github/workflows/android.yml) builds a debug
-APK on every push and attaches it to the run — download it from the Actions tab
-and sideload it.
+install a toolchain, you do not have to: the workflow builds the APK for you.
+
+### Getting a test build onto a phone
+
+Two ways, depending on whether you have a cable.
+
+**From the phone alone.** Run the Android workflow from the Actions tab
+("Run workflow"), and it publishes the APK to a fixed release tag, so the link
+never changes:
+
+```
+https://github.com/DigitalNinja-dev/CircleSong/releases/download/test-build/circlesong-debug.apk
+```
+
+Open that on the phone and tap it. Android will ask for permission to install
+from the browser the first time — Settings → Apps → Special access → Install
+unknown apps — and that is a one-time answer. Every push also attaches the APK
+to its own run under Artifacts, but that is a zip behind a GitHub login, which
+is why the release link exists.
+
+**Over a cable.**
+
+```bash
+adb install -r circlesong-debug.apk    # -r updates in place
+```
+
+**Test builds update rather than reinstall.** Android refuses to install an APK
+over one signed by a different key, and Gradle invents a debug key when it finds
+none — which, on a CI runner, is every single build. So the debug key is
+committed at `android/debug.keystore` and every test build is signed with it.
+It is not a secret: it holds Android's own published debug credentials and can
+only sign a debug build. The release key is a different thing entirely and never
+comes near the repository.
+
+**The first install after this change still needs an uninstall.** Any copy
+already on the phone was signed with the random key the old runner generated, so
+Android will refuse to install over it with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+— the very error the fixed key exists to remove. Uninstall CircleSong once, then
+install; from that build onwards every test APK updates in place.
 
 For the Play Store, tag a release (`v1.0.0`) and the same workflow builds a
 signed App Bundle, provided four repository secrets exist:
@@ -421,6 +466,10 @@ src/
   locales/es.js          Spanish
   locales/hi.js          Hindi
   locales/de.js          German
+  locales/id.js          Indonesian
+  locales/pt.js          Portuguese
+  locales/ru.js          Russian
+  locales/vi.js          Vietnamese
   projects.js            saved songs in browser storage
   content.js             harmonic-function copy, mode lessons, progressions
   audio/

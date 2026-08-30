@@ -45,6 +45,10 @@
 import { LOCALE_ES } from './locales/es.js';
 import { LOCALE_HI } from './locales/hi.js';
 import { LOCALE_DE } from './locales/de.js';
+import { LOCALE_ID } from './locales/id.js';
+import { LOCALE_PT } from './locales/pt.js';
+import { LOCALE_RU } from './locales/ru.js';
+import { LOCALE_VI } from './locales/vi.js';
 
 const LANG_KEY = 'circlesong.lang';
 
@@ -60,11 +64,27 @@ export const LANGUAGES = [
   { id: 'es', native: 'Español', english: 'Spanish', dir: 'ltr' },
   { id: 'hi', native: 'हिन्दी', english: 'Hindi', dir: 'ltr' },
   { id: 'de', native: 'Deutsch', english: 'German', dir: 'ltr' },
+  { id: 'id', native: 'Bahasa Indonesia', english: 'Indonesian', dir: 'ltr' },
+  // `pt`, not `pt-BR`: `resolveLang` matches on the primary subtag, so a device
+  // set to pt-BR or pt-PT finds this one. The wording is Brazilian, which is
+  // where the readers are.
+  { id: 'pt', native: 'Português', english: 'Portuguese', dir: 'ltr' },
+  { id: 'ru', native: 'Русский', english: 'Russian', dir: 'ltr' },
+  { id: 'vi', native: 'Tiếng Việt', english: 'Vietnamese', dir: 'ltr' },
 ];
 
 export const LANG_IDS = LANGUAGES.map((l) => l.id);
 
-const DICTS = { en: null, es: LOCALE_ES, hi: LOCALE_HI, de: LOCALE_DE };
+const DICTS = {
+  en: null,
+  es: LOCALE_ES,
+  hi: LOCALE_HI,
+  de: LOCALE_DE,
+  id: LOCALE_ID,
+  pt: LOCALE_PT,
+  ru: LOCALE_RU,
+  vi: LOCALE_VI,
+};
 
 /** One dictionary, for the coverage tool. English has none — it is the source. */
 export function dictFor(id) {
