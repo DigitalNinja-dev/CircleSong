@@ -1431,8 +1431,27 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   filter: url(#tunerGlow);
 }
 .dial-arc.flat, .dial-arc.sharp { stroke: var(--warn); }
+.dial-arc.locked { stroke: var(--a-hi); stroke-width: 11; }
 .dial-pointer { fill: var(--a-mid); filter: url(#tunerGlow); }
 .dial-pointer.flat, .dial-pointer.sharp { fill: var(--warn); }
+.dial-pointer.locked { fill: var(--a-hi); }
+
+/* In tune has to be unmistakable from across a room, and it has to hold still
+   — the detector keeps it for two seconds so that this does not blink. */
+.tuner-dial-wrap[data-state='locked'] {
+  border-color: var(--a);
+  box-shadow: 0 0 0 1px var(--a-35) inset, 0 0 26px var(--a-28);
+}
+.tuner-dial-wrap[data-state='locked'] .tuner-note {
+  color: var(--a-hi);
+  text-shadow: 0 0 20px var(--a-75), 0 0 54px var(--a-40);
+}
+.tuner-dial-wrap[data-state='locked'] #tunerState {
+  color: var(--a-hi);
+  font-weight: 700;
+}
+/* A tick, not a word: it needs no translation and reads before the text does. */
+.tuner-dial-wrap[data-state='locked'] #tunerState::before { content: '✓ '; }
 
 /* Readout sits inside the ring. */
 .tuner-centre {
@@ -13569,6 +13588,24 @@ class Tuner {
     this.emaAlpha = 0.25;
     this.lockDelayMs = 150;
     this.snapCents = 4;
+    /**
+     * How long a lock is held once it has been earned.
+     *
+     * A plucked string is not one pitch. It sharpens on the attack, settles,
+     * then drifts as it decays, and a finger on the peg moves it further — so
+     * a reading that has just touched dead centre will cross back out of a
+     * ±4¢ window several times a second. Reporting that honestly frame by
+     * frame is what makes a tuner flicker, and a flickering "in tune" is no
+     * answer at all: you cannot tell whether you are done.
+     *
+     * So the lock is held for two seconds from the last frame that was
+     * genuinely in tune. Inside that window a drift out to `releaseCents` is
+     * treated as the same note wobbling; past `releaseCents` the peg has
+     * actually moved and the display follows it immediately. The hold also
+     * survives the note dying away, which is the other half of the flicker —
+     * the level falls under the gate while you are still looking at it.
+     */
+    this.holdMs = 2000;
 
     this.notes = [40, 45, 50, 55, 59, 64];
     this.targetMidi = null;   // null = follow whichever string is nearest
@@ -13581,6 +13618,15 @@ class Tuner {
     this._smoothCents = 0;
     this._lockStart = null;
     this._locked = false;
+    this._holdUntil = 0;
+    this._recent = [];
+    this._heldMidi = null;
+    this._lastFreq = null;
+  }
+
+  /** How far the reading may wander before the lock is a lie rather than wobble. */
+  get releaseCents() {
+    return this.snapCents * 2;
   }
 
   /** Set the notes being tuned to; resizes the analysis window to suit. */
@@ -13601,6 +13647,10 @@ class Tuner {
     this._lockStart = null;
     this._locked = false;
     this._chimed = false;
+    this._holdUntil = 0;
+    this._recent = [];
+    this._heldMidi = null;
+    this._lastFreq = null;
   }
 
   /**
@@ -13685,10 +13735,18 @@ class Tuner {
     if (!this.running || !this.analyser) return;
     this.analyser.getFloatTimeDomainData(this.buffer);
 
+    const now = performance.now();
     const level = rmsOf(this.buffer);
     if (level < this.noiseGate) {
-      this._lockStart = null;
-      this._locked = false;
+      // A held lock outlives the note that earned it. Without this the answer
+      // disappears the moment the string decays under the gate, which is
+      // usually the moment you look up from the peg to read it.
+      if (this._locked && now < this._holdUntil) {
+        this._emit({ state: 'locked', freq: this._lastFreq, cents: 0, midi: this._heldMidi ?? this.targetMidi, level, clarity: 0 });
+        return;
+      }
+      this._dropLock();
+      this._recent.length = 0;
       this._smoothCents += (0 - this._smoothCents) * 0.15;
       this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
       return;
@@ -13696,22 +13754,54 @@ class Tuner {
 
     const { freq, clarity } = detectPitch(this.buffer, this.ctx.sampleRate, this._minLag, this._maxLag);
     if (freq <= 0) {
+      if (this._locked && now < this._holdUntil) {
+        this._emit({ state: 'locked', freq: this._lastFreq, cents: 0, midi: this._heldMidi ?? this.targetMidi, level, clarity: 0 });
+        return;
+      }
       this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
       return;
     }
 
-    const midi = this.targetMidi ?? this._nearest(freq);
+    this._lastFreq = freq;
+    const midi = this.targetMidi ?? this._stickyNearest(freq);
     const raw = centsBetween(freq, midiToFreq(midi, this.a4));
-    this._smoothCents += (raw - this._smoothCents) * this.emaAlpha;
 
-    // Hysteresis: hold inside the snap zone before calling it in tune, so a
-    // needle passing through does not flash green.
+    // A median of the last three readings first. One bad frame — an octave
+    // slip on the attack, a transient in the room — moves a mean and cannot
+    // move a median, and it costs two samples of lag at 30 Hz.
+    this._recent.push(raw);
+    if (this._recent.length > 3) this._recent.shift();
+    const median = this._recent.length === 3
+      ? this._recent.slice().sort((x, y) => x - y)[1]
+      : raw;
+
+    // Then an EMA whose rate follows how far it has to go. A real correction —
+    // you turning the peg — moves tens of cents and gets the full response the
+    // user asked for; the last couple of cents of a string breathing get a
+    // quarter of it, so the needle settles instead of dithering. The Response
+    // setting still means what it says: this only scales it down as the
+    // reading converges.
+    const error = Math.abs(median - this._smoothCents);
+    const urgency = Math.min(1, Math.max(0.25, error / 8));
+    this._smoothCents += (median - this._smoothCents) * this.emaAlpha * urgency;
+
+    const off = Math.abs(this._smoothCents);
     let state;
-    const now = performance.now();
-    if (Math.abs(this._smoothCents) <= this.snapCents) {
+    if (this._locked) {
+      if (off <= this.snapCents) {
+        this._holdUntil = now + this.holdMs;      // still right: keep holding
+      } else if (off > this.releaseCents || now >= this._holdUntil) {
+        this._dropLock();
+      }
+      state = this._locked ? 'locked' : (this._smoothCents < 0 ? 'flat' : 'sharp');
+    } else if (off <= this.snapCents) {
+      // Hysteresis on the way in too: hold inside the snap zone before calling
+      // it in tune, so a needle passing through does not flash green.
       if (this._lockStart === null) this._lockStart = now;
       if (now - this._lockStart >= this.lockDelayMs) {
         this._locked = true;
+        this._holdUntil = now + this.holdMs;
+        this._heldMidi = midi;
         state = 'locked';
         // Once per lock, not once per frame.
         if (this.chimeOnLock && !this._chimed) {
@@ -13721,19 +13811,42 @@ class Tuner {
       } else state = this._smoothCents < 0 ? 'flat' : 'sharp';
     } else {
       this._lockStart = null;
-      this._locked = false;
-      this._chimed = false;
       state = this._smoothCents < 0 ? 'flat' : 'sharp';
     }
 
     this._emit({
       state,
       freq,
-      cents: this._locked ? 0 : this._smoothCents,
+      cents: state === 'locked' ? 0 : this._smoothCents,
       midi,
       level,
       clarity,
     });
+  }
+
+  _dropLock() {
+    this._locked = false;
+    this._lockStart = null;
+    this._chimed = false;
+    this._holdUntil = 0;
+    this._heldMidi = null;
+  }
+
+  /**
+   * The nearest note, but reluctant to change its mind while locked.
+   *
+   * In auto mode a string that is being tuned passes closer to its neighbour
+   * for a moment, and the display jumping to that neighbour and back is the
+   * same flicker in another form. Once a note is locked it is kept until the
+   * reading is a long way from it — further than any wobble, and further than
+   * the release band.
+   */
+  _stickyNearest(freq) {
+    if (this._locked && this._heldMidi !== null) {
+      const held = Math.abs(centsBetween(freq, midiToFreq(this._heldMidi, this.a4)));
+      if (held < 70) return this._heldMidi;
+    }
+    return this._nearest(freq);
   }
 
   _emit(update) {
@@ -16361,6 +16474,35 @@ const urlTheme = THEME_IDS.includes(params.get('theme')) ? params.get('theme') :
 const initialTheme = urlTheme || storedTheme();
 applyTheme(initialTheme);
 
+/**
+ * Tell the Android shell which way round to draw the system bars.
+ *
+ * The app paints its own background behind the status bar and the navigation
+ * bar, and which background that is depends on the in-app theme — so Light and
+ * Sepia would put a white clock on a white bar. A theme is a page decision and
+ * the page is the only thing that knows it; switching the activity's night
+ * mode instead would recreate the activity and reload the app. A no-op
+ * everywhere but the app, where the bars are the browser's problem.
+ */
+function syncSystemBars(resolved) {
+  const shell = window.CircleSongInsets;
+  if (!shell || typeof shell.setLightSystemBars !== 'function') return;
+  try {
+    shell.setLightSystemBars(resolved === 'light' || resolved === 'sepia');
+  } catch (e) {
+    /* an older shell without the method — the bars simply stay as they were */
+  }
+}
+
+/** Apply a theme preference and keep the native chrome in step with it. */
+function setTheme(pref) {
+  const resolved = applyTheme(pref);
+  syncSystemBars(resolved);
+  return resolved;
+}
+
+syncSystemBars(document.documentElement.dataset.theme);
+
 // Language, on the same terms as the theme: a URL parameter wins so every
 // language is linkable and screenshottable, then the stored choice, then the
 // device's own languages. Resolved before the first render, because the tables
@@ -17098,7 +17240,13 @@ function renderCircle() {
       b.dataset.ring = minor ? 'minor' : 'major';
       b.tabIndex = focused.wedge === i && focused.minor === minor ? 0 : -1;
       b.style.cssText = `left:${pct(p.x)};top:${pct(p.y)};color:${colour};`;
-      b.onclick = () => selectWedge(i, minor);
+      // Stop it here rather than let the wheel's geometry handler filter it
+      // out downstream. Selecting can re-render the wheel, which detaches this
+      // button mid-dispatch, and a detached button no longer matches
+      // ".wheel-labels button" — so the filter missed it and every tap on a
+      // label while the key was unlocked was acted on twice, once by the
+      // button and once by the geometry. That was audible as a doubled strum.
+      b.onclick = (ev) => { ev.stopPropagation(); selectWedge(i, minor); };
       return b;
     };
     // Ink polarity is decided per wedge, against the wedge.
@@ -17400,7 +17548,20 @@ async function selectWedge(wedge, minor) {
   reresolveAll();
   render();
   restore();
-  previewDegree(0);
+  // Chord/Note governs the wheel whether or not the key is locked. Unlocked,
+  // a tap also moves the key — but what you hear is still the thing the
+  // switch names, which is the whole point of having it on screen always.
+  if (state.exploreMode === 'note') playRootNote();
+  else previewDegree(0);
+}
+
+/** The new tonic, sounded as one note — the Note half of the wheel's switch. */
+async function playRootNote() {
+  if (sequencer.playing) return;
+  if (!(await ensureAudio())) return;
+  const when = auditionStart();
+  engine.pluckNote({ midi: 60 + state.rootPc, tuning: tuning(), when, velocity: 0.85 });
+  engine.damp(when + exploreRingSeconds());
 }
 
 /** Move the keyboard focus to whichever wedge `state.wheelFocus` names. */
@@ -18843,14 +19004,21 @@ function renderTunerReadout() {
   const c = Math.max(-50, Math.min(50, r.cents));
   note.textContent = midiLabel(r.midi);
   cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
-  $('tunerFreq').textContent = t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
+  $('tunerFreq').textContent = r.freq === null
+    ? t('Freq: —')
+    : t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
   $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
   stateEl.textContent =
     r.state === 'locked' ? t('LOCKED') : r.state === 'flat' ? t('FLAT') : t('SHARP');
 
   // Fill from dead centre out to wherever the note actually is, so the arc
-  // itself shows how far off it is rather than only the pointer.
-  arc.setAttribute('d', Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r) : dialArc(0, c, DIAL.r));
+  // itself shows how far off it is rather than only the pointer. In tune, the
+  // whole ring lights instead: the question "am I done?" should be answerable
+  // from across the room, without reading a number or finding a needle.
+  arc.setAttribute('d',
+    r.state === 'locked' ? dialArc(-50, 50, DIAL.r)
+    : Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r)
+    : dialArc(0, c, DIAL.r));
 
   pointer.replaceChildren();
   const tip = dialPoint(c, DIAL.r + 16);
@@ -18979,7 +19147,7 @@ function renderTheme() {
     b.append(sw, el('span', 'theme-name', theme.label));
     b.onclick = () => {
       state.theme = theme.id;
-      applyTheme(theme.id);
+      setTheme(theme.id);
       saveTheme(theme.id);
       // The wheel and the fretboard are painted from JavaScript, so they have
       // to be repainted rather than merely restyled.
@@ -19557,9 +19725,9 @@ function wire() {
   // wheel is painted as a conic gradient rather than as twelve elements, so
   // there is nothing to attach a listener to but the geometry.
   $('wheel').onclick = (e) => {
-    // A label is a real button and handles itself; without this the same tap
-    // would be counted twice, once by the button and once by the geometry.
-    if (e.target.closest('.wheel-labels button')) return;
+    // A label is a real button and stops the event itself; this is the second
+    // line of the same defence, for anything in the labels that is not one.
+    if (e.target.closest && e.target.closest('.wheel-labels')) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const scale = rect.width / 280;
     const dx = (e.clientX - (rect.left + rect.width / 2)) / scale;
@@ -19951,7 +20119,7 @@ function applySongData(data) {
 // dark at sunset expects the app to flip with it, without being reopened.
 watchSystemTheme(
   () => state.theme,
-  () => render()
+  (resolved) => { syncSystemBars(resolved); render(); }
 );
 
 /**

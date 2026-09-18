@@ -1394,8 +1394,27 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   filter: url(#tunerGlow);
 }
 .dial-arc.flat, .dial-arc.sharp { stroke: var(--warn); }
+.dial-arc.locked { stroke: var(--a-hi); stroke-width: 11; }
 .dial-pointer { fill: var(--a-mid); filter: url(#tunerGlow); }
 .dial-pointer.flat, .dial-pointer.sharp { fill: var(--warn); }
+.dial-pointer.locked { fill: var(--a-hi); }
+
+/* In tune has to be unmistakable from across a room, and it has to hold still
+   — the detector keeps it for two seconds so that this does not blink. */
+.tuner-dial-wrap[data-state='locked'] {
+  border-color: var(--a);
+  box-shadow: 0 0 0 1px var(--a-35) inset, 0 0 26px var(--a-28);
+}
+.tuner-dial-wrap[data-state='locked'] .tuner-note {
+  color: var(--a-hi);
+  text-shadow: 0 0 20px var(--a-75), 0 0 54px var(--a-40);
+}
+.tuner-dial-wrap[data-state='locked'] #tunerState {
+  color: var(--a-hi);
+  font-weight: 700;
+}
+/* A tick, not a word: it needs no translation and reads before the text does. */
+.tuner-dial-wrap[data-state='locked'] #tunerState::before { content: '✓ '; }
 
 /* Readout sits inside the ring. */
 .tuner-centre {

@@ -126,9 +126,21 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 ### Tuning
 
 - **A real tuner** — YIN pitch detection with parabolic interpolation, an RMS
-  noise gate, EMA smoothing and a hysteresis lock, running on the app's own
-  AudioContext. The microphone is a dead end by construction: it reaches an
-  analyser and nothing else.
+  noise gate, a median filter, adaptive smoothing and a held lock, running on
+  the app's own AudioContext. The microphone is a dead end by construction: it
+  reaches an analyser and nothing else.
+- **An answer that stays still long enough to read.** A plucked string is not
+  one pitch — it sharpens on the attack, drifts as it decays, and moves again
+  under the finger on the peg — so a reading reported frame by frame crosses
+  in and out of a ±4¢ window several times a second, and a flickering "in
+  tune" is no answer at all. So: a median of the last three readings, which no
+  single bad frame can move; an EMA whose rate follows how far it has to go, so
+  a real correction is followed at once while the last couple of cents of a
+  string breathing are damped; and a lock held for two seconds from the last
+  frame that was genuinely in tune, surviving both a wobble out to ±8¢ and the
+  note dying away under the gate. Past ±8¢ the peg has actually moved and the
+  display follows it immediately. In tune, the whole ring lights and the status
+  reads ✓ LOCKED — answerable from across the room, without reading a number.
 - **8 instruments and 26 tunings** — guitar (including Drop C, Open D, DADGAD
   and 7-string), bass, ukulele, mandolin, banjo, violin, cello/viola, and
   chromatic.
@@ -447,6 +459,12 @@ inside the WebView, so they are the only native code in the project.
   `--inset-left`; `env()` stays as the fallback, which is the whole answer in a
   browser. The transport bar pads itself by the top inset rather than moving
   down, so its background still paints behind the status bar.
+- **Which way round to draw the system bars.** The app paints its own
+  background behind the status bar and the navigation bar, and which one that
+  is depends on the in-app theme — so Light and Sepia would put a white clock
+  on a white bar. The page tells the shell, which sets it through
+  `WindowInsetsControllerCompat`; switching the activity's night mode instead
+  would recreate the activity and reload the app.
 - **That the app has been put away.** Capacitor's `onPause` only notifies
   plugins — it never pauses the WebView — so a minimised app carries on
   running, and the audio worklet carries on rendering. The page silences itself
@@ -455,6 +473,20 @@ inside the WebView, so they are the only native code in the project.
   that actually guarantees silence. `MainActivity` calls `WebView.onPause`,
   which is what marks the document hidden so that event is delivered at all; it
   does not pause JavaScript, so the handler still runs.
+
+### Why the activity theme is fixed dark
+
+Capacitor sets the activity theme on the activity *and* on the application, so
+it is also the theme every native control the WebView puts up is built
+against — which on Android means the `<select>` popups. It used to be
+`Theme.AppCompat.DayNight`, which follows the phone rather than the app, so a
+phone in light mode gave those popups light-theme text on a background the
+theme's stray `android:background` had already forced dark: unreadable. The
+theme is now fixed dark with an explicit alert-dialog theme, so the popups are
+legible whichever way the phone is set. The cost is that the Light and Sepia
+themes get a dark dropdown; the alternative was an unreadable one, and the only
+way to make it follow the in-app theme is to recreate the activity, which
+reloads the app.
 
 ### Alternatively, a PWA
 

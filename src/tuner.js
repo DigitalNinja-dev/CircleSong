@@ -405,6 +405,24 @@ export class Tuner {
     this.emaAlpha = 0.25;
     this.lockDelayMs = 150;
     this.snapCents = 4;
+    /**
+     * How long a lock is held once it has been earned.
+     *
+     * A plucked string is not one pitch. It sharpens on the attack, settles,
+     * then drifts as it decays, and a finger on the peg moves it further — so
+     * a reading that has just touched dead centre will cross back out of a
+     * ±4¢ window several times a second. Reporting that honestly frame by
+     * frame is what makes a tuner flicker, and a flickering "in tune" is no
+     * answer at all: you cannot tell whether you are done.
+     *
+     * So the lock is held for two seconds from the last frame that was
+     * genuinely in tune. Inside that window a drift out to `releaseCents` is
+     * treated as the same note wobbling; past `releaseCents` the peg has
+     * actually moved and the display follows it immediately. The hold also
+     * survives the note dying away, which is the other half of the flicker —
+     * the level falls under the gate while you are still looking at it.
+     */
+    this.holdMs = 2000;
 
     this.notes = [40, 45, 50, 55, 59, 64];
     this.targetMidi = null;   // null = follow whichever string is nearest
@@ -417,6 +435,15 @@ export class Tuner {
     this._smoothCents = 0;
     this._lockStart = null;
     this._locked = false;
+    this._holdUntil = 0;
+    this._recent = [];
+    this._heldMidi = null;
+    this._lastFreq = null;
+  }
+
+  /** How far the reading may wander before the lock is a lie rather than wobble. */
+  get releaseCents() {
+    return this.snapCents * 2;
   }
 
   /** Set the notes being tuned to; resizes the analysis window to suit. */
@@ -437,6 +464,10 @@ export class Tuner {
     this._lockStart = null;
     this._locked = false;
     this._chimed = false;
+    this._holdUntil = 0;
+    this._recent = [];
+    this._heldMidi = null;
+    this._lastFreq = null;
   }
 
   /**
@@ -521,10 +552,18 @@ export class Tuner {
     if (!this.running || !this.analyser) return;
     this.analyser.getFloatTimeDomainData(this.buffer);
 
+    const now = performance.now();
     const level = rmsOf(this.buffer);
     if (level < this.noiseGate) {
-      this._lockStart = null;
-      this._locked = false;
+      // A held lock outlives the note that earned it. Without this the answer
+      // disappears the moment the string decays under the gate, which is
+      // usually the moment you look up from the peg to read it.
+      if (this._locked && now < this._holdUntil) {
+        this._emit({ state: 'locked', freq: this._lastFreq, cents: 0, midi: this._heldMidi ?? this.targetMidi, level, clarity: 0 });
+        return;
+      }
+      this._dropLock();
+      this._recent.length = 0;
       this._smoothCents += (0 - this._smoothCents) * 0.15;
       this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
       return;
@@ -532,22 +571,54 @@ export class Tuner {
 
     const { freq, clarity } = detectPitch(this.buffer, this.ctx.sampleRate, this._minLag, this._maxLag);
     if (freq <= 0) {
+      if (this._locked && now < this._holdUntil) {
+        this._emit({ state: 'locked', freq: this._lastFreq, cents: 0, midi: this._heldMidi ?? this.targetMidi, level, clarity: 0 });
+        return;
+      }
       this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
       return;
     }
 
-    const midi = this.targetMidi ?? this._nearest(freq);
+    this._lastFreq = freq;
+    const midi = this.targetMidi ?? this._stickyNearest(freq);
     const raw = centsBetween(freq, midiToFreq(midi, this.a4));
-    this._smoothCents += (raw - this._smoothCents) * this.emaAlpha;
 
-    // Hysteresis: hold inside the snap zone before calling it in tune, so a
-    // needle passing through does not flash green.
+    // A median of the last three readings first. One bad frame — an octave
+    // slip on the attack, a transient in the room — moves a mean and cannot
+    // move a median, and it costs two samples of lag at 30 Hz.
+    this._recent.push(raw);
+    if (this._recent.length > 3) this._recent.shift();
+    const median = this._recent.length === 3
+      ? this._recent.slice().sort((x, y) => x - y)[1]
+      : raw;
+
+    // Then an EMA whose rate follows how far it has to go. A real correction —
+    // you turning the peg — moves tens of cents and gets the full response the
+    // user asked for; the last couple of cents of a string breathing get a
+    // quarter of it, so the needle settles instead of dithering. The Response
+    // setting still means what it says: this only scales it down as the
+    // reading converges.
+    const error = Math.abs(median - this._smoothCents);
+    const urgency = Math.min(1, Math.max(0.25, error / 8));
+    this._smoothCents += (median - this._smoothCents) * this.emaAlpha * urgency;
+
+    const off = Math.abs(this._smoothCents);
     let state;
-    const now = performance.now();
-    if (Math.abs(this._smoothCents) <= this.snapCents) {
+    if (this._locked) {
+      if (off <= this.snapCents) {
+        this._holdUntil = now + this.holdMs;      // still right: keep holding
+      } else if (off > this.releaseCents || now >= this._holdUntil) {
+        this._dropLock();
+      }
+      state = this._locked ? 'locked' : (this._smoothCents < 0 ? 'flat' : 'sharp');
+    } else if (off <= this.snapCents) {
+      // Hysteresis on the way in too: hold inside the snap zone before calling
+      // it in tune, so a needle passing through does not flash green.
       if (this._lockStart === null) this._lockStart = now;
       if (now - this._lockStart >= this.lockDelayMs) {
         this._locked = true;
+        this._holdUntil = now + this.holdMs;
+        this._heldMidi = midi;
         state = 'locked';
         // Once per lock, not once per frame.
         if (this.chimeOnLock && !this._chimed) {
@@ -557,19 +628,42 @@ export class Tuner {
       } else state = this._smoothCents < 0 ? 'flat' : 'sharp';
     } else {
       this._lockStart = null;
-      this._locked = false;
-      this._chimed = false;
       state = this._smoothCents < 0 ? 'flat' : 'sharp';
     }
 
     this._emit({
       state,
       freq,
-      cents: this._locked ? 0 : this._smoothCents,
+      cents: state === 'locked' ? 0 : this._smoothCents,
       midi,
       level,
       clarity,
     });
+  }
+
+  _dropLock() {
+    this._locked = false;
+    this._lockStart = null;
+    this._chimed = false;
+    this._holdUntil = 0;
+    this._heldMidi = null;
+  }
+
+  /**
+   * The nearest note, but reluctant to change its mind while locked.
+   *
+   * In auto mode a string that is being tuned passes closer to its neighbour
+   * for a moment, and the display jumping to that neighbour and back is the
+   * same flicker in another form. Once a note is locked it is kept until the
+   * reading is a long way from it — further than any wobble, and further than
+   * the release band.
+   */
+  _stickyNearest(freq) {
+    if (this._locked && this._heldMidi !== null) {
+      const held = Math.abs(centsBetween(freq, midiToFreq(this._heldMidi, this.a4)));
+      if (held < 70) return this._heldMidi;
+    }
+    return this._nearest(freq);
   }
 
   _emit(update) {

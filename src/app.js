@@ -143,6 +143,35 @@ const urlTheme = THEME_IDS.includes(params.get('theme')) ? params.get('theme') :
 const initialTheme = urlTheme || storedTheme();
 applyTheme(initialTheme);
 
+/**
+ * Tell the Android shell which way round to draw the system bars.
+ *
+ * The app paints its own background behind the status bar and the navigation
+ * bar, and which background that is depends on the in-app theme — so Light and
+ * Sepia would put a white clock on a white bar. A theme is a page decision and
+ * the page is the only thing that knows it; switching the activity's night
+ * mode instead would recreate the activity and reload the app. A no-op
+ * everywhere but the app, where the bars are the browser's problem.
+ */
+function syncSystemBars(resolved) {
+  const shell = window.CircleSongInsets;
+  if (!shell || typeof shell.setLightSystemBars !== 'function') return;
+  try {
+    shell.setLightSystemBars(resolved === 'light' || resolved === 'sepia');
+  } catch (e) {
+    /* an older shell without the method — the bars simply stay as they were */
+  }
+}
+
+/** Apply a theme preference and keep the native chrome in step with it. */
+function setTheme(pref) {
+  const resolved = applyTheme(pref);
+  syncSystemBars(resolved);
+  return resolved;
+}
+
+syncSystemBars(document.documentElement.dataset.theme);
+
 // Language, on the same terms as the theme: a URL parameter wins so every
 // language is linkable and screenshottable, then the stored choice, then the
 // device's own languages. Resolved before the first render, because the tables
@@ -880,7 +909,13 @@ function renderCircle() {
       b.dataset.ring = minor ? 'minor' : 'major';
       b.tabIndex = focused.wedge === i && focused.minor === minor ? 0 : -1;
       b.style.cssText = `left:${pct(p.x)};top:${pct(p.y)};color:${colour};`;
-      b.onclick = () => selectWedge(i, minor);
+      // Stop it here rather than let the wheel's geometry handler filter it
+      // out downstream. Selecting can re-render the wheel, which detaches this
+      // button mid-dispatch, and a detached button no longer matches
+      // ".wheel-labels button" — so the filter missed it and every tap on a
+      // label while the key was unlocked was acted on twice, once by the
+      // button and once by the geometry. That was audible as a doubled strum.
+      b.onclick = (ev) => { ev.stopPropagation(); selectWedge(i, minor); };
       return b;
     };
     // Ink polarity is decided per wedge, against the wedge.
@@ -1182,7 +1217,20 @@ async function selectWedge(wedge, minor) {
   reresolveAll();
   render();
   restore();
-  previewDegree(0);
+  // Chord/Note governs the wheel whether or not the key is locked. Unlocked,
+  // a tap also moves the key — but what you hear is still the thing the
+  // switch names, which is the whole point of having it on screen always.
+  if (state.exploreMode === 'note') playRootNote();
+  else previewDegree(0);
+}
+
+/** The new tonic, sounded as one note — the Note half of the wheel's switch. */
+async function playRootNote() {
+  if (sequencer.playing) return;
+  if (!(await ensureAudio())) return;
+  const when = auditionStart();
+  engine.pluckNote({ midi: 60 + state.rootPc, tuning: tuning(), when, velocity: 0.85 });
+  engine.damp(when + exploreRingSeconds());
 }
 
 /** Move the keyboard focus to whichever wedge `state.wheelFocus` names. */
@@ -2625,14 +2673,21 @@ function renderTunerReadout() {
   const c = Math.max(-50, Math.min(50, r.cents));
   note.textContent = midiLabel(r.midi);
   cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
-  $('tunerFreq').textContent = t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
+  $('tunerFreq').textContent = r.freq === null
+    ? t('Freq: —')
+    : t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
   $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
   stateEl.textContent =
     r.state === 'locked' ? t('LOCKED') : r.state === 'flat' ? t('FLAT') : t('SHARP');
 
   // Fill from dead centre out to wherever the note actually is, so the arc
-  // itself shows how far off it is rather than only the pointer.
-  arc.setAttribute('d', Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r) : dialArc(0, c, DIAL.r));
+  // itself shows how far off it is rather than only the pointer. In tune, the
+  // whole ring lights instead: the question "am I done?" should be answerable
+  // from across the room, without reading a number or finding a needle.
+  arc.setAttribute('d',
+    r.state === 'locked' ? dialArc(-50, 50, DIAL.r)
+    : Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r)
+    : dialArc(0, c, DIAL.r));
 
   pointer.replaceChildren();
   const tip = dialPoint(c, DIAL.r + 16);
@@ -2761,7 +2816,7 @@ function renderTheme() {
     b.append(sw, el('span', 'theme-name', theme.label));
     b.onclick = () => {
       state.theme = theme.id;
-      applyTheme(theme.id);
+      setTheme(theme.id);
       saveTheme(theme.id);
       // The wheel and the fretboard are painted from JavaScript, so they have
       // to be repainted rather than merely restyled.
@@ -3339,9 +3394,9 @@ function wire() {
   // wheel is painted as a conic gradient rather than as twelve elements, so
   // there is nothing to attach a listener to but the geometry.
   $('wheel').onclick = (e) => {
-    // A label is a real button and handles itself; without this the same tap
-    // would be counted twice, once by the button and once by the geometry.
-    if (e.target.closest('.wheel-labels button')) return;
+    // A label is a real button and stops the event itself; this is the second
+    // line of the same defence, for anything in the labels that is not one.
+    if (e.target.closest && e.target.closest('.wheel-labels')) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const scale = rect.width / 280;
     const dx = (e.clientX - (rect.left + rect.width / 2)) / scale;
@@ -3733,7 +3788,7 @@ function applySongData(data) {
 // dark at sunset expects the app to flip with it, without being reopened.
 watchSystemTheme(
   () => state.theme,
-  () => render()
+  (resolved) => { syncSystemBars(resolved); render(); }
 );
 
 /**
