@@ -432,6 +432,30 @@ signing config from the environment.
   newer, which is a system component updated through the Play Store rather than
   tied to the OS version.
 
+### The two things `MainActivity` is there for
+
+Everything else about the app is the web app. These two are not reachable from
+inside the WebView, so they are the only native code in the project.
+
+- **Where the system bars are.** From targetSdk 35 the window is edge-to-edge
+  with no way to opt out, so the page is drawn underneath the status bar and
+  the navigation bar. `env(safe-area-inset-*)` does not rescue it: Android's
+  WebView fills those in from the display cutout alone, and a status bar is not
+  a cutout, so `env(safe-area-inset-top)` is `0` while the clock sits on top of
+  the transport. `MainActivity` measures the real insets and the page reads
+  them into `--inset-top`, `--inset-right`, `--inset-bottom` and
+  `--inset-left`; `env()` stays as the fallback, which is the whole answer in a
+  browser. The transport bar pads itself by the top inset rather than moving
+  down, so its background still paints behind the status bar.
+- **That the app has been put away.** Capacitor's `onPause` only notifies
+  plugins — it never pauses the WebView — so a minimised app carries on
+  running, and the audio worklet carries on rendering. The page silences itself
+  on `visibilitychange` and `pagehide`: transport stopped, notes off,
+  microphone released, and then the `AudioContext` suspended, which is the part
+  that actually guarantees silence. `MainActivity` calls `WebView.onPause`,
+  which is what marks the document hidden so that event is delivered at all; it
+  does not pause JavaScript, so the handler still runs.
+
 ### Alternatively, a PWA
 
 None of the above is required for everyday use. The app installs straight from

@@ -3598,16 +3598,6 @@ function wire() {
       previewDegree(state.activeDegree);
     }
   });
-
-  // Browsers suspend the context when the tab is hidden; stop cleanly instead
-  // of letting the scheduler race a stalled clock.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && sequencer.playing) {
-      sequencer.stop();
-      state.playing = false;
-      renderTransport();
-    }
-  });
 }
 
 // ---------------------------------------------------------------- save/load
@@ -3746,13 +3736,78 @@ watchSystemTheme(
   () => render()
 );
 
-// The microphone is released whenever the page stops being visible, so it is
-// never held by a tab sitting in the background.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) return;
+/**
+ * Everything that makes sound, stopped — and then the context itself.
+ *
+ * A backgrounded app is not reliably a paused one. Capacitor's onPause only
+ * notifies plugins, so the WebView carries on: the scheduler keeps queueing
+ * bars against an audio clock that never stops, and the worklet keeps
+ * rendering whatever it was holding. That is heard as an app still making a
+ * noise after it has been put away.
+ *
+ * Stopping the transport is not enough on its own, because a note already
+ * sounding, a reference tone or an open microphone all outlive it. Suspending
+ * the context is what actually guarantees silence: a suspended context renders
+ * nothing at all. Every path that makes sound goes through ensureAudio(),
+ * which resumes it, so nothing has to be put back by hand.
+ */
+function silenceForBackground() {
+  if (sequencer.playing) {
+    sequencer.stop();
+    state.playing = false;
+    renderTransport();
+  }
   if (state.tunerOn) stopTuner();
   stopReference();
+  engine.allNotesOff();
+  engine.suspend().catch(() => {});
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    silenceForBackground();
+  } else if (engine.ready && engine.ctx.state === 'suspended') {
+    // Brought back to the front: resume now rather than on the next tap, so
+    // the first chord after switching back is not the one that pays for it.
+    engine.ctx.resume().catch(() => {});
+  }
 });
+
+// visibilitychange is not fired when a page is discarded outright, so the last
+// moment the app is certain to get is pagehide.
+window.addEventListener('pagehide', silenceForBackground);
+
+// ------------------------------------------------------------------ insets
+
+/**
+ * How much room the system bars need, in CSS pixels.
+ *
+ * In a browser env(safe-area-inset-*) is the whole answer and the CSS defaults
+ * already hold it. In the Android app it is not: from targetSdk 35 the window
+ * is edge-to-edge with no way to opt out, and the WebView derives env() from
+ * the display cutout alone — so env(safe-area-inset-top) is 0 while the clock
+ * and the notification icons sit on top of the transport bar. MainActivity
+ * measures the real insets and exposes them here.
+ */
+function applyNativeInsets() {
+  const source = window.CircleSongInsets;
+  if (!source || typeof source.get !== 'function') return;
+  let parts;
+  try {
+    parts = String(source.get()).split(',').map(Number);
+  } catch (e) {
+    return;
+  }
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n) || n < 0)) return;
+  const names = ['--inset-top', '--inset-right', '--inset-bottom', '--inset-left'];
+  parts.forEach((px, i) => document.documentElement.style.setProperty(names[i], `${px}px`));
+}
+
+applyNativeInsets();
+// Rotation, a keyboard opening, a cutout coming into play: the native side
+// says when, and resize covers the case where the event was missed.
+window.addEventListener('circlesong:insets', applyNativeInsets);
+window.addEventListener('resize', applyNativeInsets);
 
 // --------------------------------------------------------------------- boot
 
