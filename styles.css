@@ -933,6 +933,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .legend-item i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 
 /* ---------- timeline ---------- */
+/* Every bar lasts the same time, so every bar is the same width; what gives
+   instead is how many bars share a row. A quarter of a phone holds one chord
+   comfortably and two at 16px, which is neither readable nor tappable — so a
+   section with any divided bar in it drops to two bars per row, and the extra
+   scrolling is the cheaper cost. data-split is the widest bar in the section,
+   set from JavaScript because only JavaScript knows it. */
+#timelineGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#timelineGrid[data-split='2'],
+#timelineGrid[data-split='3'],
+#timelineGrid[data-split='4'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 .bar-cell { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 3px; border: 1.5px solid transparent; }
 .bar-cell.playhead { border-color: var(--a); background: var(--info-bg-veil); }
 .bar-row { display: flex; gap: 3px; }
@@ -1713,6 +1724,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   :root { --shell: 680px; --wheel: 380px; }
 
   .panel { padding: 22px 24px 8px; }
+  /* Room for four bars across again, divided or not. */
+  #timelineGrid[data-split] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .transport { padding: calc(16px + var(--inset-top)) 24px 14px; }
 
   /* Seven degrees in one row reads as a scale rather than as two shelves. */

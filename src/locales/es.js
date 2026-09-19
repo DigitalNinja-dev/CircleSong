@@ -507,7 +507,6 @@ export const LOCALE_ES = {
   'FIRST': 'PRIMERA',
   'SECOND': 'SEGUNDA',
   'Bar {n}': 'Compás {n}',
-  'Split bar into two chords': 'Dividir el compás en dos acordes',
   'Clear': 'Borrar',
   '+ Loop': '+ Bucle',
   'Duplicate': 'Duplicar',
@@ -1102,7 +1101,17 @@ export const LOCALE_ES = {
   'Could not read that file — {error}': 'No se ha podido leer ese archivo — {error}',
   'Unrecognised file format': 'Formato de archivo no reconocido',
 
+  'Add another chord to this bar': 'Añadir otro acorde a este compás',
+  'Add another chord to bar {n}': 'Añadir otro acorde al compás {n}',
+  'CHORDS IN THIS BAR': 'ACORDES EN ESTE COMPÁS',
+  'BAR {n} · CHORD {i} OF {total}': 'COMPÁS {n} · ACORDE {i} DE {total}',
+  'One chord for the whole bar': 'Un solo acorde para todo el compás',
+  'Divide the bar into {n} chords of equal length':
+    'Dividir el compás en {n} acordes de igual duración',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Un compás no tiene por qué llevar un solo acorde. Toca el + que hay junto a un compás, o ábrelo y elige 1, 2, 3 o 4: el compás conserva su duración y los acordes lo reparten por igual, que es como se mueve de verdad la mayoría de las canciones.',
   '// MODES': '// MODOS',
   '// GUIDE_FOR_GUITARISTS': '// GUÍA_PARA_GUITARRISTAS',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':

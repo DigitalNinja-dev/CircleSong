@@ -970,6 +970,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 .legend-item i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 
 /* ---------- timeline ---------- */
+/* Every bar lasts the same time, so every bar is the same width; what gives
+   instead is how many bars share a row. A quarter of a phone holds one chord
+   comfortably and two at 16px, which is neither readable nor tappable — so a
+   section with any divided bar in it drops to two bars per row, and the extra
+   scrolling is the cheaper cost. data-split is the widest bar in the section,
+   set from JavaScript because only JavaScript knows it. */
+#timelineGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#timelineGrid[data-split='2'],
+#timelineGrid[data-split='3'],
+#timelineGrid[data-split='4'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 .bar-cell { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 3px; border: 1.5px solid transparent; }
 .bar-cell.playhead { border-color: var(--a); background: var(--info-bg-veil); }
 .bar-row { display: flex; gap: 3px; }
@@ -1750,6 +1761,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   :root { --shell: 680px; --wheel: 380px; }
 
   .panel { padding: 22px 24px 8px; }
+  /* Room for four bars across again, divided or not. */
+  #timelineGrid[data-split] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .transport { padding: calc(16px + var(--inset-top)) 24px 14px; }
 
   /* Seven degrees in one row reads as a scale rather than as two shelves. */
@@ -2177,6 +2190,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <span class="micro-label" id="pickerTitle">BAR 1</span>
           <button id="pickerCloseBtn" class="chip small" data-i18n>Done</button>
         </div>
+        <!-- How many chords this bar holds. A bar is one chord by default, but
+             plenty of songs put two, three or four in it, and a tool that
+             cannot write those cannot write those songs. -->
+        <div class="row gap-xs wrap mt-s">
+          <span class="micro-label" data-i18n>CHORDS IN THIS BAR</span>
+          <div class="row gap-xs wrap grow" id="pickerSplitRow"></div>
+        </div>
         <span class="micro-label mt-s" data-i18n>SUGGESTED NEXT</span>
         <div id="pickerSuggestions" class="suggest-list"></div>
         <span class="micro-label mt-s" data-i18n>EVERY CHORD IN THE KEY</span>
@@ -2187,7 +2207,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
           <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
           <p id="pickerHint" class="body-copy tight"></p>
-          <div class="row gap-xs">
+          <div class="row gap-xs wrap">
             <button id="pickerResetBtn" class="chip small" data-i18n>Follow the key</button>
             <button id="pickerClearBtn" class="chip small" data-i18n>Remove chord</button>
           </div>
@@ -2250,6 +2270,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
           <li data-i18n>The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.</li>
           <li data-i18n>A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.</li>
           <li data-i18n>A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.</li>
+          <li data-i18n>A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.</li>
           <li data-i18n>Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.</li>
         </ul>
 
@@ -3003,7 +3024,6 @@ const LOCALE_ES = {
   'FIRST': 'PRIMERA',
   'SECOND': 'SEGUNDA',
   'Bar {n}': 'Compás {n}',
-  'Split bar into two chords': 'Dividir el compás en dos acordes',
   'Clear': 'Borrar',
   '+ Loop': '+ Bucle',
   'Duplicate': 'Duplicar',
@@ -3598,7 +3618,17 @@ const LOCALE_ES = {
   'Could not read that file — {error}': 'No se ha podido leer ese archivo — {error}',
   'Unrecognised file format': 'Formato de archivo no reconocido',
 
+  'Add another chord to this bar': 'Añadir otro acorde a este compás',
+  'Add another chord to bar {n}': 'Añadir otro acorde al compás {n}',
+  'CHORDS IN THIS BAR': 'ACORDES EN ESTE COMPÁS',
+  'BAR {n} · CHORD {i} OF {total}': 'COMPÁS {n} · ACORDE {i} DE {total}',
+  'One chord for the whole bar': 'Un solo acorde para todo el compás',
+  'Divide the bar into {n} chords of equal length':
+    'Dividir el compás en {n} acordes de igual duración',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Un compás no tiene por qué llevar un solo acorde. Toca el + que hay junto a un compás, o ábrelo y elige 1, 2, 3 o 4: el compás conserva su duración y los acordes lo reparten por igual, que es como se mueve de verdad la mayoría de las canciones.',
   '// MODES': '// MODOS',
   '// GUIDE_FOR_GUITARISTS': '// GUÍA_PARA_GUITARRISTAS',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -4145,7 +4175,6 @@ const LOCALE_HI = {
   'FIRST': 'पहला',
   'SECOND': 'दूसरा',
   'Bar {n}': 'बार {n}',
-  'Split bar into two chords': 'बार को दो कॉर्ड में बाँटें',
   'Clear': 'खाली करें',
   '+ Loop': '+ लूप',
   'Duplicate': 'प्रतिलिपि',
@@ -4738,7 +4767,16 @@ const LOCALE_HI = {
   'Could not read that file — {error}': 'वह फ़ाइल पढ़ी नहीं जा सकी — {error}',
   'Unrecognised file format': 'अपरिचित फ़ाइल प्रारूप',
 
+  'Add another chord to this bar': 'इस बार में एक और कॉर्ड जोड़ें',
+  'Add another chord to bar {n}': 'बार {n} में एक और कॉर्ड जोड़ें',
+  'CHORDS IN THIS BAR': 'इस बार के कॉर्ड',
+  'BAR {n} · CHORD {i} OF {total}': 'बार {n} · कॉर्ड {i} / {total}',
+  'One chord for the whole bar': 'पूरे बार के लिए एक ही कॉर्ड',
+  'Divide the bar into {n} chords of equal length': 'बार को बराबर लंबाई के {n} कॉर्ड में बाँटें',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'एक बार में एक ही कॉर्ड होना ज़रूरी नहीं। बार के बगल वाले + को छुइए, या बार खोलकर 1, 2, 3 या 4 चुनिए — बार की लंबाई वही रहती है और कॉर्ड उसे बराबर बाँट लेते हैं, और असल में ज़्यादातर गीत ऐसे ही चलते हैं।',
   '// MODES': '// मोड',
   '// GUIDE_FOR_GUITARISTS': '// गिटार_बजाने_वालों_के_लिए_गाइड',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -5283,7 +5321,6 @@ const LOCALE_DE = {
   'FIRST': 'ERSTE',
   'SECOND': 'ZWEITE',
   'Bar {n}': 'Takt {n}',
-  'Split bar into two chords': 'Takt in zwei Akkorde teilen',
   'Clear': 'Leeren',
   '+ Loop': '+ Loop',
   'Duplicate': 'Duplizieren',
@@ -5878,7 +5915,16 @@ const LOCALE_DE = {
   'Could not read that file — {error}': 'Diese Datei konnte nicht gelesen werden — {error}',
   'Unrecognised file format': 'Unbekanntes Dateiformat',
 
+  'Add another chord to this bar': 'Noch einen Akkord in diesen Takt',
+  'Add another chord to bar {n}': 'Noch einen Akkord in Takt {n}',
+  'CHORDS IN THIS BAR': 'AKKORDE IN DIESEM TAKT',
+  'BAR {n} · CHORD {i} OF {total}': 'TAKT {n} · AKKORD {i} VON {total}',
+  'One chord for the whole bar': 'Ein Akkord für den ganzen Takt',
+  'Divide the bar into {n} chords of equal length': 'Den Takt in {n} gleich lange Akkorde teilen',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Ein Takt muss nicht einen Akkord enthalten. Tippe auf das + neben einem Takt, oder öffne ihn und wähle 1, 2, 3 oder 4 — der Takt behält seine Länge, und die Akkorde teilen sie gleichmäßig unter sich auf. So bewegen sich die meisten Songs wirklich.',
   '// MODES': '// MODI',
   '// GUIDE_FOR_GUITARISTS': '// LEITFADEN_FÜR_GITARRISTEN',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -6425,7 +6471,6 @@ const LOCALE_ID = {
   'FIRST': 'PERTAMA',
   'SECOND': 'KEDUA',
   'Bar {n}': 'Birama {n}',
-  'Split bar into two chords': 'Bagi birama menjadi dua akor',
   'Clear': 'Kosongkan',
   '+ Loop': '+ Loop',
   'Duplicate': 'Gandakan',
@@ -7018,7 +7063,16 @@ const LOCALE_ID = {
   'Could not read that file — {error}': 'Berkas itu tidak bisa dibaca — {error}',
   'Unrecognised file format': 'Format berkas tidak dikenali',
 
+  'Add another chord to this bar': 'Tambah satu akor lagi ke birama ini',
+  'Add another chord to bar {n}': 'Tambah satu akor lagi ke birama {n}',
+  'CHORDS IN THIS BAR': 'AKOR DI BIRAMA INI',
+  'BAR {n} · CHORD {i} OF {total}': 'BIRAMA {n} · AKOR {i} DARI {total}',
+  'One chord for the whole bar': 'Satu akor untuk seluruh birama',
+  'Divide the bar into {n} chords of equal length': 'Bagi birama menjadi {n} akor sama panjang',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Satu birama tidak harus berisi satu akor. Sentuh tanda + di samping birama, atau buka biramanya dan pilih 1, 2, 3, atau 4 — panjang biramanya tetap dan akornya membaginya rata, dan begitulah kebanyakan lagu sebenarnya berjalan.',
   '// MODES': '// MODUS',
   '// GUIDE_FOR_GUITARISTS': '// PANDUAN_UNTUK_GITARIS',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -7569,7 +7623,6 @@ const LOCALE_PT = {
   'FIRST': 'PRIMEIRA',
   'SECOND': 'SEGUNDA',
   'Bar {n}': 'Compasso {n}',
-  'Split bar into two chords': 'Dividir o compasso em dois acordes',
   'Clear': 'Limpar',
   '+ Loop': '+ Loop',
   'Duplicate': 'Duplicar',
@@ -8162,7 +8215,17 @@ const LOCALE_PT = {
   'Could not read that file — {error}': 'Não foi possível ler esse arquivo — {error}',
   'Unrecognised file format': 'Formato de arquivo não reconhecido',
 
+  'Add another chord to this bar': 'Adicionar outro acorde a este compasso',
+  'Add another chord to bar {n}': 'Adicionar outro acorde ao compasso {n}',
+  'CHORDS IN THIS BAR': 'ACORDES NESTE COMPASSO',
+  'BAR {n} · CHORD {i} OF {total}': 'COMPASSO {n} · ACORDE {i} DE {total}',
+  'One chord for the whole bar': 'Um acorde só para o compasso inteiro',
+  'Divide the bar into {n} chords of equal length':
+    'Dividir o compasso em {n} acordes de mesma duração',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Um compasso não precisa ter um acorde só. Toque no + ao lado de um compasso, ou abra-o e escolha 1, 2, 3 ou 4: o compasso mantém a duração e os acordes o dividem por igual, que é como a maioria das músicas realmente anda.',
   '// MODES': '// MODOS',
   '// GUIDE_FOR_GUITARISTS': '// GUIA_PARA_GUITARRISTAS',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -8709,7 +8772,6 @@ const LOCALE_RU = {
   'FIRST': 'ПЕРВАЯ',
   'SECOND': 'ВТОРАЯ',
   'Bar {n}': 'Такт {n}',
-  'Split bar into two chords': 'Разделить такт на два аккорда',
   'Clear': 'Очистить',
   '+ Loop': '+ Луп',
   'Duplicate': 'Дублировать',
@@ -9302,7 +9364,17 @@ const LOCALE_RU = {
   'Could not read that file — {error}': 'Не удалось прочитать этот файл — {error}',
   'Unrecognised file format': 'Формат файла не распознан',
 
+  'Add another chord to this bar': 'Добавить ещё один аккорд в этот такт',
+  'Add another chord to bar {n}': 'Добавить ещё один аккорд в такт {n}',
+  'CHORDS IN THIS BAR': 'АККОРДОВ В ТАКТЕ',
+  'BAR {n} · CHORD {i} OF {total}': 'ТАКТ {n} · АККОРД {i} ИЗ {total}',
+  'One chord for the whole bar': 'Один аккорд на весь такт',
+  'Divide the bar into {n} chords of equal length':
+    'Разделить такт на {n} аккорда одинаковой длины',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'В такте не обязательно один аккорд. Нажмите + рядом с тактом или откройте его и выберите 1, 2, 3 или 4: длительность такта не меняется, а аккорды делят её поровну — именно так и движется большинство песен.',
   '// MODES': '// ЛАДЫ',
   '// GUIDE_FOR_GUITARISTS': '// РУКОВОДСТВО_ДЛЯ_ГИТАРИСТОВ',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -9847,7 +9919,6 @@ const LOCALE_VI = {
   'FIRST': 'ĐẦU',
   'SECOND': 'SAU',
   'Bar {n}': 'Ô nhịp {n}',
-  'Split bar into two chords': 'Chia ô nhịp thành hai hợp âm',
   'Clear': 'Xóa',
   '+ Loop': '+ Vòng lặp',
   'Duplicate': 'Nhân bản',
@@ -10440,7 +10511,16 @@ const LOCALE_VI = {
   'Could not read that file — {error}': 'Không đọc được tệp đó — {error}',
   'Unrecognised file format': 'Định dạng tệp không nhận ra',
 
+  'Add another chord to this bar': 'Thêm một hợp âm nữa vào ô nhịp này',
+  'Add another chord to bar {n}': 'Thêm một hợp âm nữa vào ô nhịp {n}',
+  'CHORDS IN THIS BAR': 'SỐ HỢP ÂM TRONG Ô NHỊP',
+  'BAR {n} · CHORD {i} OF {total}': 'Ô NHỊP {n} · HỢP ÂM {i}/{total}',
+  'One chord for the whole bar': 'Một hợp âm cho cả ô nhịp',
+  'Divide the bar into {n} chords of equal length': 'Chia ô nhịp thành {n} hợp âm dài bằng nhau',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Một ô nhịp không nhất thiết chỉ chứa một hợp âm. Chạm dấu + bên cạnh ô nhịp, hoặc mở ô nhịp ra rồi chọn 1, 2, 3 hay 4 — ô nhịp vẫn dài như cũ và các hợp âm chia đều nó ra, và phần lớn bài hát thật sự đi như vậy.',
   '// MODES': '// ĐIỆU_THỨC',
   '// GUIDE_FOR_GUITARISTS': '// HƯỚNG_DẪN_CHO_NGƯỜI_CHƠI_GHI-TA',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
@@ -17491,14 +17571,56 @@ function clearSlot(barIdx, slotIdx) {
   const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots[slotIdx] = null;
-  if (bar.slots.length === 2 && !bar.slots[0] && !bar.slots[1]) bar.slots = [null];
+  // A bar emptied completely goes back to being one undivided bar, so the
+  // grid does not keep the shape of an edit that has been undone.
+  if (bar.slots.length > 1 && bar.slots.every((slot) => !slot)) bar.slots = [null];
   renderTimeline();
 }
 
-function addHalfBar(barIdx) {
+/**
+ * How many chords one bar may hold, which is a question about the metre.
+ *
+ * A chord can land on any beat, so a simple metre allows one per beat: four in
+ * 4/4, three in 3/4. A compound metre's beat is the dotted note rather than
+ * the quaver, so 6/8 has two places a chord can go and 12/8 has four —
+ * counting its quavers would offer six or twelve divisions that nobody writes.
+ * Never fewer than two, so every bar can be split, and never more than four,
+ * because a fifth chord in a bar is narrower than a fingertip on a phone.
+ */
+function maxSlotsPerBar(timeSig = state.timeSig) {
+  const { beats, unit } = parseTimeSig(timeSig);
+  const places = unit === 8 && beats % 3 === 0 ? beats / 3 : beats;
+  return Math.max(2, Math.min(4, places));
+}
+
+/** Add one more chord position to a bar, up to what the metre allows. */
+function addSlot(barIdx) {
+  const bar = bars()[barIdx];
+  if (!bar || bar.slots.length >= maxSlotsPerBar()) return;
+  bar.slots = [...bar.slots, slotFromDegree(state.activeDegree)];
+  renderTimeline();
+}
+
+/**
+ * Set a bar to hold exactly `n` chords.
+ *
+ * Growing fills the new positions with the chord currently selected, so a bar
+ * split in two is immediately playable rather than half empty. Shrinking drops
+ * the positions off the end, which is the only honest reading of "this bar has
+ * two chords now" — and it is visible the instant it happens.
+ */
+function setSlotCount(barIdx, n) {
   const bar = bars()[barIdx];
   if (!bar) return;
-  bar.slots = [bar.slots[0] || null, slotFromDegree(state.activeDegree)];
+  const want = Math.max(1, Math.min(maxSlotsPerBar(), n));
+  if (want === bar.slots.length) return;
+  bar.slots = want < bar.slots.length
+    ? bar.slots.slice(0, want)
+    : [...bar.slots, ...Array.from({ length: want - bar.slots.length },
+        () => slotFromDegree(state.activeDegree))];
+  if (state.picker && state.picker.barIdx === barIdx) {
+    state.picker = { ...state.picker, slotIdx: Math.min(state.picker.slotIdx, want - 1) };
+  }
   renderTimeline();
 }
 
@@ -18879,6 +19001,11 @@ function renderTimeline() {
 
   const grid = $('timelineGrid');
   grid.replaceChildren();
+  // Every bar lasts the same time, so every bar is the same width — that is
+  // what makes the grid readable as a chart. What has to give instead is how
+  // many bars fit on a row: four chords inside a quarter of a phone is 15px
+  // per chord, which is neither readable nor tappable.
+  grid.dataset.split = String(Math.max(...bars().map((bar) => bar.slots.length)));
   bars().forEach((bar, idx) => {
     const cell = el('div', `bar-cell${idx === state.playheadIndex ? ' playhead' : ''}`);
     const inner = el('div', 'bar-row');
@@ -18890,7 +19017,9 @@ function renderTimeline() {
       s.setAttribute('role', 'button');
       s.append(
         el('span', 'main', slot ? slot.label : '+'),
-        el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : t('Bar {n}', { n: idx + 1 }))
+        // A divided bar numbers its own positions; an undivided one is better
+        // served by naming which bar it is.
+        el('span', 'sub', slot ? slot.roman : n > 1 ? String(slotIdx + 1) : t('Bar {n}', { n: idx + 1 }))
       );
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('dragover'); };
       s.ondragleave = () => s.classList.remove('dragover');
@@ -18926,10 +19055,11 @@ function renderTimeline() {
       inner.appendChild(s);
     });
 
-    if (n === 1) {
+    if (n < maxSlotsPerBar()) {
       const add = el('button', 'add-half', '+');
-      add.title = t('Split bar into two chords');
-      add.onclick = () => addHalfBar(idx);
+      add.title = t('Add another chord to this bar');
+      add.setAttribute('aria-label', t('Add another chord to bar {n}', { n: idx + 1 }));
+      add.onclick = () => addSlot(idx);
       inner.appendChild(add);
     }
 
@@ -19067,7 +19197,25 @@ function renderPicker() {
           n: barIdx + 1,
           half: slotIdx === 0 ? t('FIRST') : t('SECOND'),
         })
-      : t('BAR {n}', { n: barIdx + 1 });
+      : bar.slots.length > 2
+        ? t('BAR {n} · CHORD {i} OF {total}', {
+            n: barIdx + 1, i: slotIdx + 1, total: bar.slots.length,
+          })
+        : t('BAR {n}', { n: barIdx + 1 });
+
+  // One tap per count rather than a stepper: the choice is between four
+  // values and the current one has to be visible, which is a radio group.
+  const splitRow = $('pickerSplitRow');
+  splitRow.replaceChildren();
+  for (let n = 1; n <= maxSlotsPerBar(); n++) {
+    const b = el('button', `chip small${bar.slots.length === n ? ' active' : ''}`, String(n));
+    b.setAttribute('aria-pressed', String(bar.slots.length === n));
+    b.title = n === 1
+      ? t('One chord for the whole bar')
+      : t('Divide the bar into {n} chords of equal length', { n });
+    b.onclick = () => setSlotCount(barIdx, n);
+    splitRow.appendChild(b);
+  }
 
   // Everything written before this position is the context for the suggestion.
   const list = filledSlots();

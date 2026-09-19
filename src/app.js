@@ -650,14 +650,56 @@ function clearSlot(barIdx, slotIdx) {
   const bar = bars()[barIdx];
   if (!bar) return;
   bar.slots[slotIdx] = null;
-  if (bar.slots.length === 2 && !bar.slots[0] && !bar.slots[1]) bar.slots = [null];
+  // A bar emptied completely goes back to being one undivided bar, so the
+  // grid does not keep the shape of an edit that has been undone.
+  if (bar.slots.length > 1 && bar.slots.every((slot) => !slot)) bar.slots = [null];
   renderTimeline();
 }
 
-function addHalfBar(barIdx) {
+/**
+ * How many chords one bar may hold, which is a question about the metre.
+ *
+ * A chord can land on any beat, so a simple metre allows one per beat: four in
+ * 4/4, three in 3/4. A compound metre's beat is the dotted note rather than
+ * the quaver, so 6/8 has two places a chord can go and 12/8 has four —
+ * counting its quavers would offer six or twelve divisions that nobody writes.
+ * Never fewer than two, so every bar can be split, and never more than four,
+ * because a fifth chord in a bar is narrower than a fingertip on a phone.
+ */
+function maxSlotsPerBar(timeSig = state.timeSig) {
+  const { beats, unit } = parseTimeSig(timeSig);
+  const places = unit === 8 && beats % 3 === 0 ? beats / 3 : beats;
+  return Math.max(2, Math.min(4, places));
+}
+
+/** Add one more chord position to a bar, up to what the metre allows. */
+function addSlot(barIdx) {
+  const bar = bars()[barIdx];
+  if (!bar || bar.slots.length >= maxSlotsPerBar()) return;
+  bar.slots = [...bar.slots, slotFromDegree(state.activeDegree)];
+  renderTimeline();
+}
+
+/**
+ * Set a bar to hold exactly `n` chords.
+ *
+ * Growing fills the new positions with the chord currently selected, so a bar
+ * split in two is immediately playable rather than half empty. Shrinking drops
+ * the positions off the end, which is the only honest reading of "this bar has
+ * two chords now" — and it is visible the instant it happens.
+ */
+function setSlotCount(barIdx, n) {
   const bar = bars()[barIdx];
   if (!bar) return;
-  bar.slots = [bar.slots[0] || null, slotFromDegree(state.activeDegree)];
+  const want = Math.max(1, Math.min(maxSlotsPerBar(), n));
+  if (want === bar.slots.length) return;
+  bar.slots = want < bar.slots.length
+    ? bar.slots.slice(0, want)
+    : [...bar.slots, ...Array.from({ length: want - bar.slots.length },
+        () => slotFromDegree(state.activeDegree))];
+  if (state.picker && state.picker.barIdx === barIdx) {
+    state.picker = { ...state.picker, slotIdx: Math.min(state.picker.slotIdx, want - 1) };
+  }
   renderTimeline();
 }
 
@@ -2038,6 +2080,11 @@ function renderTimeline() {
 
   const grid = $('timelineGrid');
   grid.replaceChildren();
+  // Every bar lasts the same time, so every bar is the same width — that is
+  // what makes the grid readable as a chart. What has to give instead is how
+  // many bars fit on a row: four chords inside a quarter of a phone is 15px
+  // per chord, which is neither readable nor tappable.
+  grid.dataset.split = String(Math.max(...bars().map((bar) => bar.slots.length)));
   bars().forEach((bar, idx) => {
     const cell = el('div', `bar-cell${idx === state.playheadIndex ? ' playhead' : ''}`);
     const inner = el('div', 'bar-row');
@@ -2049,7 +2096,9 @@ function renderTimeline() {
       s.setAttribute('role', 'button');
       s.append(
         el('span', 'main', slot ? slot.label : '+'),
-        el('span', 'sub', slot ? slot.roman : n === 2 ? (slotIdx === 0 ? 'L' : 'R') : t('Bar {n}', { n: idx + 1 }))
+        // A divided bar numbers its own positions; an undivided one is better
+        // served by naming which bar it is.
+        el('span', 'sub', slot ? slot.roman : n > 1 ? String(slotIdx + 1) : t('Bar {n}', { n: idx + 1 }))
       );
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('dragover'); };
       s.ondragleave = () => s.classList.remove('dragover');
@@ -2085,10 +2134,11 @@ function renderTimeline() {
       inner.appendChild(s);
     });
 
-    if (n === 1) {
+    if (n < maxSlotsPerBar()) {
       const add = el('button', 'add-half', '+');
-      add.title = t('Split bar into two chords');
-      add.onclick = () => addHalfBar(idx);
+      add.title = t('Add another chord to this bar');
+      add.setAttribute('aria-label', t('Add another chord to bar {n}', { n: idx + 1 }));
+      add.onclick = () => addSlot(idx);
       inner.appendChild(add);
     }
 
@@ -2226,7 +2276,25 @@ function renderPicker() {
           n: barIdx + 1,
           half: slotIdx === 0 ? t('FIRST') : t('SECOND'),
         })
-      : t('BAR {n}', { n: barIdx + 1 });
+      : bar.slots.length > 2
+        ? t('BAR {n} · CHORD {i} OF {total}', {
+            n: barIdx + 1, i: slotIdx + 1, total: bar.slots.length,
+          })
+        : t('BAR {n}', { n: barIdx + 1 });
+
+  // One tap per count rather than a stepper: the choice is between four
+  // values and the current one has to be visible, which is a radio group.
+  const splitRow = $('pickerSplitRow');
+  splitRow.replaceChildren();
+  for (let n = 1; n <= maxSlotsPerBar(); n++) {
+    const b = el('button', `chip small${bar.slots.length === n ? ' active' : ''}`, String(n));
+    b.setAttribute('aria-pressed', String(bar.slots.length === n));
+    b.title = n === 1
+      ? t('One chord for the whole bar')
+      : t('Divide the bar into {n} chords of equal length', { n });
+    b.onclick = () => setSlotCount(barIdx, n);
+    splitRow.appendChild(b);
+  }
 
   // Everything written before this position is the context for the suggestion.
   const list = filledSlots();

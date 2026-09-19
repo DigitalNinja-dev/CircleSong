@@ -508,7 +508,6 @@ export const LOCALE_DE = {
   'FIRST': 'ERSTE',
   'SECOND': 'ZWEITE',
   'Bar {n}': 'Takt {n}',
-  'Split bar into two chords': 'Takt in zwei Akkorde teilen',
   'Clear': 'Leeren',
   '+ Loop': '+ Loop',
   'Duplicate': 'Duplizieren',
@@ -1103,7 +1102,16 @@ export const LOCALE_DE = {
   'Could not read that file — {error}': 'Diese Datei konnte nicht gelesen werden — {error}',
   'Unrecognised file format': 'Unbekanntes Dateiformat',
 
+  'Add another chord to this bar': 'Noch einen Akkord in diesen Takt',
+  'Add another chord to bar {n}': 'Noch einen Akkord in Takt {n}',
+  'CHORDS IN THIS BAR': 'AKKORDE IN DIESEM TAKT',
+  'BAR {n} · CHORD {i} OF {total}': 'TAKT {n} · AKKORD {i} VON {total}',
+  'One chord for the whole bar': 'Ein Akkord für den ganzen Takt',
+  'Divide the bar into {n} chords of equal length': 'Den Takt in {n} gleich lange Akkorde teilen',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Ein Takt muss nicht einen Akkord enthalten. Tippe auf das + neben einem Takt, oder öffne ihn und wähle 1, 2, 3 oder 4 — der Takt behält seine Länge, und die Akkorde teilen sie gleichmäßig unter sich auf. So bewegen sich die meisten Songs wirklich.',
   '// MODES': '// MODI',
   '// GUIDE_FOR_GUITARISTS': '// LEITFADEN_FÜR_GITARRISTEN',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':

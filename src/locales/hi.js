@@ -509,7 +509,6 @@ export const LOCALE_HI = {
   'FIRST': 'पहला',
   'SECOND': 'दूसरा',
   'Bar {n}': 'बार {n}',
-  'Split bar into two chords': 'बार को दो कॉर्ड में बाँटें',
   'Clear': 'खाली करें',
   '+ Loop': '+ लूप',
   'Duplicate': 'प्रतिलिपि',
@@ -1102,7 +1101,16 @@ export const LOCALE_HI = {
   'Could not read that file — {error}': 'वह फ़ाइल पढ़ी नहीं जा सकी — {error}',
   'Unrecognised file format': 'अपरिचित फ़ाइल प्रारूप',
 
+  'Add another chord to this bar': 'इस बार में एक और कॉर्ड जोड़ें',
+  'Add another chord to bar {n}': 'बार {n} में एक और कॉर्ड जोड़ें',
+  'CHORDS IN THIS BAR': 'इस बार के कॉर्ड',
+  'BAR {n} · CHORD {i} OF {total}': 'बार {n} · कॉर्ड {i} / {total}',
+  'One chord for the whole bar': 'पूरे बार के लिए एक ही कॉर्ड',
+  'Divide the bar into {n} chords of equal length': 'बार को बराबर लंबाई के {n} कॉर्ड में बाँटें',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'एक बार में एक ही कॉर्ड होना ज़रूरी नहीं। बार के बगल वाले + को छुइए, या बार खोलकर 1, 2, 3 या 4 चुनिए — बार की लंबाई वही रहती है और कॉर्ड उसे बराबर बाँट लेते हैं, और असल में ज़्यादातर गीत ऐसे ही चलते हैं।',
   '// MODES': '// मोड',
   '// GUIDE_FOR_GUITARISTS': '// गिटार_बजाने_वालों_के_लिए_गाइड',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':

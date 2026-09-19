@@ -507,7 +507,6 @@ export const LOCALE_ID = {
   'FIRST': 'PERTAMA',
   'SECOND': 'KEDUA',
   'Bar {n}': 'Birama {n}',
-  'Split bar into two chords': 'Bagi birama menjadi dua akor',
   'Clear': 'Kosongkan',
   '+ Loop': '+ Loop',
   'Duplicate': 'Gandakan',
@@ -1100,7 +1099,16 @@ export const LOCALE_ID = {
   'Could not read that file — {error}': 'Berkas itu tidak bisa dibaca — {error}',
   'Unrecognised file format': 'Format berkas tidak dikenali',
 
+  'Add another chord to this bar': 'Tambah satu akor lagi ke birama ini',
+  'Add another chord to bar {n}': 'Tambah satu akor lagi ke birama {n}',
+  'CHORDS IN THIS BAR': 'AKOR DI BIRAMA INI',
+  'BAR {n} · CHORD {i} OF {total}': 'BIRAMA {n} · AKOR {i} DARI {total}',
+  'One chord for the whole bar': 'Satu akor untuk seluruh birama',
+  'Divide the bar into {n} chords of equal length': 'Bagi birama menjadi {n} akor sama panjang',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Satu birama tidak harus berisi satu akor. Sentuh tanda + di samping birama, atau buka biramanya dan pilih 1, 2, 3, atau 4 — panjang biramanya tetap dan akornya membaginya rata, dan begitulah kebanyakan lagu sebenarnya berjalan.',
   '// MODES': '// MODUS',
   '// GUIDE_FOR_GUITARISTS': '// PANDUAN_UNTUK_GITARIS',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
