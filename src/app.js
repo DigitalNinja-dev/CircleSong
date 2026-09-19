@@ -55,6 +55,7 @@ import {
 } from './fretboard.js';
 import { AudioEngine, PRESETS } from './audio/engine.js';
 import { Sequencer, barDuration, parseTimeSig } from './sequencer.js';
+import { enhanceSelects, initMenus, syncMenus, menuIsOpen } from './menu.js';
 import { RHYTHMS, FEELS, patternTempo, getPattern } from './patterns.js';
 import {
   Tuner,
@@ -775,6 +776,10 @@ function render() {
   renderSongs();
   renderTuner();
   renderTabs();
+  // Assigning to select.value changes a property, not an attribute, so there
+  // is nothing for the dropdowns to observe. Here is the one moment when
+  // everything they mirror is already up to date.
+  syncMenus();
 }
 
 function renderTabs() {
@@ -3780,7 +3785,16 @@ function wire() {
   $('importInput').onchange = importSong;
 
   document.addEventListener('keydown', (e) => {
-    if (e.target.matches('input, select, textarea')) return;
+    // A keydown's target is document when nothing is focused, and document
+    // has no matches(). Rare with a pointer, routine after a dialog closes
+    // and takes the focused element with it.
+    const on = e.target instanceof Element ? e.target : null;
+    // Single keys belong to whatever is focused, if anything is. Space in
+    // particular is how a button is pressed, and the app now has ten more of
+    // them standing in for the dropdowns — stealing it would mean the
+    // transport started instead of the list opening.
+    if (on && on.closest('input, select, textarea, button, [contenteditable], [role="option"]')) return;
+    if (menuIsOpen()) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.key >= '1' && e.key <= '7') {
       state.activeDegree = Number(e.key) - 1;
@@ -4005,6 +4019,8 @@ window.addEventListener('resize', applyNativeInsets);
 wire();
 translateDom();
 fillStaticSelects();
+initMenus();
+enhanceSelects();
 render();
 
 // Arm the audio engine on the first interaction anywhere, so the very first

@@ -77,6 +77,19 @@
     <span class="bracket tl"></span><span class="bracket tr"></span>
     <span class="bracket bl"></span><span class="bracket br"></span>
 
+    <!-- DROPDOWNS -->
+    <!-- One overlay shared by every <select> in the app. Android's own list
+         is a framework dialog built from the activity theme, and it arrived
+         unreadable twice; this one is the app's, so it is themed, translated
+         and measurable like everything else. -->
+    <div id="menuOverlay" class="overlay" hidden>
+      <div class="about menu-sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+        <span id="menuTitle" class="micro-label"></span>
+        <div class="menu-list" id="menuList" role="listbox"></div>
+        <button id="menuCloseBtn" class="about-close" data-i18n>CLOSE</button>
+      </div>
+    </div>
+
     <!-- LANGUAGE -->
     <div id="langOverlay" class="overlay" hidden>
       <div class="about lang-sheet" role="dialog" aria-modal="true" aria-labelledby="langTitle">

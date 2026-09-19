@@ -793,6 +793,22 @@ input[type='range']::-moz-range-thumb { width: 14px; height: 14px; border: none;
   border-radius: 0; min-width: 0;
 }
 .select:hover { border-color: var(--a); }
+/* The button standing in for a <select>. It carries the select's own classes,
+   so it inherits whatever that select looked like; these are the few things a
+   button does differently from a select. */
+.menu-proxy {
+  display: flex; align-items: center; gap: 8px;
+  text-align: left; width: 100%;
+}
+.menu-proxy .menu-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-proxy .menu-caret {
+  flex: none; width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.7;
+}
+.menu-proxy[disabled] { opacity: 0.5; cursor: default; }
 .select.compact { flex: none; font-family: var(--mono); font-weight: 600; font-size: 11px; padding: 6px 8px; }
 .select:focus-visible, .chip:focus-visible, .slot:focus-visible,
 button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
@@ -1006,6 +1022,34 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 }
 .tabbar button.active { color: var(--a); }
 .tabbar i { display: block; }
+
+/* ---------- the app's own dropdowns ---------- */
+.menu-sheet { max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+.menu-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 60vh; overflow-y: auto;
+  /* A long list — 26 tunings — must not push the close button off the sheet. */
+  overscroll-behavior: contain;
+}
+.menu-option {
+  text-align: left;
+  padding: 11px 12px;
+  border: 1.5px solid var(--border);
+  background: var(--raised-lo);
+  color: var(--text);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+}
+.menu-option:hover { border-color: var(--a); }
+.menu-option.active {
+  border-color: var(--a);
+  /* The accent at low alpha rather than the info wash: it is derived from the
+     theme's own accent, so it stays in the palette on the warm themes too. */
+  background: var(--a-12);
+  color: var(--a);
+  font-weight: 700;
+}
+.menu-option:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
 
 /* ---------- toast ---------- */
 .toast {
@@ -1422,7 +1466,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 /* Pill row: instrument, tuning, auto. */
 .tuner-pills { display: flex; gap: 6px; margin: 12px 0 14px; }
 .pill-select { position: relative; flex: 1 1 0; min-width: 0; }
-.pill-select select {
+.pill-select select,
+.pill-select .menu-proxy {
   width: 100%;
   appearance: none; -webkit-appearance: none;
   padding: 8px 20px 8px 12px;
@@ -1435,7 +1480,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   text-overflow: ellipsis;
   cursor: pointer;
 }
-.pill-select select:focus { outline: none; box-shadow: 0 0 0 2px var(--a-28); }
+.pill-select select:focus,
+.pill-select .menu-proxy:focus { outline: none; box-shadow: 0 0 0 2px var(--a-28); }
+/* The pill draws its own caret, so the stand-in must not draw a second. */
+.pill-select .menu-caret { display: none; }
 .pill-caret { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 9px; color: var(--a); }
 .pill {
   flex: 0 0 auto;

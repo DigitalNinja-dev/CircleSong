@@ -31,7 +31,7 @@
  * says otherwise — which looks exactly like the new feature not working.
  */
 
-const CACHE = 'circlesong-e17b65ae';
+const CACHE = 'circlesong-7c4cd6c2';
 
 const SHELL = [
   './',
@@ -42,6 +42,7 @@ const SHELL = [
   './manifest.webmanifest',
   './src/app.js',
   './src/i18n.js',
+  './src/menu.js',
   './src/i18n-data.js',
   './src/locales/es.js',
   './src/locales/hi.js',

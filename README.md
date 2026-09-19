@@ -517,19 +517,36 @@ inside the WebView, so they are the only native code in the project.
   which is what marks the document hidden so that event is delivered at all; it
   does not pause JavaScript, so the handler still runs.
 
-### Why the activity theme is fixed dark
+### Why the app draws its own dropdowns
+
+These were native `<select>`s, and deliberately so: the platform picker cannot
+get stuck open, and it is keyboard- and screen-reader-accessible for free. On
+Android that turned out not to hold.
 
 Capacitor sets the activity theme on the activity *and* on the application, so
 it is also the theme every native control the WebView puts up is built
-against — which on Android means the `<select>` popups. It used to be
+against — which on Android means the `<select>` popups. They arrived unreadable
+twice. First as dark text on a dark panel: the theme was
 `Theme.AppCompat.DayNight`, which follows the phone rather than the app, so a
-phone in light mode gave those popups light-theme text on a background the
-theme's stray `android:background` had already forced dark: unreadable. The
-theme is now fixed dark with an explicit alert-dialog theme, so the popups are
-legible whichever way the phone is set. The cost is that the Light and Sepia
-themes get a dark dropdown; the alternative was an unreadable one, and the only
-way to make it follow the in-app theme is to recreate the activity, which
-reloads the app.
+phone in light mode gave light-theme text on a background the theme's stray
+`android:background` had already forced dark. Fixing that — a fixed-dark theme
+and a pinned alert-dialog theme — produced the second failure, a white sheet
+with no legible rows at all.
+
+The common factor is that none of it is reproducible or measurable from a
+browser. Every attempt at a fix was a guess whose only verification was
+somebody's phone, and the second guess was worse than the first. So the list is
+drawn by the page now, in the same overlay the language picker and About
+already use: themed with the rest of the app, translated, inset-aware, and
+checked here rather than on a device.
+
+The `<select>` elements stay exactly where they are. Each is hidden and given a
+button that stands in for it, so everything that reads `select.value`, assigns
+to it, refills its options or listens for `change` goes on working untouched —
+which is what keeps `src/menu.js` a layer rather than a rewrite. The pinned
+alert-dialog theme is gone with the popups it was for; the activity theme stays
+fixed dark so that whatever the system does put up matches an app that ships
+dark.
 
 ### Alternatively, a PWA
 
@@ -562,6 +579,7 @@ src/
   theme.js               resolving, storing and applying the five themes
   i18n.js                t(), language resolution, and translating the markup
   i18n-data.js           rewrites the data tables into the chosen language
+  menu.js                the app's own dropdowns, in place of the platform's
   locales/es.js          Spanish
   locales/hi.js          Hindi
   locales/de.js          German

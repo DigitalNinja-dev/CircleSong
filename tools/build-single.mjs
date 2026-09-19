@@ -74,6 +74,7 @@ const MODULES = [
   'src/sequencer.js',
   // After every table it rewrites — it snapshots them at module scope, so any
   // module it reads has to have been evaluated already.
+  'src/menu.js',
   'src/i18n-data.js',
   'src/app.js',
 ];
@@ -124,6 +125,27 @@ const MODULES = [
   if (aliased.length) {
     throw new Error(
       `build: renamed imports do not survive bundling — rename the export instead:\n  ${aliased.join('\n  ')}`
+    );
+  }
+
+  // Two modules may each declare a top-level `el`; one bundle may not. The
+  // modules are concatenated into a single scope, so a name used twice at the
+  // top level is a SyntaxError that takes the whole file down — and only the
+  // single-file build, never the dev server. This has now happened twice, with
+  // `KEY` and with `el`, so it is checked rather than remembered.
+  const owner = new Map();
+  const clashes = [];
+  const DECL = /^(?:export\s+)?(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
+  for (const rel of MODULES) {
+    for (const m of read(rel).matchAll(DECL)) {
+      const name = m[1];
+      if (owner.has(name)) clashes.push(`${name}: ${owner.get(name)} and ${rel}`);
+      else owner.set(name, rel);
+    }
+  }
+  if (clashes.length) {
+    throw new Error(
+      `build: these top-level names are declared in more than one module, which the single-file build cannot hold:\n  ${clashes.join('\n  ')}`
     );
   }
 }
