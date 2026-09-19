@@ -509,7 +509,6 @@ export const LOCALE_RU = {
   'FIRST': 'ПЕРВАЯ',
   'SECOND': 'ВТОРАЯ',
   'Bar {n}': 'Такт {n}',
-  'Split bar into two chords': 'Разделить такт на два аккорда',
   'Clear': 'Очистить',
   '+ Loop': '+ Луп',
   'Duplicate': 'Дублировать',
@@ -1102,7 +1101,17 @@ export const LOCALE_RU = {
   'Could not read that file — {error}': 'Не удалось прочитать этот файл — {error}',
   'Unrecognised file format': 'Формат файла не распознан',
 
+  'Add another chord to this bar': 'Добавить ещё один аккорд в этот такт',
+  'Add another chord to bar {n}': 'Добавить ещё один аккорд в такт {n}',
+  'CHORDS IN THIS BAR': 'АККОРДОВ В ТАКТЕ',
+  'BAR {n} · CHORD {i} OF {total}': 'ТАКТ {n} · АККОРД {i} ИЗ {total}',
+  'One chord for the whole bar': 'Один аккорд на весь такт',
+  'Divide the bar into {n} chords of equal length':
+    'Разделить такт на {n} аккорда одинаковой длины',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'В такте не обязательно один аккорд. Нажмите + рядом с тактом или откройте его и выберите 1, 2, 3 или 4: длительность такта не меняется, а аккорды делят её поровну — именно так и движется большинство песен.',
   '// MODES': '// ЛАДЫ',
   '// GUIDE_FOR_GUITARISTS': '// РУКОВОДСТВО_ДЛЯ_ГИТАРИСТОВ',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':

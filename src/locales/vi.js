@@ -508,7 +508,6 @@ export const LOCALE_VI = {
   'FIRST': 'ĐẦU',
   'SECOND': 'SAU',
   'Bar {n}': 'Ô nhịp {n}',
-  'Split bar into two chords': 'Chia ô nhịp thành hai hợp âm',
   'Clear': 'Xóa',
   '+ Loop': '+ Vòng lặp',
   'Duplicate': 'Nhân bản',
@@ -1101,7 +1100,16 @@ export const LOCALE_VI = {
   'Could not read that file — {error}': 'Không đọc được tệp đó — {error}',
   'Unrecognised file format': 'Định dạng tệp không nhận ra',
 
+  'Add another chord to this bar': 'Thêm một hợp âm nữa vào ô nhịp này',
+  'Add another chord to bar {n}': 'Thêm một hợp âm nữa vào ô nhịp {n}',
+  'CHORDS IN THIS BAR': 'SỐ HỢP ÂM TRONG Ô NHỊP',
+  'BAR {n} · CHORD {i} OF {total}': 'Ô NHỊP {n} · HỢP ÂM {i}/{total}',
+  'One chord for the whole bar': 'Một hợp âm cho cả ô nhịp',
+  'Divide the bar into {n} chords of equal length': 'Chia ô nhịp thành {n} hợp âm dài bằng nhau',
+
   // ------------------------------------------------ guide for guitarists
+  'A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.':
+    'Một ô nhịp không nhất thiết chỉ chứa một hợp âm. Chạm dấu + bên cạnh ô nhịp, hoặc mở ô nhịp ra rồi chọn 1, 2, 3 hay 4 — ô nhịp vẫn dài như cũ và các hợp âm chia đều nó ra, và phần lớn bài hát thật sự đi như vậy.',
   '// MODES': '// ĐIỆU_THỨC',
   '// GUIDE_FOR_GUITARISTS': '// HƯỚNG_DẪN_CHO_NGƯỜI_CHƠI_GHI-TA',
   'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':

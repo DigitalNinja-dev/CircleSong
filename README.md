@@ -89,8 +89,22 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   chord-tone colouring, and instant auditioning of root position, 1st and 2nd
   inversion, Drop-2 and Drop-3. Cycle alternative shapes for any chord.
 - **Progression timeline** — loops of 4, 8, 16 or 32 bars in **five time
-  signatures** (4/4, 3/4, 6/8, 3/8, 12/8). Bars split in half for two chords per
-  bar. Every bar can be filled from a picker that suggests what comes next.
+  signatures** (4/4, 3/4, 6/8, 3/8, 12/8). Every bar can be filled from a
+  picker that suggests what comes next.
+- **Up to four chords in a bar**, because most songs are not one chord per bar
+  and a tool that cannot write those cannot write those songs. The limit is the
+  metre's, not an arbitrary one: one chord per beat in a simple metre, one per
+  dotted beat in a compound one — four in 4/4, three in 3/4, two in 6/8, four
+  in 12/8. The bar keeps its length and the chords divide it evenly, which is
+  measured at the engine rather than drawn: four chords in a bar at 120bpm
+  reach the sequencer half a second apart, half a second each.
+
+  Every bar stays the same width, because equal width for equal time is what
+  makes the grid readable as a chart. What gives instead is how many bars share
+  a row: a quarter of a phone holds one chord comfortably and two at 16px, so a
+  section with any divided bar in it drops to two bars per row below 700px. The
+  narrowest chord that now results is 31px wide and 54px tall, at 320px with
+  four to a bar.
 - **Multiple loops per song** — verse, chorus, turnaround as separate loops with
   section roles, switchable while playing. A switch waits for the bar line, so
   the change lands on the beat instead of cutting mid-phrase.
@@ -202,7 +216,7 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 ### Language
 
 - **Eight languages** — English, Español, हिन्दी, Deutsch, Bahasa Indonesia,
-  Português, Русский and Tiếng Việt, complete rather than partial: **850
+  Português, Русский and Tiếng Việt, complete rather than partial: **856
   strings** in each, including the mode lessons, all 56 progression notes, the
   harmonic analysis the app writes about your loop, and the tuner's microphone
   errors. Not a word of the interface is left in English. Note letters and chord

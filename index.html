@@ -415,6 +415,13 @@
           <span class="micro-label" id="pickerTitle">BAR 1</span>
           <button id="pickerCloseBtn" class="chip small" data-i18n>Done</button>
         </div>
+        <!-- How many chords this bar holds. A bar is one chord by default, but
+             plenty of songs put two, three or four in it, and a tool that
+             cannot write those cannot write those songs. -->
+        <div class="row gap-xs wrap mt-s">
+          <span class="micro-label" data-i18n>CHORDS IN THIS BAR</span>
+          <div class="row gap-xs wrap grow" id="pickerSplitRow"></div>
+        </div>
         <span class="micro-label mt-s" data-i18n>SUGGESTED NEXT</span>
         <div id="pickerSuggestions" class="suggest-list"></div>
         <span class="micro-label mt-s" data-i18n>EVERY CHORD IN THE KEY</span>
@@ -425,7 +432,7 @@
           <div class="row wrap gap-xs mt-s" id="pickerColourRow"></div>
           <div class="row wrap gap-xs mt-s" id="pickerAlterRow"></div>
           <p id="pickerHint" class="body-copy tight"></p>
-          <div class="row gap-xs">
+          <div class="row gap-xs wrap">
             <button id="pickerResetBtn" class="chip small" data-i18n>Follow the key</button>
             <button id="pickerClearBtn" class="chip small" data-i18n>Remove chord</button>
           </div>
@@ -488,6 +495,7 @@
           <li data-i18n>The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.</li>
           <li data-i18n>A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.</li>
           <li data-i18n>A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.</li>
+          <li data-i18n>A bar does not have to hold one chord. Tap the + beside a bar, or open a bar and pick 1, 2, 3 or 4 — the bar keeps its length and the chords divide it evenly, which is how most songs actually move.</li>
           <li data-i18n>Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.</li>
         </ul>
 
