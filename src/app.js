@@ -1008,6 +1008,7 @@ function renderCircle() {
     modeBtns.appendChild(b);
   }
 
+  renderKeyRegion(gradeAt);
   renderSecondaryDominants(posAt);
   renderExplore();
 
@@ -1041,6 +1042,73 @@ function renderCircle() {
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Outline the block of wedges the key's own chords occupy.
+ *
+ * The seven chords of a key are not scattered around the circle of fifths.
+ * Each ring holds one unbroken run of them — three or four adjacent wedges —
+ * and that is the whole reason this wheel is the right picture of a key:
+ * "in the key" is a place, not a list. Drawing the boundary says which chords
+ * those are at a glance, and says why they are neighbours at the same time.
+ *
+ * It is a shape rather than a shade because a shade had run out of room. On
+ * the pale themes an out-of-key wedge is already nearly the colour of the
+ * page, so there is nowhere further for it to go, and the in-key and
+ * out-of-key wedges sat at 1.3:1 — indistinguishable. An outline does not
+ * care how light the wedges are.
+ */
+function renderKeyRegion(gradeAt) {
+  const svg = $('wheelRegion');
+  svg.replaceChildren();
+
+  const MID = 140;
+  const pt = (r, deg) => {
+    const a = (deg * Math.PI) / 180;
+    return { x: MID + r * Math.sin(a), y: MID - r * Math.cos(a) };
+  };
+  // An annular sector, inset far enough that the stroke is not half-clipped
+  // by the rim it sits on.
+  const sector = (r0, r1, from, to) => {
+    const big = to - from > 180 ? 1 : 0;
+    const [a, b, c, d] = [pt(r1, from), pt(r1, to), pt(r0, to), pt(r0, from)];
+    const n = (v) => v.toFixed(2);
+    return `M${n(a.x)},${n(a.y)}`
+      + `A${r1},${r1} 0 ${big} 1 ${n(b.x)},${n(b.y)}`
+      + `L${n(c.x)},${n(c.y)}`
+      + `A${r0},${r0} 0 ${big} 0 ${n(d.x)},${n(d.y)}Z`;
+  };
+  // Maximal runs of adjacent wedges, wrapping round the twelve. The runs are
+  // found rather than assumed: every diatonic mode gives one per ring, but a
+  // scale that did not would draw as several outlines instead of one wrong one.
+  const runs = (flags) => {
+    const found = [];
+    if (flags.every(Boolean) || !flags.some(Boolean)) return found;
+    for (let i = 0; i < 12; i++) {
+      if (!flags[i] || flags[(i + 11) % 12]) continue;
+      let len = 0;
+      while (len < 12 && flags[(i + len) % 12]) len++;
+      found.push([i, i + len - 1]);
+    }
+    return found;
+  };
+
+  for (const [r0, r1, flags] of [
+    [91, 138.5, CIRCLE.map((note) => gradeAt.has(`${note}:maj`))],
+    [43.5, 88.5, CIRCLE.map((note) => gradeAt.has(`${(note + 9) % 12}:min`))],
+  ]) {
+    for (const [from, to] of runs(flags)) {
+      const d = sector(r0, r1, from * 30 - 15, to * 30 + 15);
+      // Halo first, line on top: two passes of the same path.
+      for (const cls of ['key-region halo', 'key-region line']) {
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', cls);
+        svg.appendChild(path);
+      }
+    }
+  }
 }
 
 /**

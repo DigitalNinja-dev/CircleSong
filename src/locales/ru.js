@@ -89,7 +89,7 @@ export const LOCALE_RU = {
   '/03 DRUM_MACHINE': '/03 ДРАМ-МАШИНА',
   '/04 DIATONIC_CHORDS': '/04 ДИАТОНИЧЕСКИЕ_АККОРДЫ',
   '/05 TIMELINE': '/05 ТАЙМЛАЙН',
-  '/06 MODES': '/06 ЛАДЫ',
+  '/06 LEARN': '/06 УЧИТЬСЯ',
   '/07 SONGWRITING_ASSISTANT': '/07 ПОМОЩНИК_СОЧИНИТЕЛЯ',
   '/08 SONGS': '/08 ПЕСНИ',
   '/09 TUNER': '/09 ТЮНЕР',
@@ -1101,4 +1101,57 @@ export const LOCALE_RU = {
   'New song started.': 'Новая песня начата.',
   'Could not read that file — {error}': 'Не удалось прочитать этот файл — {error}',
   'Unrecognised file format': 'Формат файла не распознан',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// ЛАДЫ',
+  '// GUIDE_FOR_GUITARISTS': '// РУКОВОДСТВО_ДЛЯ_ГИТАРИСТОВ',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong — инструмент для сочинения, который показывает свою работу. Выберите тональность, и он назовёт все её аккорды и роль каждого; напишите последовательность, и она прозвучит на смоделированной гитаре, так что идею слышно раньше, чем её получается сыграть.',
+  '// START_HERE': '// НАЧНИТЕ_ЗДЕСЬ',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Настройтесь. Тюнер знает 8 инструментов и 26 строёв, а коснувшись любой струны, можно услышать её высоту и настроиться на слух.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Выберите тональность. Коснитесь сектора круга. Обведённый блок — все аккорды, которые принадлежат этой тональности.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Послушайте аккорды. «Сочинять» раскладывает семь ступеней, и у каждой есть аппликатура, которую действительно можно взять.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Напишите что-нибудь. Таймлайн превращает такты в песню: коснитесь такта, выберите аккорд, нажмите воспроизведение.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Приведите это в движение. Тембр решает, как по струнам бьют; Ударные подкладывают грув.',
+  '// READING_THE_WHEEL': '// КАК_ЧИТАТЬ_КРУГ',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Внешнее кольцо — мажорные аккорды. Внутреннее — их параллельные минорные: те же ноты, более тёмная отправная точка.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Обведённый блок — ваша тональность. Три-четыре сектора на каждом кольце, всегда рядом, потому что тональность — это место на этом круге, а не список для заучивания.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'По часовой стрелке — вверх на квинту: G это V от C, и она тянет домой. Против часовой — вверх на кварту: F это IV от C, и она, наоборот, расслабляет.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Римская цифра на секторе — работа этого аккорда. I, IV и V — три ваших мажора; ii, iii и vi — три минора; vii° — тот, который не может усидеть на месте.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Соседние секторы делят больше всего общих нот. На гитаре это значит наименьшее движение руки — потому столько песен собрано из секторов, которые соприкасаются.',
+  '// IF_YOU_ALREADY_PLAY': '// ЕСЛИ_ВЫ_УЖЕ_ИГРАЕТЕ',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Открытые аккорды, которые вы уже знаете, — это тональность. G, C и D — это I, IV и V в G: круг и есть та же самая связь, вычерченная для всех двенадцати тональностей.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Каподастр поворачивает круг, а не аппликатуры. Тот же захват на два лада выше — это тональность на два сектора по часовой стрелке; задайте её здесь, и приложение назовёт аккорды, которые вы играете на самом деле.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Аппликатура — это не аккорд. «Сочинять» предлагает несколько играбельных расположений одного аккорда, а число ↔ на таймлайне — сколько ладов проходит рука, чтобы взять его. «Плавные расположения» выбирают те, что почти не двигаются.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Заимствованные аккорды — это секторы сразу за обводкой. Прежде чем браться за экзотику, попробуйте соседний: одна нота из-за пределов тональности — источник почти всего цвета в поп-музыке.',
+  '// WHAT_EACH_TAB_IS_FOR': '// ДЛЯ_ЧЕГО_КАЖДАЯ_ВКЛАДКА',
+  'Choose a key and see what is in it.': 'Выбрать тональность и увидеть, что в ней есть.',
+  'Get in tune, on any of eight instruments.': 'Настроиться — на любом из восьми инструментов.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Как это играется: инструмент, рисунок боя, характер и свинг.',
+  'A groove underneath, editable step by step.': 'Грув снизу, редактируемый шаг за шагом.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Сам аккорд: септимы, надстройки, обращения и аппликатура для ваших рук.',
+  'The song: bars, loops and sections.': 'Песня: такты, петли и разделы.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Что может быть дальше, и 56 последовательностей из настоящих песен.',
+  'The modes, and an ear trainer to test them.': 'Лады и тренировка слуха, чтобы их проверить.',
+  'Save, reopen, import and export what you write.':
+    'Сохранить, открыть заново, импортировать и экспортировать написанное.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Если запомнить только одно: аккорды, стоящие рядом на круге, делят почти все свои ноты. Сдвиньтесь на шаг, оставьте большинство пальцев на месте — и это прозвучит как своё.',
 };

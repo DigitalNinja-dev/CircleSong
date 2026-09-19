@@ -57,6 +57,16 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   diatonic chords. The outer ring is major keys, the inner ring their relative
   minors, and each diatonic wedge is marked with its **scale degree** (I, ii,
   iii…) which follows the key as you change it.
+- **The key is outlined, not merely tinted.** The seven chords of a key are not
+  scattered around the circle of fifths: each ring holds one unbroken run of
+  them, which is the whole reason this wheel is the right picture of a key.
+  Drawing that boundary says which chords are in and which are borrowed at a
+  glance, and says why they are neighbours at the same time. It is a shape
+  rather than a shade because a shade had run out of room — on the pale themes
+  an out-of-key wedge is already nearly the colour of the page, and in-key and
+  out-of-key wedges sat at 1.3:1, which is indistinguishable. The outline is
+  checked at 3:1 against every wedge it can cross, in all four themes, and the
+  enclosure itself is checked against all 84 key-and-mode combinations.
 - **Extended and altered chords** — five sizes (triad, 7th, 9th, 11th, 13th),
   **nine colours** (diatonic, dominant 7, sus4, sus2, 6th, add9, °7, ø7,
   augmented) and **four alterations** (♭9, ♯9, ♯11, ♭13), per chord and
@@ -152,6 +162,12 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 
 ### Learning
 
+- **A guide for guitarists**, at the top of the Learn tab: what the app is for,
+  the first five minutes, how to read the wheel, and what each of the nine tabs
+  does. Written for someone who already plays — the open chords you know are a
+  key, a capo turns the wheel rather than the shapes, a shape is not a chord —
+  rather than for someone starting at first principles. It collapses, because
+  the ear trainer underneath is the part people come back for.
 - **Modes lesson and ear trainer** — play any mode's scale and characteristic
   vamp, see the degree strip showing exactly which notes it alters against the
   major scale, then test yourself with a "guess the mode" quiz that tracks your
@@ -186,7 +202,7 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 ### Language
 
 - **Eight languages** — English, Español, हिन्दी, Deutsch, Bahasa Indonesia,
-  Português, Русский and Tiếng Việt, complete rather than partial: **819
+  Português, Русский and Tiếng Việt, complete rather than partial: **850
   strings** in each, including the mode lessons, all 56 progression notes, the
   harmonic analysis the app writes about your loop, and the tuner's microphone
   errors. Not a word of the interface is left in English. Note letters and chord
@@ -300,6 +316,19 @@ now chosen per wedge by measuring it (`readableInk` in `src/theme.js`), with a
 dimmer pair for wedges outside the key so they still recede. All 288 pairs now
 pass, the worst at 4.52:1. The fretboard dots pick their ink the same way,
 which changes nothing today and stops the next palette edit from breaking them.
+
+The same tool measures the outline round the key's own chords, at the 3:1 WCAG
+asks of a graphical object rather than of text. It is drawn as a line over a
+halo because no single colour is legible across wedges that run from yellow to
+violet, so what must separate from the wedge is whichever of the two is further
+from it — and the two must separate from each other, or they read as one thick
+smudge. 580 pairs in total, the outline's worst at 3.29:1.
+
+It also reports what the colour alone is worth, which is how the outline came
+to exist: in-key and out-of-key wedges were 1.30:1 apart in Sepia and 1.33:1 in
+Light — indistinguishable — against 2.42:1 in Dark. Widening the tokens as far
+as the pale palettes allow brought those to 1.57 and 1.51, nowhere near enough
+on its own, so the shape carries the meaning and the colour supports it.
 
 ---
 

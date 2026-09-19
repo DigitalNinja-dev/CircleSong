@@ -35,6 +35,12 @@
  *
  * Every hue is checked in every state on both rings, not only the ones the
  * default key happens to show, because the user can turn the wheel to any key.
+ *
+ * The outline round the key's own chords is checked on the same terms, at the
+ * 3:1 WCAG asks of a graphical object. It is drawn as a line over a halo, so
+ * what has to separate from the wedge is whichever of the two is further from
+ * it — and the two have to separate from each other, or they read as one
+ * thick smudge.
  */
 
 import { chromium } from 'playwright';
@@ -46,6 +52,8 @@ import { createServer } from 'node:http';
 const root = process.env.APP_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES = ['dark', 'light', 'contrast', 'sepia'];
 const AA = 4.5;
+/** WCAG 1.4.11: the bar for a graphical object rather than for text. */
+const NON_TEXT = 3;
 
 const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -83,7 +91,7 @@ let failures = 0;
 let pairs = 0;
 
 for (const theme of THEMES) {
-  const rows = await page.evaluate((t) => {
+  const measured = await page.evaluate((t) => {
     document.documentElement.dataset.theme = t;
     window.CircleSong.state.activeTab = 'circle';
     window.CircleSong.render();
@@ -135,9 +143,35 @@ for (const theme of THEMES) {
         }
       }
     }
-    return out;
+
+    // The outline. It crosses several hues at once, so one colour cannot be
+    // chosen per wedge the way the ink is — both strokes are checked against
+    // every wedge the run can touch.
+    const line = solid(ink('a'));
+    const halo = solid(over(ink('wheel-region-halo'), [128, 128, 128]));
+    const region = [];
+    for (let i = 0; i < 12; i++) {
+      const hue = i * 30;
+      for (const [state, L, C] of [
+        ['root', p.lRoot, p.cRoot], ['diatonic', p.lDia, p.cDia], ['off', p.lOff, p.cOff],
+      ]) {
+        for (const ring of ['outer', 'inner']) {
+          const wedge = solid(ring === 'inner'
+            ? `oklch(${L - p.drop} ${C * 0.78} ${hue})`
+            : `oklch(${L} ${C} ${hue})`);
+          region.push({
+            hue, state, ring,
+            r: Math.max(ratio(line, wedge), ratio(halo, wedge)),
+          });
+        }
+      }
+    }
+    region.push({ hue: -1, state: 'line', ring: 'halo', r: ratio(line, halo) });
+
+    return { out, region };
   }, theme);
 
+  const rows = measured.out;
   const under = rows.filter((x) => x.r < 4.5);
   pairs += rows.length;
   failures += under.length;
@@ -146,11 +180,20 @@ for (const theme of THEMES) {
   for (const u of under) {
     console.log(`     hue ${String(u.hue).padStart(3)}  ${u.ring.padEnd(6)}${u.state.padEnd(10)}${u.token.padEnd(24)}${u.r.toFixed(2)}`);
   }
+
+  const faint = measured.region.filter((x) => x.r < NON_TEXT);
+  pairs += measured.region.length;
+  failures += faint.length;
+  const worstEdge = Math.min(...measured.region.map((x) => x.r));
+  console.log(`            ${measured.region.length} key-outline pairs, worst ${worstEdge.toFixed(2)}${faint.length ? `, ${faint.length} below ${NON_TEXT}:1` : ''}`);
+  for (const f of faint) {
+    console.log(`     hue ${String(f.hue).padStart(3)}  ${f.ring.padEnd(6)}${f.state.padEnd(10)}${f.r.toFixed(2)}`);
+  }
 }
 
 await browser.close();
 server.close();
 console.log(failures
-  ? `\n${failures} of ${pairs} wedge/ink pairs are below WCAG AA`
-  : `\nall ${pairs} wedge/ink pairs pass WCAG AA (${AA}:1)`);
+  ? `\n${failures} of ${pairs} pairs are below contrast`
+  : `\nall ${pairs} pairs pass: labels at WCAG AA (${AA}:1), the key outline at ${NON_TEXT}:1`);
 process.exit(failures ? 1 : 0);
