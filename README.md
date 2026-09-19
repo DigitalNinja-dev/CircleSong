@@ -57,6 +57,16 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
   diatonic chords. The outer ring is major keys, the inner ring their relative
   minors, and each diatonic wedge is marked with its **scale degree** (I, ii,
   iii…) which follows the key as you change it.
+- **The key is outlined, not merely tinted.** The seven chords of a key are not
+  scattered around the circle of fifths: each ring holds one unbroken run of
+  them, which is the whole reason this wheel is the right picture of a key.
+  Drawing that boundary says which chords are in and which are borrowed at a
+  glance, and says why they are neighbours at the same time. It is a shape
+  rather than a shade because a shade had run out of room — on the pale themes
+  an out-of-key wedge is already nearly the colour of the page, and in-key and
+  out-of-key wedges sat at 1.3:1, which is indistinguishable. The outline is
+  checked at 3:1 against every wedge it can cross, in all four themes, and the
+  enclosure itself is checked against all 84 key-and-mode combinations.
 - **Extended and altered chords** — five sizes (triad, 7th, 9th, 11th, 13th),
   **nine colours** (diatonic, dominant 7, sus4, sus2, 6th, add9, °7, ø7,
   augmented) and **four alterations** (♭9, ♯9, ♯11, ♭13), per chord and
@@ -126,9 +136,21 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 ### Tuning
 
 - **A real tuner** — YIN pitch detection with parabolic interpolation, an RMS
-  noise gate, EMA smoothing and a hysteresis lock, running on the app's own
-  AudioContext. The microphone is a dead end by construction: it reaches an
-  analyser and nothing else.
+  noise gate, a median filter, adaptive smoothing and a held lock, running on
+  the app's own AudioContext. The microphone is a dead end by construction: it
+  reaches an analyser and nothing else.
+- **An answer that stays still long enough to read.** A plucked string is not
+  one pitch — it sharpens on the attack, drifts as it decays, and moves again
+  under the finger on the peg — so a reading reported frame by frame crosses
+  in and out of a ±4¢ window several times a second, and a flickering "in
+  tune" is no answer at all. So: a median of the last three readings, which no
+  single bad frame can move; an EMA whose rate follows how far it has to go, so
+  a real correction is followed at once while the last couple of cents of a
+  string breathing are damped; and a lock held for two seconds from the last
+  frame that was genuinely in tune, surviving both a wobble out to ±8¢ and the
+  note dying away under the gate. Past ±8¢ the peg has actually moved and the
+  display follows it immediately. In tune, the whole ring lights and the status
+  reads ✓ LOCKED — answerable from across the room, without reading a number.
 - **8 instruments and 26 tunings** — guitar (including Drop C, Open D, DADGAD
   and 7-string), bass, ukulele, mandolin, banjo, violin, cello/viola, and
   chromatic.
@@ -140,6 +162,12 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 
 ### Learning
 
+- **A guide for guitarists**, at the top of the Learn tab: what the app is for,
+  the first five minutes, how to read the wheel, and what each of the nine tabs
+  does. Written for someone who already plays — the open chords you know are a
+  key, a capo turns the wheel rather than the shapes, a shape is not a chord —
+  rather than for someone starting at first principles. It collapses, because
+  the ear trainer underneath is the part people come back for.
 - **Modes lesson and ear trainer** — play any mode's scale and characteristic
   vamp, see the degree strip showing exactly which notes it alters against the
   major scale, then test yourself with a "guess the mode" quiz that tracks your
@@ -174,7 +202,7 @@ Requires a browser with `AudioWorklet`: Chrome/Edge 66+, Firefox 76+, Safari 14.
 ### Language
 
 - **Eight languages** — English, Español, हिन्दी, Deutsch, Bahasa Indonesia,
-  Português, Русский and Tiếng Việt, complete rather than partial: **819
+  Português, Русский and Tiếng Việt, complete rather than partial: **850
   strings** in each, including the mode lessons, all 56 progression notes, the
   harmonic analysis the app writes about your loop, and the tuner's microphone
   errors. Not a word of the interface is left in English. Note letters and chord
@@ -288,6 +316,19 @@ now chosen per wedge by measuring it (`readableInk` in `src/theme.js`), with a
 dimmer pair for wedges outside the key so they still recede. All 288 pairs now
 pass, the worst at 4.52:1. The fretboard dots pick their ink the same way,
 which changes nothing today and stops the next palette edit from breaking them.
+
+The same tool measures the outline round the key's own chords, at the 3:1 WCAG
+asks of a graphical object rather than of text. It is drawn as a line over a
+halo because no single colour is legible across wedges that run from yellow to
+violet, so what must separate from the wedge is whichever of the two is further
+from it — and the two must separate from each other, or they read as one thick
+smudge. 580 pairs in total, the outline's worst at 3.29:1.
+
+It also reports what the colour alone is worth, which is how the outline came
+to exist: in-key and out-of-key wedges were 1.30:1 apart in Sepia and 1.33:1 in
+Light — indistinguishable — against 2.42:1 in Dark. Widening the tokens as far
+as the pale palettes allow brought those to 1.57 and 1.51, nowhere near enough
+on its own, so the shape carries the meaning and the colour supports it.
 
 ---
 
@@ -431,6 +472,50 @@ signing config from the environment.
 - **minSdk 24** (Android 7). `AudioWorklet` needs a Chromium WebView 66 or
   newer, which is a system component updated through the Play Store rather than
   tied to the OS version.
+
+### The two things `MainActivity` is there for
+
+Everything else about the app is the web app. These two are not reachable from
+inside the WebView, so they are the only native code in the project.
+
+- **Where the system bars are.** From targetSdk 35 the window is edge-to-edge
+  with no way to opt out, so the page is drawn underneath the status bar and
+  the navigation bar. `env(safe-area-inset-*)` does not rescue it: Android's
+  WebView fills those in from the display cutout alone, and a status bar is not
+  a cutout, so `env(safe-area-inset-top)` is `0` while the clock sits on top of
+  the transport. `MainActivity` measures the real insets and the page reads
+  them into `--inset-top`, `--inset-right`, `--inset-bottom` and
+  `--inset-left`; `env()` stays as the fallback, which is the whole answer in a
+  browser. The transport bar pads itself by the top inset rather than moving
+  down, so its background still paints behind the status bar.
+- **Which way round to draw the system bars.** The app paints its own
+  background behind the status bar and the navigation bar, and which one that
+  is depends on the in-app theme — so Light and Sepia would put a white clock
+  on a white bar. The page tells the shell, which sets it through
+  `WindowInsetsControllerCompat`; switching the activity's night mode instead
+  would recreate the activity and reload the app.
+- **That the app has been put away.** Capacitor's `onPause` only notifies
+  plugins — it never pauses the WebView — so a minimised app carries on
+  running, and the audio worklet carries on rendering. The page silences itself
+  on `visibilitychange` and `pagehide`: transport stopped, notes off,
+  microphone released, and then the `AudioContext` suspended, which is the part
+  that actually guarantees silence. `MainActivity` calls `WebView.onPause`,
+  which is what marks the document hidden so that event is delivered at all; it
+  does not pause JavaScript, so the handler still runs.
+
+### Why the activity theme is fixed dark
+
+Capacitor sets the activity theme on the activity *and* on the application, so
+it is also the theme every native control the WebView puts up is built
+against — which on Android means the `<select>` popups. It used to be
+`Theme.AppCompat.DayNight`, which follows the phone rather than the app, so a
+phone in light mode gave those popups light-theme text on a background the
+theme's stray `android:background` had already forced dark: unreadable. The
+theme is now fixed dark with an explicit alert-dialog theme, so the popups are
+legible whichever way the phone is set. The cost is that the Light and Sepia
+themes get a dark dropdown; the alternative was an unreadable one, and the only
+way to make it follow the in-app theme is to recreate the activity, which
+reloads the app.
 
 ### Alternatively, a PWA
 

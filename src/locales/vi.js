@@ -88,7 +88,7 @@ export const LOCALE_VI = {
   '/03 DRUM_MACHINE': '/03 MÁY_TRỐNG',
   '/04 DIATONIC_CHORDS': '/04 HỢP_ÂM_DIATONIC',
   '/05 TIMELINE': '/05 DÒNG_THỜI_GIAN',
-  '/06 MODES': '/06 ĐIỆU_THỨC',
+  '/06 LEARN': '/06 HỌC',
   '/07 SONGWRITING_ASSISTANT': '/07 TRỢ_LÝ_SÁNG_TÁC',
   '/08 SONGS': '/08 BÀI_HÁT',
   '/09 TUNER': '/09 LÊN_DÂY',
@@ -1100,4 +1100,59 @@ export const LOCALE_VI = {
   'New song started.': 'Đã bắt đầu bài hát mới.',
   'Could not read that file — {error}': 'Không đọc được tệp đó — {error}',
   'Unrecognised file format': 'Định dạng tệp không nhận ra',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// ĐIỆU_THỨC',
+  '// GUIDE_FOR_GUITARISTS': '// HƯỚNG_DẪN_CHO_NGƯỜI_CHƠI_GHI-TA',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong là một công cụ sáng tác cho bạn thấy cả cách nó tính. Chọn một giọng và nó gọi tên từng hợp âm trong giọng đó cùng vai trò của mỗi hợp âm; viết một vòng hòa âm và nó vang lên trên một cây ghi-ta được mô phỏng, nên bạn nghe được ý tưởng trước khi chơi được nó.',
+  '// START_HERE': '// BẮT_ĐẦU_TỪ_ĐÂY',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Lên dây trước đã. Bộ lên dây biết 8 nhạc cụ và 26 kiểu lên dây, và bạn có thể chạm vào bất kỳ dây nào để nghe cao độ của nó rồi lên dây bằng tai.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Chọn giọng của bạn. Chạm vào một múi trên vòng tròn. Khối được viền lại chính là mọi hợp âm thuộc về giọng đó.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Nghe các hợp âm. Sáng tác bày ra đủ bảy bậc, mỗi bậc kèm một thế bấm trên cần đàn mà bạn thực sự chơi được.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Viết một thứ gì đó. Dòng thời gian biến các ô nhịp thành một bài hát: chạm vào một ô nhịp, chọn hợp âm, rồi bấm phát.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Cho nó chuyển động. Âm sắc quyết định cách quạt chả; Trống đặt một groove xuống bên dưới.',
+  '// READING_THE_WHEEL': '// ĐỌC_VÒNG_TRÒN_NHƯ_THẾ_NÀO',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Vành ngoài là hợp âm trưởng. Vành trong là các giọng thứ song song của chúng — vẫn những nốt ấy, chỉ là một chỗ xuất phát tối hơn.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Khối được viền là giọng của bạn. Ba hoặc bốn múi trên mỗi vành, luôn nằm cạnh nhau, bởi một giọng là một chỗ trên vòng tròn này chứ không phải một danh sách phải học thuộc.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'Theo chiều kim đồng hồ là lên một quãng năm: G là bậc V của C và nó kéo về nhà. Ngược chiều kim đồng hồ là lên một quãng bốn: F là bậc IV của C, và nó lại làm mọi thứ chùng xuống.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Số La Mã trên một múi là việc mà hợp âm đó làm. I, IV và V là ba hợp âm trưởng của bạn; ii, iii và vi là ba hợp âm thứ; còn vii° là cái không chịu ngồi yên.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Các múi kề nhau dùng chung nhiều nốt nhất. Trên ghi-ta điều đó có nghĩa là tay phải di chuyển ít nhất, và đó là lý do rất nhiều bài hát được dựng từ những múi chạm nhau.',
+  '// IF_YOU_ALREADY_PLAY': '// NẾU_BẠN_ĐÃ_BIẾT_CHƠI',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Những hợp âm mở bạn đã biết chính là một giọng. G, C và D là I, IV và V trong giọng G — vòng tròn này chỉ là đúng mối quan hệ ấy, vẽ ra cho cả mười hai giọng.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Capo xoay vòng tròn chứ không đổi thế bấm. Vẫn thế bấm ấy nhưng cao hơn hai ngăn là một giọng lệch hai múi theo chiều kim đồng hồ; đặt giọng đó ở đây và ứng dụng sẽ gọi đúng tên những hợp âm bạn đang thực sự chơi.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Một thế bấm không phải là một hợp âm. Sáng tác đưa ra nhiều thế bấm chơi được của cùng một hợp âm, và con số ↔ trên dòng thời gian là số ngăn tay bạn phải đi để tới thế bấm ấy. Nối thế bấm mượt sẽ chọn những thế gần như không phải di chuyển.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Hợp âm mượn là những múi nằm ngay bên ngoài đường viền. Hãy thử múi kề bên trước khi thử thứ gì lạ lẫm — chỉ một nốt nằm ngoài giọng thôi đã là nguồn gốc của phần lớn màu sắc trong nhạc pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// TỪNG_THẺ_DÙNG_ĐỂ_LÀM_GÌ',
+  'Choose a key and see what is in it.': 'Chọn một giọng và xem trong đó có gì.',
+  'Get in tune, on any of eight instruments.':
+    'Lên dây cho chuẩn, trên bất kỳ nhạc cụ nào trong tám nhạc cụ.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Cách chơi nó: nhạc cụ, mẫu quạt chả, cảm giác và swing.',
+  'A groove underneath, editable step by step.': 'Một groove ở bên dưới, sửa được theo từng bước.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Bản thân hợp âm: quãng bảy, các âm mở rộng, thể đảo, và một thế bấm cho đôi tay bạn.',
+  'The song: bars, loops and sections.': 'Bài hát: ô nhịp, vòng lặp và các đoạn.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Thứ có thể đến tiếp theo, cùng 56 vòng hòa âm lấy từ những bài hát có thật.',
+  'The modes, and an ear trainer to test them.':
+    'Các điệu thức, và một bài luyện tai để kiểm tra chúng.',
+  'Save, reopen, import and export what you write.':
+    'Lưu, mở lại, nhập và xuất những gì bạn viết ra.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Nếu chỉ mang theo được một điều: những hợp âm ngồi cạnh nhau trên vòng tròn dùng chung gần hết số nốt. Bước sang một múi, để phần lớn ngón tay nguyên chỗ, và nó sẽ nghe như thể vốn thuộc về đó.',
 };

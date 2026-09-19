@@ -9,15 +9,45 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
-    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <!--
+      The activity theme. Capacitor sets this on the activity and on the
+      application, so it is also the theme every native control the WebView
+      puts up is built against — which on Android means the <select> popups.
+
+      Fixed dark rather than DayNight. DayNight follows the phone, not the app,
+      so a phone in light mode gave those popups light-theme text: dark grey on
+      whatever background they inherited. That was the "menus are black" bug.
+      CircleSong ships dark and defaults to dark, so the popups are pinned dark
+      and are legible whichever way the phone is set. The cost is that the
+      Light and Sepia themes get a dark dropdown; the alternative was an
+      unreadable one.
+
+      There is deliberately no android:background here. As a theme attribute it
+      leaks into views that do not set their own, popup rows among them, and it
+      was doing nothing that android:windowBackground does not do properly.
+    -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
         <!-- The window sits behind the WebView while it paints. Left null it is
              white, which reads as a flash on every launch of a dark app. -->
-        <item name="android:background">@color/splashBackground</item>
         <item name="android:windowBackground">@color/splashBackground</item>
+        <!-- The list a <select> opens is a framework AlertDialog built from
+             this theme, so it is given one outright rather than left to
+             inherit. -->
+        <item name="android:alertDialogTheme">@style/CircleSongDialog</item>
     </style>
 
+    <!-- Dark panel, light text, CircleSong's accent on the radio buttons. -->
+    <style name="CircleSongDialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="android:colorBackground">@color/dialogBackground</item>
+        <item name="android:textColorPrimary">@color/dialogText</item>
+        <item name="android:textColorSecondary">@color/dialogTextDim</item>
+    </style>
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>

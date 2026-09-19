@@ -192,6 +192,9 @@
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
         <div class="wheel-spokes"></div>
+        <!-- The chords the key contains, outlined. Its own layer because the
+             arcs below are redrawn by the secondary-dominant toggle. -->
+        <svg class="wheel-arcs" id="wheelRegion" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <svg class="wheel-arcs" id="wheelArcs" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <div class="wheel-labels" id="wheelLabels" role="group" aria-label="Circle of fifths — arrow keys move around the wheel" data-i18n-attr="aria-label"></div>
         <div class="wheel-hub">
@@ -451,7 +454,60 @@
 
     <!-- /06 LEARN -->
     <section class="panel" id="tab-learn" hidden>
-      <h2 data-i18n>/06 MODES</h2>
+      <h2 data-i18n>/06 LEARN</h2>
+
+      <!-- The guide. In a <details> because the ear trainer below is the part
+           people come back for, and a page of prose in front of it every time
+           is a tax on the second visit. Open by default: the first visit is
+           the one that needs it. -->
+      <details class="guide" open>
+        <summary data-i18n>// GUIDE_FOR_GUITARISTS</summary>
+
+        <p class="body-copy" data-i18n>CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.</p>
+
+        <h4 data-i18n>// START_HERE</h4>
+        <ol class="guide-steps">
+          <li data-i18n>Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.</li>
+          <li data-i18n>Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.</li>
+          <li data-i18n>Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.</li>
+          <li data-i18n>Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.</li>
+          <li data-i18n>Make it move. Tone decides how it is strummed; Drums puts a groove underneath.</li>
+        </ol>
+
+        <h4 data-i18n>// READING_THE_WHEEL</h4>
+        <ul class="guide-list">
+          <li data-i18n>The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.</li>
+          <li data-i18n>The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.</li>
+          <li data-i18n>Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.</li>
+          <li data-i18n>The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.</li>
+          <li data-i18n>Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.</li>
+        </ul>
+
+        <h4 data-i18n>// IF_YOU_ALREADY_PLAY</h4>
+        <ul class="guide-list">
+          <li data-i18n>The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.</li>
+          <li data-i18n>A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.</li>
+          <li data-i18n>A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.</li>
+          <li data-i18n>Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.</li>
+        </ul>
+
+        <h4 data-i18n>// WHAT_EACH_TAB_IS_FOR</h4>
+        <dl class="guide-tabs">
+          <dt data-i18n>Circle</dt><dd data-i18n>Choose a key and see what is in it.</dd>
+          <dt data-i18n>Tuner</dt><dd data-i18n>Get in tune, on any of eight instruments.</dd>
+          <dt data-i18n>Tone</dt><dd data-i18n>How it is played: instrument, strumming pattern, feel and swing.</dd>
+          <dt data-i18n>Drums</dt><dd data-i18n>A groove underneath, editable step by step.</dd>
+          <dt data-i18n>Compose</dt><dd data-i18n>The chord itself: sevenths, extensions, inversions, and a shape for your hands.</dd>
+          <dt data-i18n>Timeline</dt><dd data-i18n>The song: bars, loops and sections.</dd>
+          <dt data-i18n>Assist</dt><dd data-i18n>What could come next, and 56 progressions taken from real songs.</dd>
+          <dt data-i18n>Learn</dt><dd data-i18n>The modes, and an ear trainer to test them.</dd>
+          <dt data-i18n>Songs</dt><dd data-i18n>Save, reopen, import and export what you write.</dd>
+        </dl>
+
+        <p class="body-copy" data-i18n>If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.</p>
+      </details>
+
+      <h3 data-i18n>// MODES</h3>
       <p class="body-copy" data-i18n>Modes are the 7 scales hiding inside every major scale — same notes, different starting point, different mood. Pick one to hear it and read how guitarists use it.</p>
       <div class="chip-row" id="learnModeRow"></div>
       <div class="card">

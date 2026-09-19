@@ -87,7 +87,7 @@ export const LOCALE_ID = {
   '/03 DRUM_MACHINE': '/03 MESIN_DRUM',
   '/04 DIATONIC_CHORDS': '/04 AKOR_DIATONIS',
   '/05 TIMELINE': '/05 LINIMASA',
-  '/06 MODES': '/06 MODUS',
+  '/06 LEARN': '/06 BELAJAR',
   '/07 SONGWRITING_ASSISTANT': '/07 ASISTEN_PENULISAN_LAGU',
   '/08 SONGS': '/08 LAGU',
   '/09 TUNER': '/09 PENYETEM',
@@ -1099,4 +1099,59 @@ export const LOCALE_ID = {
   'New song started.': 'Lagu baru dimulai.',
   'Could not read that file — {error}': 'Berkas itu tidak bisa dibaca — {error}',
   'Unrecognised file format': 'Format berkas tidak dikenali',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// MODUS',
+  '// GUIDE_FOR_GUITARISTS': '// PANDUAN_UNTUK_GITARIS',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong adalah alat menulis lagu yang memperlihatkan cara kerjanya. Pilih sebuah nada dasar dan ia menyebutkan setiap akor di dalamnya beserta perannya; tulis sebuah progresi dan ia dibunyikan oleh gitar model, jadi kamu mendengar idenya sebelum bisa memainkannya.',
+  '// START_HERE': '// MULAI_DI_SINI',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Setem dulu. Penyetem mengenal 8 instrumen dan 26 setelan, dan kamu bisa menyentuh senar mana pun untuk mendengar nadanya dan menyetem dengan telinga.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Pilih nada dasarmu. Sentuh satu juring pada lingkaran. Blok yang bergaris adalah semua akor yang termasuk nada dasar itu.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Dengarkan akornya. Menggubah menampilkan ketujuh tingkatnya, masing-masing dengan posisi jari di fret yang benar-benar bisa dimainkan.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Tulis sesuatu. Linimasa mengubah birama menjadi lagu: sentuh sebuah birama, pilih akor, lalu putar.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Beri gerak. Nada menentukan cara genjrengannya; Drum menaruh groove di bawahnya.',
+  '// READING_THE_WHEEL': '// MEMBACA_LINGKARAN',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Cincin luar adalah akor mayor. Cincin dalam adalah minor relatifnya — nada yang sama, titik berangkat yang lebih gelap.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Blok bergaris itu nada dasarmu. Tiga atau empat juring di tiap cincin, selalu bersebelahan, karena sebuah nada dasar adalah tempat pada lingkaran ini, bukan daftar yang harus dihafal.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'Searah jarum jam naik satu kuint: G adalah V dari C dan menarik pulang. Berlawanan arah jarum jam naik satu kuart: F adalah IV dari C, dan justru melonggarkan.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Angka romawi pada sebuah juring adalah tugas akor itu. I, IV, dan V adalah tiga mayormu; ii, iii, dan vi tiga minornya; vii° yang tidak bisa diam.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Juring bertetangga berbagi paling banyak nada. Di gitar itu berarti gerak tangan paling sedikit, dan itulah sebabnya begitu banyak lagu dibangun dari juring yang bersentuhan.',
+  '// IF_YOU_ALREADY_PLAY': '// KALAU_KAMU_SUDAH_BISA_MAIN',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Akor terbuka yang sudah kamu kuasai itu sebuah nada dasar. G, C, dan D adalah I, IV, dan V di G — lingkaran ini adalah hubungan yang sama, digambar untuk kedua belas nada dasar.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Kapo memutar lingkarannya, bukan bentuk jarinya. Pegangan yang sama dua fret lebih tinggi adalah nada dasar dua juring searah jarum jam; setel di sini dan aplikasi menyebut akor yang benar-benar kamu mainkan.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Bentuk jari bukan akor. Menggubah menawarkan beberapa voicing yang bisa dimainkan untuk akor yang sama, dan angka ↔ di linimasa adalah berapa fret tanganmu berpindah untuk mencapainya. Voicing halus memilih bentuk yang nyaris tidak bergerak.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Akor pinjaman adalah juring tepat di luar garis. Coba yang bersebelahan dulu sebelum yang aneh-aneh — satu nada dari luar nada dasar adalah sumber hampir semua warna dalam musik pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// GUNANYA_TIAP_TAB',
+  'Choose a key and see what is in it.': 'Pilih nada dasar dan lihat apa isinya.',
+  'Get in tune, on any of eight instruments.':
+    'Jadi setem, pada salah satu dari delapan instrumen.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Cara memainkannya: instrumen, pola genjreng, rasa, dan swing.',
+  'A groove underneath, editable step by step.':
+    'Groove di bawahnya, bisa disunting langkah demi langkah.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Akornya sendiri: septim, ekstensi, inversi, dan sebuah bentuk untuk tanganmu.',
+  'The song: bars, loops and sections.': 'Lagunya: birama, loop, dan bagian.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Apa yang mungkin datang berikutnya, dan 56 progresi yang diambil dari lagu sungguhan.',
+  'The modes, and an ear trainer to test them.': 'Modusnya, dan latihan telinga untuk mengujinya.',
+  'Save, reopen, import and export what you write.':
+    'Simpan, buka lagi, impor, dan ekspor apa yang kamu tulis.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Kalau hanya satu hal yang kamu bawa pulang: akor yang bersebelahan pada lingkaran berbagi hampir semua nadanya. Melangkahlah satu juring, biarkan sebagian besar jarimu di tempatnya, dan bunyinya akan terdengar pas.',
 };

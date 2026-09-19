@@ -92,7 +92,7 @@ export const LOCALE_PT = {
   '/03 DRUM_MACHINE': '/03 BATERIA_ELETRÔNICA',
   '/04 DIATONIC_CHORDS': '/04 ACORDES_DIATÔNICOS',
   '/05 TIMELINE': '/05 LINHA_DO_TEMPO',
-  '/06 MODES': '/06 MODOS',
+  '/06 LEARN': '/06 APRENDER',
   '/07 SONGWRITING_ASSISTANT': '/07 ASSISTENTE_DE_COMPOSIÇÃO',
   '/08 SONGS': '/08 MÚSICAS',
   '/09 TUNER': '/09 AFINADOR',
@@ -1104,4 +1104,58 @@ export const LOCALE_PT = {
   'New song started.': 'Nova música começada.',
   'Could not read that file — {error}': 'Não foi possível ler esse arquivo — {error}',
   'Unrecognised file format': 'Formato de arquivo não reconhecido',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// MODOS',
+  '// GUIDE_FOR_GUITARISTS': '// GUIA_PARA_GUITARRISTAS',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'O CircleSong é uma ferramenta de composição que mostra as contas. Escolha um tom e ele nomeia todos os acordes dele e o que cada um faz; escreva uma progressão e ela toca num violão modelado, então você ouve a ideia antes de saber tocá-la.',
+  '// START_HERE': '// COMECE_AQUI',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Afine. O afinador conhece 8 instrumentos e 26 afinações, e você pode tocar qualquer corda para ouvir a altura dela e afinar de ouvido.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Escolha o seu tom. Toque numa fatia do círculo. O bloco contornado são todos os acordes que pertencem àquele tom.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Ouça os acordes. Compor abre os sete graus, cada um com uma posição no braço que dá para tocar de verdade.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Escreva alguma coisa. Linha transforma compassos numa música: toque num compasso, escolha um acorde e aperte play.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Ponha em movimento. Timbre decide como é batido; Bateria coloca um groove por baixo.',
+  '// READING_THE_WHEEL': '// LENDO_A_RODA',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'O anel externo são acordes maiores. O interno, as relativas menores deles: as mesmas notas, um ponto de partida mais escuro.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'O bloco contornado é o seu tom. Três ou quatro fatias em cada anel, sempre lado a lado, porque um tom é um lugar neste círculo e não uma lista para decorar.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'No sentido horário você sobe uma quinta: G é o V de C e puxa de volta para casa. No anti-horário sobe uma quarta: F é o IV de C, e em vez disso relaxa.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'O número romano numa fatia é a função daquele acorde. I, IV e V são os seus três maiores; ii, iii e vi os três menores; vii° o que não consegue ficar parado.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Fatias vizinhas compartilham mais notas. No violão isso quer dizer menos movimento de mão, e é por isso que tanta música é feita de fatias que se encostam.',
+  '// IF_YOU_ALREADY_PLAY': '// SE_VOCÊ_JÁ_TOCA',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Os acordes abertos que você já sabe são um tom. G, C e D são I, IV e V em G: o círculo é essa mesma relação desenhada para os doze tons.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'O capotraste gira a roda, não as formas. A mesma pegada duas casas acima é um tom duas fatias no sentido horário; defina esse tom aqui e o app nomeia os acordes que você está tocando de verdade.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Uma forma não é um acorde. Compor oferece vários voicings tocáveis do mesmo acorde, e o número ↔ na linha do tempo é quantas casas a sua mão viaja para alcançar um deles. Condução suave escolhe as formas que quase não se mexem.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Acordes emprestados são as fatias logo fora do contorno. Experimente a vizinha antes de qualquer coisa exótica: uma única nota de fora do tom é de onde vem quase toda a cor do pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// PARA_QUE_SERVE_CADA_ABA',
+  'Choose a key and see what is in it.': 'Escolha um tom e veja o que tem dentro dele.',
+  'Get in tune, on any of eight instruments.':
+    'Fique afinado, em qualquer um de oito instrumentos.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Como é tocado: instrumento, levada, suingue e balanço.',
+  'A groove underneath, editable step by step.': 'Um groove por baixo, editável passo a passo.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'O acorde em si: sétimas, extensões, inversões e uma forma para as suas mãos.',
+  'The song: bars, loops and sections.': 'A música: compassos, loops e seções.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'O que pode vir depois, e 56 progressões tiradas de músicas de verdade.',
+  'The modes, and an ear trainer to test them.': 'Os modos, e um treino de ouvido para testá-los.',
+  'Save, reopen, import and export what you write.':
+    'Salve, reabra, importe e exporte o que você escrever.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Se levar só uma coisa daqui: acordes que ficam lado a lado na roda compartilham quase todas as notas. Ande um passo, deixe quase todos os dedos onde estão, e vai soar como se pertencesse.',
 };

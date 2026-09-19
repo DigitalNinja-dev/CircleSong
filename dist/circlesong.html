@@ -43,9 +43,10 @@
    * the circle would stay dark on a light page, which is exactly what happened
    * the first time. Lightness and chroma are plain numbers; the hue comes from
    * the note's position on the circle. */
-  --wheel-l-root: 0.68; --wheel-l-dia: 0.56; --wheel-l-off: 0.26;
-  --wheel-c-root: 0.17; --wheel-c-dia: 0.13; --wheel-c-off: 0.035;
+  --wheel-l-root: 0.70; --wheel-l-dia: 0.58; --wheel-l-off: 0.22;
+  --wheel-c-root: 0.18; --wheel-c-dia: 0.15; --wheel-c-off: 0.018;
   --wheel-in-drop: 0.12;
+  --wheel-region-halo: oklch(0.06 0.004 250 / 0.92);
   /* Two polarities per prominence level, not one ink per level. Which of them
      a label gets is decided against the wedge it lands on — see readableInk in
      src/theme.js and the note in renderCircle. The -dim pair is for wedges
@@ -211,9 +212,10 @@
  */
 
 [data-theme='light'] {
-  --wheel-l-root: 0.7; --wheel-l-dia: 0.83; --wheel-l-off: 0.94;
-  --wheel-c-root: 0.16; --wheel-c-dia: 0.09; --wheel-c-off: 0.015;
+  --wheel-l-root: 0.68; --wheel-l-dia: 0.79; --wheel-l-off: 0.955;
+  --wheel-c-root: 0.17; --wheel-c-dia: 0.13; --wheel-c-off: 0.006;
   --wheel-in-drop: -0.06;
+  --wheel-region-halo: oklch(0.99 0.002 250 / 0.94);
   --wheel-ink-light: oklch(1 0 0);
   --wheel-ink-dark: oklch(0.18 0.02 250);
   --wheel-ink-light-dim: oklch(1 0 0 / 0.86);
@@ -339,6 +341,7 @@
   --wheel-l-root: 0.85; --wheel-l-dia: 0.68; --wheel-l-off: 0.14;
   --wheel-c-root: 0.24; --wheel-c-dia: 0.19; --wheel-c-off: 0.0;
   --wheel-in-drop: 0.16;
+  --wheel-region-halo: oklch(0 0 0 / 1);
   --wheel-ink-light: oklch(1 0 0);
   --wheel-ink-dark: oklch(0 0 0);
   --wheel-ink-light-dim: oklch(1 0 0);
@@ -462,9 +465,10 @@
  * reading for an hour, so the background is tinted off white and the text is
  * brown-black rather than black. */
 [data-theme='sepia'] {
-  --wheel-l-root: 0.68; --wheel-l-dia: 0.81; --wheel-l-off: 0.9;
-  --wheel-c-root: 0.12; --wheel-c-dia: 0.07; --wheel-c-off: 0.02;
+  --wheel-l-root: 0.66; --wheel-l-dia: 0.77; --wheel-l-off: 0.925;
+  --wheel-c-root: 0.15; --wheel-c-dia: 0.12; --wheel-c-off: 0.008;
   --wheel-in-drop: -0.05;
+  --wheel-region-halo: oklch(0.99 0.004 82 / 0.94);
   --wheel-ink-light: oklch(0.99 0.02 85);
   --wheel-ink-dark: oklch(0.22 0.04 58);
   --wheel-ink-light-dim: oklch(0.99 0.02 85 / 0.86);
@@ -612,9 +616,28 @@ a { color: var(--a); }
      these, which is the layout that has been measured and shipped. */
   --shell: 430px;
   --wheel: 280px;
+
+  /* Room the app must leave for whatever the system draws over it: the status
+     bar, the navigation bar, a camera cutout.
+
+     In a browser env(safe-area-inset-*) is the whole answer. In the Android
+     app it is not: from targetSdk 35 the window is edge-to-edge and cannot opt
+     out, and Android's WebView derives env() from the display cutout alone —
+     the status bar is not a cutout, so env(safe-area-inset-top) is 0 while the
+     clock sits on top of the transport bar. MainActivity measures the real
+     insets and overwrites these four, so env() is the fallback rather than the
+     source. Both are in CSS pixels. */
+  --inset-top: env(safe-area-inset-top, 0px);
+  --inset-right: env(safe-area-inset-right, 0px);
+  --inset-bottom: env(safe-area-inset-bottom, 0px);
+  --inset-left: env(safe-area-inset-left, 0px);
 }
 
-.stage { display: flex; justify-content: center; width: 100%; min-height: 100vh; background: var(--bg); }
+.stage {
+  display: flex; justify-content: center; width: 100%; min-height: 100vh;
+  background: var(--bg);
+  padding-left: var(--inset-left); padding-right: var(--inset-right);
+}
 /* Mobile toolbars change the viewport height as they hide and show; dvh tracks
    the space actually visible, where vh stays at the largest size and leaves the
    tab bar sitting below the fold. */
@@ -636,10 +659,10 @@ a { color: var(--a); }
 
 /* corner brackets */
 .bracket { position: fixed; width: 14px; height: 14px; opacity: 0.55; pointer-events: none; z-index: 40; }
-.bracket.tl { top: 8px; left: 8px; border-top: 2px solid var(--a); border-left: 2px solid var(--a); }
-.bracket.tr { top: 8px; right: 8px; border-top: 2px solid var(--a); border-right: 2px solid var(--a); }
-.bracket.bl { bottom: 8px; left: 8px; border-bottom: 2px solid var(--a); border-left: 2px solid var(--a); }
-.bracket.br { bottom: 8px; right: 8px; border-bottom: 2px solid var(--a); border-right: 2px solid var(--a); }
+.bracket.tl { top: calc(8px + var(--inset-top)); left: calc(8px + var(--inset-left)); border-top: 2px solid var(--a); border-left: 2px solid var(--a); }
+.bracket.tr { top: calc(8px + var(--inset-top)); right: calc(8px + var(--inset-right)); border-top: 2px solid var(--a); border-right: 2px solid var(--a); }
+.bracket.bl { bottom: calc(8px + var(--inset-bottom)); left: calc(8px + var(--inset-left)); border-bottom: 2px solid var(--a); border-left: 2px solid var(--a); }
+.bracket.br { bottom: calc(8px + var(--inset-bottom)); right: calc(8px + var(--inset-right)); border-bottom: 2px solid var(--a); border-right: 2px solid var(--a); }
 @media (min-width: 460px) { .bracket { position: absolute; } }
 
 /* ---------- transport ---------- */
@@ -648,7 +671,7 @@ a { color: var(--a); }
   background: var(--bar);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--a-28);
-  padding: 14px 16px 12px;
+  padding: calc(14px + var(--inset-top)) 16px 12px;
   display: flex; flex-direction: column; gap: 10px;
 }
 
@@ -661,7 +684,7 @@ a { color: var(--a); }
 .row.gap-xs { gap: 5px; }
 .grow { flex: 1; min-width: 0; }
 .scroll-x { overflow-x: auto; padding-bottom: 2px; }
-.spacer { flex: 1; min-height: calc(62px + env(safe-area-inset-bottom)); }
+.spacer { flex: 1; min-height: calc(62px + var(--inset-bottom)); }
 .mt { margin-top: 18px; }
 .mt-s { margin-top: 10px; }
 .block { display: block; width: 100%; }
@@ -686,7 +709,9 @@ a { color: var(--a); }
 
 /* ---------- about ---------- */
 .overlay {
-  position: fixed; inset: 0; z-index: 100; padding: 24px;
+  position: fixed; inset: 0; z-index: 100;
+  padding: calc(24px + var(--inset-top)) calc(24px + var(--inset-right))
+           calc(24px + var(--inset-bottom)) calc(24px + var(--inset-left));
   background: var(--scrim);
   display: flex; align-items: center; justify-content: center;
 }
@@ -998,7 +1023,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   z-index: 20; display: flex;
   background: var(--bar); backdrop-filter: blur(8px);
   border-top: 1px solid var(--a-28);
-  padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+  padding: 8px 4px calc(8px + var(--inset-bottom));
 }
 .tabbar button {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -1010,7 +1035,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
 /* ---------- toast ---------- */
 .toast {
-  position: fixed; left: 50%; bottom: 78px; transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: calc(78px + var(--inset-bottom)); transform: translateX(-50%);
   z-index: 60; max-width: 380px; padding: 10px 14px;
   background: var(--raised-2); border: 1px solid var(--border);
   color: var(--text); font: 500 12px var(--sans); box-shadow: 0 8px 20px var(--shadow);
@@ -1171,6 +1196,59 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 /* ------------------------------------------------------ loop analysis */
 .analysis { border-left: 2px solid var(--c); }
 .analysis .mono-strong { margin: 6px 0 0; font: 600 12px var(--mono); color: var(--a); letter-spacing: 0.03em; }
+/* ---------------------------------------- the guide in the Learn panel */
+.guide { margin: 4px 0 18px; }
+.guide > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font: 700 12px var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--a);
+  /* The default triangle is a different shape in every browser; this one is
+     the app's own, and it turns when the section opens. */
+  list-style: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.guide > summary::-webkit-details-marker { display: none; }
+.guide > summary::before {
+  content: '';
+  width: 0; height: 0; flex: none;
+  border-left: 6px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.guide[open] > summary::before { transform: rotate(90deg); }
+.guide > summary:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
+.guide h4 {
+  margin: 18px 0 6px;
+  font: 700 10px var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--dim-hi);
+}
+.guide-steps, .guide-list { margin: 0; padding-left: 18px; }
+.guide-steps li, .guide-list li {
+  font: 400 12px/1.6 var(--sans);
+  color: var(--dim-hi);
+  margin-bottom: 7px;
+}
+.guide-steps li::marker { color: var(--a); font-weight: 700; }
+.guide-list li::marker { color: var(--a-mid); }
+.guide-tabs {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 12px;
+  align-items: baseline;
+}
+.guide-tabs dt {
+  font: 700 11px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--a);
+  white-space: nowrap;
+}
+.guide-tabs dd { margin: 0; font: 400 12px/1.5 var(--sans); color: var(--dim-hi); }
+
 .note-list { margin: 8px 0 0; padding-left: 16px; }
 .note-list li { font: 400 11px/1.55 var(--sans); color: var(--dim-hi); margin-bottom: 3px; }
 .note-list li.hint { color: var(--warn-lo); }
@@ -1185,6 +1263,23 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   pointer-events: none;
 }
 #secDomPanel { margin-top: 12px; }
+
+/* ---------------------------------------- the key's own region of the wheel */
+/*
+ * The seven chords a key contains are not scattered around the circle of
+ * fifths: they are one unbroken block on each ring, and that is the whole
+ * reason this wheel is the right picture of a key. Outlining the block says
+ * "these, and not the others" in a way that a shade of colour cannot — the
+ * pale themes have no room left to make an out-of-key wedge paler, and a
+ * difference in lightness is the first thing lost on a phone in sunlight.
+ *
+ * Two strokes, not one. The line has to cross wedges that run from yellow to
+ * violet, and no single colour is legible on all of them; the halo underneath
+ * is the page's own dark or light, so the pair always reads.
+ */
+.key-region { fill: none; stroke-linejoin: round; }
+.key-region.halo { stroke: var(--wheel-region-halo); stroke-width: 5.5; }
+.key-region.line { stroke: var(--a); stroke-width: 2.4; }
 
 /* ---------------------------------------- grade markers on the wheel */
 /* The roman numeral of every chord in the key, so the grades of the tone are
@@ -1410,8 +1505,27 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   filter: url(#tunerGlow);
 }
 .dial-arc.flat, .dial-arc.sharp { stroke: var(--warn); }
+.dial-arc.locked { stroke: var(--a-hi); stroke-width: 11; }
 .dial-pointer { fill: var(--a-mid); filter: url(#tunerGlow); }
 .dial-pointer.flat, .dial-pointer.sharp { fill: var(--warn); }
+.dial-pointer.locked { fill: var(--a-hi); }
+
+/* In tune has to be unmistakable from across a room, and it has to hold still
+   — the detector keeps it for two seconds so that this does not blink. */
+.tuner-dial-wrap[data-state='locked'] {
+  border-color: var(--a);
+  box-shadow: 0 0 0 1px var(--a-35) inset, 0 0 26px var(--a-28);
+}
+.tuner-dial-wrap[data-state='locked'] .tuner-note {
+  color: var(--a-hi);
+  text-shadow: 0 0 20px var(--a-75), 0 0 54px var(--a-40);
+}
+.tuner-dial-wrap[data-state='locked'] #tunerState {
+  color: var(--a-hi);
+  font-weight: 700;
+}
+/* A tick, not a word: it needs no translation and reads before the text does. */
+.tuner-dial-wrap[data-state='locked'] #tunerState::before { content: '✓ '; }
 
 /* Readout sits inside the ring. */
 .tuner-centre {
@@ -1636,7 +1750,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   :root { --shell: 680px; --wheel: 380px; }
 
   .panel { padding: 22px 24px 8px; }
-  .transport { padding: 16px 24px 14px; }
+  .transport { padding: calc(16px + var(--inset-top)) 24px 14px; }
 
   /* Seven degrees in one row reads as a scale rather than as two shelves. */
   #chordGrid { grid-template-columns: repeat(7, 1fr); }
@@ -1684,13 +1798,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
      a desktop it is a strip floating over the content at the bottom of a tall
      window, which is both odd to reach and — because it is fixed and the
      column is short — drawn on top of the panel it belongs to. */
-  .stage { padding-left: 108px; }
+  .stage { padding-left: calc(108px + var(--inset-left)); }
   .tabbar {
     top: 0; bottom: 0; left: 0; transform: none;
     width: 108px; max-width: 108px; height: 100%;
     flex-direction: column; justify-content: flex-start; gap: 2px;
     border-top: none; border-right: 1px solid var(--a-28);
-    padding: 18px 8px;
+    padding: calc(18px + var(--inset-top)) 8px calc(18px + var(--inset-bottom))
+             calc(8px + var(--inset-left));
   }
   .tabbar button {
     flex: none; flex-direction: row; justify-content: flex-start;
@@ -1700,7 +1815,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
   .tabbar button.active { background: var(--flat); }
   /* The bottom bar is gone, so the room reserved for it is too. */
   .spacer { min-height: 24px; }
-  .toast { bottom: 24px; }
+  .toast { bottom: calc(24px + var(--inset-bottom)); }
 
   /* Lists that were one card per row become two. */
   #templateList, #projectList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: start; }
@@ -1839,6 +1954,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
         <div class="wheel-outer" id="wheelOuter"></div>
         <div class="wheel-inner" id="wheelInner"></div>
         <div class="wheel-spokes"></div>
+        <!-- The chords the key contains, outlined. Its own layer because the
+             arcs below are redrawn by the secondary-dominant toggle. -->
+        <svg class="wheel-arcs" id="wheelRegion" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <svg class="wheel-arcs" id="wheelArcs" viewBox="0 0 280 280" aria-hidden="true"></svg>
         <div class="wheel-labels" id="wheelLabels" role="group" aria-label="Circle of fifths — arrow keys move around the wheel" data-i18n-attr="aria-label"></div>
         <div class="wheel-hub">
@@ -2098,7 +2216,60 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--a); outline
 
     <!-- /06 LEARN -->
     <section class="panel" id="tab-learn" hidden>
-      <h2 data-i18n>/06 MODES</h2>
+      <h2 data-i18n>/06 LEARN</h2>
+
+      <!-- The guide. In a <details> because the ear trainer below is the part
+           people come back for, and a page of prose in front of it every time
+           is a tax on the second visit. Open by default: the first visit is
+           the one that needs it. -->
+      <details class="guide" open>
+        <summary data-i18n>// GUIDE_FOR_GUITARISTS</summary>
+
+        <p class="body-copy" data-i18n>CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.</p>
+
+        <h4 data-i18n>// START_HERE</h4>
+        <ol class="guide-steps">
+          <li data-i18n>Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.</li>
+          <li data-i18n>Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.</li>
+          <li data-i18n>Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.</li>
+          <li data-i18n>Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.</li>
+          <li data-i18n>Make it move. Tone decides how it is strummed; Drums puts a groove underneath.</li>
+        </ol>
+
+        <h4 data-i18n>// READING_THE_WHEEL</h4>
+        <ul class="guide-list">
+          <li data-i18n>The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.</li>
+          <li data-i18n>The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.</li>
+          <li data-i18n>Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.</li>
+          <li data-i18n>The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.</li>
+          <li data-i18n>Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.</li>
+        </ul>
+
+        <h4 data-i18n>// IF_YOU_ALREADY_PLAY</h4>
+        <ul class="guide-list">
+          <li data-i18n>The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.</li>
+          <li data-i18n>A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.</li>
+          <li data-i18n>A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.</li>
+          <li data-i18n>Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.</li>
+        </ul>
+
+        <h4 data-i18n>// WHAT_EACH_TAB_IS_FOR</h4>
+        <dl class="guide-tabs">
+          <dt data-i18n>Circle</dt><dd data-i18n>Choose a key and see what is in it.</dd>
+          <dt data-i18n>Tuner</dt><dd data-i18n>Get in tune, on any of eight instruments.</dd>
+          <dt data-i18n>Tone</dt><dd data-i18n>How it is played: instrument, strumming pattern, feel and swing.</dd>
+          <dt data-i18n>Drums</dt><dd data-i18n>A groove underneath, editable step by step.</dd>
+          <dt data-i18n>Compose</dt><dd data-i18n>The chord itself: sevenths, extensions, inversions, and a shape for your hands.</dd>
+          <dt data-i18n>Timeline</dt><dd data-i18n>The song: bars, loops and sections.</dd>
+          <dt data-i18n>Assist</dt><dd data-i18n>What could come next, and 56 progressions taken from real songs.</dd>
+          <dt data-i18n>Learn</dt><dd data-i18n>The modes, and an ear trainer to test them.</dd>
+          <dt data-i18n>Songs</dt><dd data-i18n>Save, reopen, import and export what you write.</dd>
+        </dl>
+
+        <p class="body-copy" data-i18n>If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.</p>
+      </details>
+
+      <h3 data-i18n>// MODES</h3>
       <p class="body-copy" data-i18n>Modes are the 7 scales hiding inside every major scale — same notes, different starting point, different mood. Pick one to hear it and read how guitarists use it.</p>
       <div class="chip-row" id="learnModeRow"></div>
       <div class="card">
@@ -2412,7 +2583,7 @@ const LOCALE_ES = {
   '/03 DRUM_MACHINE': '/03 CAJA_DE_RITMOS',
   '/04 DIATONIC_CHORDS': '/04 ACORDES_DIATÓNICOS',
   '/05 TIMELINE': '/05 LÍNEA_DE_TIEMPO',
-  '/06 MODES': '/06 MODOS',
+  '/06 LEARN': '/06 APRENDER',
   '/07 SONGWRITING_ASSISTANT': '/07 ASISTENTE_DE_COMPOSICIÓN',
   '/08 SONGS': '/08 CANCIONES',
   '/09 TUNER': '/09 AFINADOR',
@@ -3426,6 +3597,60 @@ const LOCALE_ES = {
   'New song started.': 'Canción nueva empezada.',
   'Could not read that file — {error}': 'No se ha podido leer ese archivo — {error}',
   'Unrecognised file format': 'Formato de archivo no reconocido',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// MODOS',
+  '// GUIDE_FOR_GUITARISTS': '// GUÍA_PARA_GUITARRISTAS',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong es una herramienta de composición que enseña cómo funciona. Elige una tonalidad y te nombra todos sus acordes y lo que hace cada uno; escribe una progresión y suena en una guitarra modelada, así que oyes la idea antes de saber tocarla.',
+  '// START_HERE': '// EMPIEZA_AQUÍ',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Afina. El afinador conoce 8 instrumentos y 26 afinaciones, y puedes tocar cualquier cuerda para oír su altura y afinar de oído.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Elige tu tonalidad. Toca una cuña del círculo. El bloque contorneado son todos los acordes que pertenecen a esa tonalidad.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Escucha los acordes. Componer despliega los siete grados, cada uno con una posición en el mástil que puedes tocar de verdad.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Escribe algo. Línea convierte compases en una canción: toca un compás, elige un acorde y dale al play.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Dale movimiento. Timbre decide cómo se rasguea; Batería pone un groove debajo.',
+  '// READING_THE_WHEEL': '// LEER_LA_RUEDA',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'El anillo exterior son acordes mayores. El interior, sus relativos menores: las mismas notas, un punto de partida más oscuro.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'El bloque contorneado es tu tonalidad. Tres o cuatro cuñas en cada anillo, siempre juntas, porque una tonalidad es un sitio en este círculo y no una lista que memorizar.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'En sentido horario subes una quinta: G es la V de C y tira hacia casa. En sentido antihorario subes una cuarta: F es el IV de C, y en cambio relaja.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'El número romano de una cuña es el papel de ese acorde. I, IV y V son tus tres mayores; ii, iii y vi los tres menores; vii° el que no se puede estar quieto.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Las cuñas vecinas comparten más notas. En la guitarra eso significa mover menos la mano, y por eso tantas canciones están hechas de cuñas que se tocan.',
+  '// IF_YOU_ALREADY_PLAY': '// SI_YA_TOCAS',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Los acordes abiertos que ya te sabes son una tonalidad. G, C y D son I, IV y V en G: el círculo es esa misma relación dibujada para las doce tonalidades.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'La cejilla gira la rueda, no las posiciones. La misma forma dos trastes más arriba es una tonalidad dos cuñas en sentido horario; fíjala aquí y la app nombra los acordes que estás tocando de verdad.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Una posición no es un acorde. Componer ofrece varias voces tocables del mismo acorde, y el número ↔ de la línea de tiempo es cuántos trastes viaja tu mano para llegar a una. Voces suaves elige las que casi no se mueven.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Los acordes prestados son las cuñas justo fuera del contorno. Prueba la de al lado antes que nada exótico: una sola nota de fuera de la tonalidad es de donde sale casi todo el color del pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// PARA_QUÉ_SIRVE_CADA_PESTAÑA',
+  'Choose a key and see what is in it.': 'Elige una tonalidad y mira lo que hay dentro.',
+  'Get in tune, on any of eight instruments.': 'Ponte a tono, en cualquiera de ocho instrumentos.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Cómo se toca: instrumento, patrón de rasgueo, aire y swing.',
+  'A groove underneath, editable step by step.': 'Un groove debajo, editable paso a paso.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'El acorde en sí: séptimas, extensiones, inversiones y una posición para tus manos.',
+  'The song: bars, loops and sections.': 'La canción: compases, bucles y secciones.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Qué podría venir después, y 56 progresiones sacadas de canciones reales.',
+  'The modes, and an ear trainer to test them.':
+    'Los modos, y un entrenador de oído para ponerlos a prueba.',
+  'Save, reopen, import and export what you write.':
+    'Guarda, reabre, importa y exporta lo que escribas.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Si te quedas con una sola cosa: los acordes que están juntos en la rueda comparten casi todas sus notas. Muévete un paso, deja casi todos los dedos donde están, y sonará como si perteneciera.',
 };
 
 /* ===== src/locales/hi.js ===== */
@@ -3500,7 +3725,7 @@ const LOCALE_HI = {
   '/03 DRUM_MACHINE': '/03 ड्रम_मशीन',
   '/04 DIATONIC_CHORDS': '/04 डायटॉनिक_कॉर्ड',
   '/05 TIMELINE': '/05 टाइमलाइन',
-  '/06 MODES': '/06 मोड',
+  '/06 LEARN': '/06 सीखें',
   '/07 SONGWRITING_ASSISTANT': '/07 गीत_रचना_सहायक',
   '/08 SONGS': '/08 गीत',
   '/09 TUNER': '/09 ट्यूनर',
@@ -4512,6 +4737,59 @@ const LOCALE_HI = {
   'New song started.': 'नया गीत शुरू हुआ।',
   'Could not read that file — {error}': 'वह फ़ाइल पढ़ी नहीं जा सकी — {error}',
   'Unrecognised file format': 'अपरिचित फ़ाइल प्रारूप',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// मोड',
+  '// GUIDE_FOR_GUITARISTS': '// गिटार_बजाने_वालों_के_लिए_गाइड',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong गीत लिखने का एक औज़ार है जो अपना हिसाब भी दिखाता है। एक कुंजी चुनिए और यह उसके हर कॉर्ड का नाम और काम बता देता है; एक प्रोग्रेशन लिखिए और वह एक मॉडल की गई गिटार पर बजता है — यानी बजाना आने से पहले ही विचार सुनाई दे जाता है।',
+  '// START_HERE': '// यहाँ_से_शुरू_करें',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'पहले ट्यून कीजिए। ट्यूनर 8 वाद्य और 26 ट्यूनिंग जानता है, और किसी भी तार को छूकर उसकी पिच सुनी जा सकती है और कान से ट्यून किया जा सकता है।',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'अपनी कुंजी चुनिए। चक्र के किसी टुकड़े को छुइए। जिस हिस्से के चारों ओर रेखा खिंची है, वे सब उसी कुंजी के कॉर्ड हैं।',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'कॉर्ड सुनिए। रचना सातों अंश सामने रख देती है, हर एक के साथ फ़्रेटबोर्ड की ऐसी पकड़ जो सचमुच बजाई जा सके।',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'कुछ लिखिए। टाइमलाइन बारों को गीत में बदल देती है — एक बार छुइए, कॉर्ड चुनिए, और चला दीजिए।',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'इसमें हरकत लाइए। ध्वनि तय करती है कि स्ट्रम कैसा हो; ड्रम नीचे एक ग्रूव रख देते हैं।',
+  '// READING_THE_WHEEL': '// चक्र_कैसे_पढ़ें',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'बाहरी छल्ला मेजर कॉर्ड है। भीतरी छल्ला उनके सापेक्ष माइनर — वही स्वर, बस शुरुआत की जगह ज़्यादा गहरी।',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'रेखांकित हिस्सा आपकी कुंजी है। हर छल्ले पर तीन या चार टुकड़े, हमेशा अगल-बगल, क्योंकि कुंजी इस चक्र पर एक जगह है, रटने की सूची नहीं।',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'घड़ी की दिशा में एक पंचम ऊपर: G, C का V है और घर की ओर खींचता है। उल्टी दिशा में एक चतुर्थ ऊपर: F, C का IV है, और वह उलटे ढील देता है।',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'टुकड़े पर लिखा रोमन अंक उस कॉर्ड का काम है। I, IV और V आपके तीन मेजर हैं; ii, iii और vi तीन माइनर; और vii° वह जो टिक नहीं पाता।',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'पड़ोसी टुकड़ों में सबसे ज़्यादा स्वर साझे होते हैं। गिटार पर इसका मतलब है हाथ की सबसे कम हरकत — इसीलिए इतने गीत उन्हीं टुकड़ों से बने हैं जो एक-दूसरे से सटे हैं।',
+  '// IF_YOU_ALREADY_PLAY': '// अगर_आप_पहले_से_बजाते_हैं',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'जो खुले कॉर्ड आप पहले से जानते हैं, वे एक कुंजी हैं। G, C और D, G में I, IV और V हैं — यह चक्र उसी एक रिश्ते को बारहों कुंजियों के लिए खींच देता है।',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'कैपो चक्र को घुमाता है, पकड़ को नहीं। वही पकड़ दो फ़्रेट ऊपर घड़ी की दिशा में दो टुकड़े आगे की कुंजी है; उसे यहाँ सेट कीजिए और ऐप उन कॉर्डों के नाम बताएगा जो आप सचमुच बजा रहे हैं।',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'पकड़ और कॉर्ड एक चीज़ नहीं। रचना एक ही कॉर्ड की कई बजाने योग्य वॉइसिंग देती है, और टाइमलाइन पर ↔ संख्या बताती है कि उस तक पहुँचने में हाथ कितने फ़्रेट चलता है। सहज वॉइसिंग वही पकड़ चुनती है जो मुश्किल से हिलती है।',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'उधार लिए कॉर्ड वे टुकड़े हैं जो रेखा के ठीक बाहर हैं। कुछ भी अनोखा आज़माने से पहले बगल वाला आज़माइए — कुंजी के बाहर का एक ही स्वर पॉप के अधिकांश रंग का स्रोत है।',
+  '// WHAT_EACH_TAB_IS_FOR': '// कौन_सा_टैब_किस_लिए',
+  'Choose a key and see what is in it.': 'एक कुंजी चुनिए और देखिए उसमें क्या है।',
+  'Get in tune, on any of eight instruments.': 'आठ में से किसी भी वाद्य पर सुर में आइए।',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'कैसे बजाया जाए: वाद्य, स्ट्रम का पैटर्न, मिज़ाज और स्विंग।',
+  'A groove underneath, editable step by step.': 'नीचे एक ग्रूव, कदम-दर-कदम बदला जा सकने वाला।',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'कॉर्ड खुद: सप्तम, विस्तार, पलटाव, और आपके हाथों के लिए एक पकड़।',
+  'The song: bars, loops and sections.': 'गीत: बार, लूप और खंड।',
+  'What could come next, and 56 progressions taken from real songs.':
+    'आगे क्या आ सकता है, और असली गीतों से लिए गए 56 प्रोग्रेशन।',
+  'The modes, and an ear trainer to test them.': 'मोड, और उन्हें परखने के लिए कान की कसरत।',
+  'Save, reopen, import and export what you write.':
+    'जो लिखें उसे सहेजिए, फिर खोलिए, आयात और निर्यात कीजिए।',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'अगर एक ही बात याद रखनी हो: चक्र पर अगल-बगल बैठे कॉर्ड अपने लगभग सारे स्वर साझा करते हैं। एक कदम चलिए, ज़्यादातर उँगलियाँ जहाँ हैं वहीं रहने दीजिए, और वह अपनी जगह का लगेगा।',
 };
 
 /* ===== src/locales/de.js ===== */
@@ -4585,7 +4863,7 @@ const LOCALE_DE = {
   '/03 DRUM_MACHINE': '/03 DRUMCOMPUTER',
   '/04 DIATONIC_CHORDS': '/04 LEITEREIGENE_AKKORDE',
   '/05 TIMELINE': '/05 TIMELINE',
-  '/06 MODES': '/06 MODI',
+  '/06 LEARN': '/06 LERNEN',
   '/07 SONGWRITING_ASSISTANT': '/07 SONGWRITING_ASSISTENT',
   '/08 SONGS': '/08 SONGS',
   '/09 TUNER': '/09 STIMMGERÄT',
@@ -5599,6 +5877,62 @@ const LOCALE_DE = {
   'New song started.': 'Neuer Song begonnen.',
   'Could not read that file — {error}': 'Diese Datei konnte nicht gelesen werden — {error}',
   'Unrecognised file format': 'Unbekanntes Dateiformat',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// MODI',
+  '// GUIDE_FOR_GUITARISTS': '// LEITFADEN_FÜR_GITARRISTEN',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong ist ein Werkzeug zum Songschreiben, das seine Rechenwege zeigt. Wähle eine Tonart, und es benennt jeden Akkord darin und was er tut; schreib eine Progression, und sie erklingt auf einer modellierten Gitarre — du hörst die Idee, bevor du sie spielen kannst.',
+  '// START_HERE': '// HIER_ANFANGEN',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Stimm die Gitarre. Das Stimmgerät kennt 8 Instrumente und 26 Stimmungen, und du kannst jede Saite antippen, um ihre Tonhöhe zu hören und nach Gehör zu stimmen.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Wähle deine Tonart. Tippe auf ein Segment des Kreises. Der umrandete Block sind alle Akkorde, die zu dieser Tonart gehören.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Hör dir die Akkorde an. Komponieren legt die sieben Stufen aus, jede mit einem Griff, den du wirklich spielen kannst.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Schreib etwas. Die Timeline macht aus Takten einen Song: Takt antippen, Akkord wählen, abspielen.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Bring es in Bewegung. Klang entscheidet, wie geschlagen wird; Drums legt einen Groove darunter.',
+  '// READING_THE_WHEEL': '// DAS_RAD_LESEN',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Der äußere Ring sind Durakkorde. Der innere ihre Parallelen in Moll — dieselben Töne, ein dunklerer Ausgangspunkt.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Der umrandete Block ist deine Tonart. Drei oder vier Segmente pro Ring, immer nebeneinander, denn eine Tonart ist ein Ort auf diesem Kreis und keine Liste zum Auswendiglernen.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'Im Uhrzeigersinn geht es eine Quinte hinauf: G ist die V von C und zieht nach Hause. Gegen den Uhrzeigersinn eine Quarte hinauf: F ist die IV von C, und die entspannt stattdessen.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Die römische Ziffer auf einem Segment ist die Aufgabe dieses Akkords. I, IV und V sind deine drei Durakkorde; ii, iii und vi die drei Mollakkorde; vii° der, der nicht stillsitzen kann.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Nachbarn teilen sich die meisten Töne. Auf der Gitarre heißt das die kleinste Handbewegung — und darum bestehen so viele Songs aus Segmenten, die sich berühren.',
+  '// IF_YOU_ALREADY_PLAY': '// WENN_DU_SCHON_SPIELST',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Die offenen Akkorde, die du schon kannst, sind eine Tonart. G, C und D sind I, IV und V in G — der Kreis ist genau diese Beziehung, aufgezeichnet für alle zwölf Tonarten.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Ein Kapodaster dreht das Rad, nicht die Griffe. Derselbe Griff zwei Bünde höher ist eine Tonart zwei Segmente im Uhrzeigersinn; stell sie hier ein, und die App benennt die Akkorde, die du wirklich spielst.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Ein Griff ist kein Akkord. Komponieren bietet mehrere spielbare Voicings desselben Akkords, und die Zahl ↔ in der Timeline ist, wie viele Bünde deine Hand dorthin wandert. Weiche Voicings wählt die Griffe, die sich kaum bewegen.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Geliehene Akkorde sind die Segmente direkt außerhalb der Umrandung. Probier das Nachbarsegment, bevor du etwas Exotisches nimmst — ein einziger Ton von außerhalb der Tonart ist die Quelle der meisten Farbe im Pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// WOFÜR_JEDER_TAB_DA_IST',
+  'Choose a key and see what is in it.': 'Eine Tonart wählen und sehen, was darin steckt.',
+  'Get in tune, on any of eight instruments.':
+    'In Stimmung kommen, auf jedem von acht Instrumenten.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Wie gespielt wird: Instrument, Schlagmuster, Feel und Swing.',
+  'A groove underneath, editable step by step.':
+    'Ein Groove darunter, Schritt für Schritt bearbeitbar.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Der Akkord selbst: Septimen, Erweiterungen, Umkehrungen und ein Griff für deine Hände.',
+  'The song: bars, loops and sections.': 'Der Song: Takte, Loops und Abschnitte.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Was als Nächstes kommen könnte, und 56 Progressionen aus echten Songs.',
+  'The modes, and an ear trainer to test them.':
+    'Die Modi, und ein Gehörtraining, um sie zu prüfen.',
+  'Save, reopen, import and export what you write.':
+    'Speichern, wieder öffnen, importieren und exportieren, was du schreibst.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Wenn du nur eines mitnimmst: Akkorde, die auf dem Rad nebeneinanderliegen, teilen sich fast alle ihre Töne. Geh einen Schritt weiter, lass die meisten Finger, wo sie sind, und es klingt, als gehörte es dahin.',
 };
 
 /* ===== src/locales/id.js ===== */
@@ -5671,7 +6005,7 @@ const LOCALE_ID = {
   '/03 DRUM_MACHINE': '/03 MESIN_DRUM',
   '/04 DIATONIC_CHORDS': '/04 AKOR_DIATONIS',
   '/05 TIMELINE': '/05 LINIMASA',
-  '/06 MODES': '/06 MODUS',
+  '/06 LEARN': '/06 BELAJAR',
   '/07 SONGWRITING_ASSISTANT': '/07 ASISTEN_PENULISAN_LAGU',
   '/08 SONGS': '/08 LAGU',
   '/09 TUNER': '/09 PENYETEM',
@@ -6683,6 +7017,61 @@ const LOCALE_ID = {
   'New song started.': 'Lagu baru dimulai.',
   'Could not read that file — {error}': 'Berkas itu tidak bisa dibaca — {error}',
   'Unrecognised file format': 'Format berkas tidak dikenali',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// MODUS',
+  '// GUIDE_FOR_GUITARISTS': '// PANDUAN_UNTUK_GITARIS',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong adalah alat menulis lagu yang memperlihatkan cara kerjanya. Pilih sebuah nada dasar dan ia menyebutkan setiap akor di dalamnya beserta perannya; tulis sebuah progresi dan ia dibunyikan oleh gitar model, jadi kamu mendengar idenya sebelum bisa memainkannya.',
+  '// START_HERE': '// MULAI_DI_SINI',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Setem dulu. Penyetem mengenal 8 instrumen dan 26 setelan, dan kamu bisa menyentuh senar mana pun untuk mendengar nadanya dan menyetem dengan telinga.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Pilih nada dasarmu. Sentuh satu juring pada lingkaran. Blok yang bergaris adalah semua akor yang termasuk nada dasar itu.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Dengarkan akornya. Menggubah menampilkan ketujuh tingkatnya, masing-masing dengan posisi jari di fret yang benar-benar bisa dimainkan.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Tulis sesuatu. Linimasa mengubah birama menjadi lagu: sentuh sebuah birama, pilih akor, lalu putar.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Beri gerak. Nada menentukan cara genjrengannya; Drum menaruh groove di bawahnya.',
+  '// READING_THE_WHEEL': '// MEMBACA_LINGKARAN',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Cincin luar adalah akor mayor. Cincin dalam adalah minor relatifnya — nada yang sama, titik berangkat yang lebih gelap.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Blok bergaris itu nada dasarmu. Tiga atau empat juring di tiap cincin, selalu bersebelahan, karena sebuah nada dasar adalah tempat pada lingkaran ini, bukan daftar yang harus dihafal.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'Searah jarum jam naik satu kuint: G adalah V dari C dan menarik pulang. Berlawanan arah jarum jam naik satu kuart: F adalah IV dari C, dan justru melonggarkan.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Angka romawi pada sebuah juring adalah tugas akor itu. I, IV, dan V adalah tiga mayormu; ii, iii, dan vi tiga minornya; vii° yang tidak bisa diam.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Juring bertetangga berbagi paling banyak nada. Di gitar itu berarti gerak tangan paling sedikit, dan itulah sebabnya begitu banyak lagu dibangun dari juring yang bersentuhan.',
+  '// IF_YOU_ALREADY_PLAY': '// KALAU_KAMU_SUDAH_BISA_MAIN',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Akor terbuka yang sudah kamu kuasai itu sebuah nada dasar. G, C, dan D adalah I, IV, dan V di G — lingkaran ini adalah hubungan yang sama, digambar untuk kedua belas nada dasar.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Kapo memutar lingkarannya, bukan bentuk jarinya. Pegangan yang sama dua fret lebih tinggi adalah nada dasar dua juring searah jarum jam; setel di sini dan aplikasi menyebut akor yang benar-benar kamu mainkan.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Bentuk jari bukan akor. Menggubah menawarkan beberapa voicing yang bisa dimainkan untuk akor yang sama, dan angka ↔ di linimasa adalah berapa fret tanganmu berpindah untuk mencapainya. Voicing halus memilih bentuk yang nyaris tidak bergerak.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Akor pinjaman adalah juring tepat di luar garis. Coba yang bersebelahan dulu sebelum yang aneh-aneh — satu nada dari luar nada dasar adalah sumber hampir semua warna dalam musik pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// GUNANYA_TIAP_TAB',
+  'Choose a key and see what is in it.': 'Pilih nada dasar dan lihat apa isinya.',
+  'Get in tune, on any of eight instruments.':
+    'Jadi setem, pada salah satu dari delapan instrumen.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Cara memainkannya: instrumen, pola genjreng, rasa, dan swing.',
+  'A groove underneath, editable step by step.':
+    'Groove di bawahnya, bisa disunting langkah demi langkah.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Akornya sendiri: septim, ekstensi, inversi, dan sebuah bentuk untuk tanganmu.',
+  'The song: bars, loops and sections.': 'Lagunya: birama, loop, dan bagian.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Apa yang mungkin datang berikutnya, dan 56 progresi yang diambil dari lagu sungguhan.',
+  'The modes, and an ear trainer to test them.': 'Modusnya, dan latihan telinga untuk mengujinya.',
+  'Save, reopen, import and export what you write.':
+    'Simpan, buka lagi, impor, dan ekspor apa yang kamu tulis.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Kalau hanya satu hal yang kamu bawa pulang: akor yang bersebelahan pada lingkaran berbagi hampir semua nadanya. Melangkahlah satu juring, biarkan sebagian besar jarimu di tempatnya, dan bunyinya akan terdengar pas.',
 };
 
 /* ===== src/locales/pt.js ===== */
@@ -6760,7 +7149,7 @@ const LOCALE_PT = {
   '/03 DRUM_MACHINE': '/03 BATERIA_ELETRÔNICA',
   '/04 DIATONIC_CHORDS': '/04 ACORDES_DIATÔNICOS',
   '/05 TIMELINE': '/05 LINHA_DO_TEMPO',
-  '/06 MODES': '/06 MODOS',
+  '/06 LEARN': '/06 APRENDER',
   '/07 SONGWRITING_ASSISTANT': '/07 ASSISTENTE_DE_COMPOSIÇÃO',
   '/08 SONGS': '/08 MÚSICAS',
   '/09 TUNER': '/09 AFINADOR',
@@ -7772,6 +8161,60 @@ const LOCALE_PT = {
   'New song started.': 'Nova música começada.',
   'Could not read that file — {error}': 'Não foi possível ler esse arquivo — {error}',
   'Unrecognised file format': 'Formato de arquivo não reconhecido',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// MODOS',
+  '// GUIDE_FOR_GUITARISTS': '// GUIA_PARA_GUITARRISTAS',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'O CircleSong é uma ferramenta de composição que mostra as contas. Escolha um tom e ele nomeia todos os acordes dele e o que cada um faz; escreva uma progressão e ela toca num violão modelado, então você ouve a ideia antes de saber tocá-la.',
+  '// START_HERE': '// COMECE_AQUI',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Afine. O afinador conhece 8 instrumentos e 26 afinações, e você pode tocar qualquer corda para ouvir a altura dela e afinar de ouvido.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Escolha o seu tom. Toque numa fatia do círculo. O bloco contornado são todos os acordes que pertencem àquele tom.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Ouça os acordes. Compor abre os sete graus, cada um com uma posição no braço que dá para tocar de verdade.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Escreva alguma coisa. Linha transforma compassos numa música: toque num compasso, escolha um acorde e aperte play.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Ponha em movimento. Timbre decide como é batido; Bateria coloca um groove por baixo.',
+  '// READING_THE_WHEEL': '// LENDO_A_RODA',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'O anel externo são acordes maiores. O interno, as relativas menores deles: as mesmas notas, um ponto de partida mais escuro.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'O bloco contornado é o seu tom. Três ou quatro fatias em cada anel, sempre lado a lado, porque um tom é um lugar neste círculo e não uma lista para decorar.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'No sentido horário você sobe uma quinta: G é o V de C e puxa de volta para casa. No anti-horário sobe uma quarta: F é o IV de C, e em vez disso relaxa.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'O número romano numa fatia é a função daquele acorde. I, IV e V são os seus três maiores; ii, iii e vi os três menores; vii° o que não consegue ficar parado.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Fatias vizinhas compartilham mais notas. No violão isso quer dizer menos movimento de mão, e é por isso que tanta música é feita de fatias que se encostam.',
+  '// IF_YOU_ALREADY_PLAY': '// SE_VOCÊ_JÁ_TOCA',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Os acordes abertos que você já sabe são um tom. G, C e D são I, IV e V em G: o círculo é essa mesma relação desenhada para os doze tons.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'O capotraste gira a roda, não as formas. A mesma pegada duas casas acima é um tom duas fatias no sentido horário; defina esse tom aqui e o app nomeia os acordes que você está tocando de verdade.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Uma forma não é um acorde. Compor oferece vários voicings tocáveis do mesmo acorde, e o número ↔ na linha do tempo é quantas casas a sua mão viaja para alcançar um deles. Condução suave escolhe as formas que quase não se mexem.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Acordes emprestados são as fatias logo fora do contorno. Experimente a vizinha antes de qualquer coisa exótica: uma única nota de fora do tom é de onde vem quase toda a cor do pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// PARA_QUE_SERVE_CADA_ABA',
+  'Choose a key and see what is in it.': 'Escolha um tom e veja o que tem dentro dele.',
+  'Get in tune, on any of eight instruments.':
+    'Fique afinado, em qualquer um de oito instrumentos.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Como é tocado: instrumento, levada, suingue e balanço.',
+  'A groove underneath, editable step by step.': 'Um groove por baixo, editável passo a passo.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'O acorde em si: sétimas, extensões, inversões e uma forma para as suas mãos.',
+  'The song: bars, loops and sections.': 'A música: compassos, loops e seções.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'O que pode vir depois, e 56 progressões tiradas de músicas de verdade.',
+  'The modes, and an ear trainer to test them.': 'Os modos, e um treino de ouvido para testá-los.',
+  'Save, reopen, import and export what you write.':
+    'Salve, reabra, importe e exporte o que você escrever.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Se levar só uma coisa daqui: acordes que ficam lado a lado na roda compartilham quase todas as notas. Ande um passo, deixe quase todos os dedos onde estão, e vai soar como se pertencesse.',
 };
 
 /* ===== src/locales/ru.js ===== */
@@ -7846,7 +8289,7 @@ const LOCALE_RU = {
   '/03 DRUM_MACHINE': '/03 ДРАМ-МАШИНА',
   '/04 DIATONIC_CHORDS': '/04 ДИАТОНИЧЕСКИЕ_АККОРДЫ',
   '/05 TIMELINE': '/05 ТАЙМЛАЙН',
-  '/06 MODES': '/06 ЛАДЫ',
+  '/06 LEARN': '/06 УЧИТЬСЯ',
   '/07 SONGWRITING_ASSISTANT': '/07 ПОМОЩНИК_СОЧИНИТЕЛЯ',
   '/08 SONGS': '/08 ПЕСНИ',
   '/09 TUNER': '/09 ТЮНЕР',
@@ -8858,6 +9301,59 @@ const LOCALE_RU = {
   'New song started.': 'Новая песня начата.',
   'Could not read that file — {error}': 'Не удалось прочитать этот файл — {error}',
   'Unrecognised file format': 'Формат файла не распознан',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// ЛАДЫ',
+  '// GUIDE_FOR_GUITARISTS': '// РУКОВОДСТВО_ДЛЯ_ГИТАРИСТОВ',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong — инструмент для сочинения, который показывает свою работу. Выберите тональность, и он назовёт все её аккорды и роль каждого; напишите последовательность, и она прозвучит на смоделированной гитаре, так что идею слышно раньше, чем её получается сыграть.',
+  '// START_HERE': '// НАЧНИТЕ_ЗДЕСЬ',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Настройтесь. Тюнер знает 8 инструментов и 26 строёв, а коснувшись любой струны, можно услышать её высоту и настроиться на слух.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Выберите тональность. Коснитесь сектора круга. Обведённый блок — все аккорды, которые принадлежат этой тональности.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Послушайте аккорды. «Сочинять» раскладывает семь ступеней, и у каждой есть аппликатура, которую действительно можно взять.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Напишите что-нибудь. Таймлайн превращает такты в песню: коснитесь такта, выберите аккорд, нажмите воспроизведение.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Приведите это в движение. Тембр решает, как по струнам бьют; Ударные подкладывают грув.',
+  '// READING_THE_WHEEL': '// КАК_ЧИТАТЬ_КРУГ',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Внешнее кольцо — мажорные аккорды. Внутреннее — их параллельные минорные: те же ноты, более тёмная отправная точка.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Обведённый блок — ваша тональность. Три-четыре сектора на каждом кольце, всегда рядом, потому что тональность — это место на этом круге, а не список для заучивания.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'По часовой стрелке — вверх на квинту: G это V от C, и она тянет домой. Против часовой — вверх на кварту: F это IV от C, и она, наоборот, расслабляет.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Римская цифра на секторе — работа этого аккорда. I, IV и V — три ваших мажора; ii, iii и vi — три минора; vii° — тот, который не может усидеть на месте.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Соседние секторы делят больше всего общих нот. На гитаре это значит наименьшее движение руки — потому столько песен собрано из секторов, которые соприкасаются.',
+  '// IF_YOU_ALREADY_PLAY': '// ЕСЛИ_ВЫ_УЖЕ_ИГРАЕТЕ',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Открытые аккорды, которые вы уже знаете, — это тональность. G, C и D — это I, IV и V в G: круг и есть та же самая связь, вычерченная для всех двенадцати тональностей.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Каподастр поворачивает круг, а не аппликатуры. Тот же захват на два лада выше — это тональность на два сектора по часовой стрелке; задайте её здесь, и приложение назовёт аккорды, которые вы играете на самом деле.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Аппликатура — это не аккорд. «Сочинять» предлагает несколько играбельных расположений одного аккорда, а число ↔ на таймлайне — сколько ладов проходит рука, чтобы взять его. «Плавные расположения» выбирают те, что почти не двигаются.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Заимствованные аккорды — это секторы сразу за обводкой. Прежде чем браться за экзотику, попробуйте соседний: одна нота из-за пределов тональности — источник почти всего цвета в поп-музыке.',
+  '// WHAT_EACH_TAB_IS_FOR': '// ДЛЯ_ЧЕГО_КАЖДАЯ_ВКЛАДКА',
+  'Choose a key and see what is in it.': 'Выбрать тональность и увидеть, что в ней есть.',
+  'Get in tune, on any of eight instruments.': 'Настроиться — на любом из восьми инструментов.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Как это играется: инструмент, рисунок боя, характер и свинг.',
+  'A groove underneath, editable step by step.': 'Грув снизу, редактируемый шаг за шагом.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Сам аккорд: септимы, надстройки, обращения и аппликатура для ваших рук.',
+  'The song: bars, loops and sections.': 'Песня: такты, петли и разделы.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Что может быть дальше, и 56 последовательностей из настоящих песен.',
+  'The modes, and an ear trainer to test them.': 'Лады и тренировка слуха, чтобы их проверить.',
+  'Save, reopen, import and export what you write.':
+    'Сохранить, открыть заново, импортировать и экспортировать написанное.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Если запомнить только одно: аккорды, стоящие рядом на круге, делят почти все свои ноты. Сдвиньтесь на шаг, оставьте большинство пальцев на месте — и это прозвучит как своё.',
 };
 
 /* ===== src/locales/vi.js ===== */
@@ -8931,7 +9427,7 @@ const LOCALE_VI = {
   '/03 DRUM_MACHINE': '/03 MÁY_TRỐNG',
   '/04 DIATONIC_CHORDS': '/04 HỢP_ÂM_DIATONIC',
   '/05 TIMELINE': '/05 DÒNG_THỜI_GIAN',
-  '/06 MODES': '/06 ĐIỆU_THỨC',
+  '/06 LEARN': '/06 HỌC',
   '/07 SONGWRITING_ASSISTANT': '/07 TRỢ_LÝ_SÁNG_TÁC',
   '/08 SONGS': '/08 BÀI_HÁT',
   '/09 TUNER': '/09 LÊN_DÂY',
@@ -9943,6 +10439,61 @@ const LOCALE_VI = {
   'New song started.': 'Đã bắt đầu bài hát mới.',
   'Could not read that file — {error}': 'Không đọc được tệp đó — {error}',
   'Unrecognised file format': 'Định dạng tệp không nhận ra',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// ĐIỆU_THỨC',
+  '// GUIDE_FOR_GUITARISTS': '// HƯỚNG_DẪN_CHO_NGƯỜI_CHƠI_GHI-TA',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong là một công cụ sáng tác cho bạn thấy cả cách nó tính. Chọn một giọng và nó gọi tên từng hợp âm trong giọng đó cùng vai trò của mỗi hợp âm; viết một vòng hòa âm và nó vang lên trên một cây ghi-ta được mô phỏng, nên bạn nghe được ý tưởng trước khi chơi được nó.',
+  '// START_HERE': '// BẮT_ĐẦU_TỪ_ĐÂY',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'Lên dây trước đã. Bộ lên dây biết 8 nhạc cụ và 26 kiểu lên dây, và bạn có thể chạm vào bất kỳ dây nào để nghe cao độ của nó rồi lên dây bằng tai.',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'Chọn giọng của bạn. Chạm vào một múi trên vòng tròn. Khối được viền lại chính là mọi hợp âm thuộc về giọng đó.',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'Nghe các hợp âm. Sáng tác bày ra đủ bảy bậc, mỗi bậc kèm một thế bấm trên cần đàn mà bạn thực sự chơi được.',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'Viết một thứ gì đó. Dòng thời gian biến các ô nhịp thành một bài hát: chạm vào một ô nhịp, chọn hợp âm, rồi bấm phát.',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'Cho nó chuyển động. Âm sắc quyết định cách quạt chả; Trống đặt một groove xuống bên dưới.',
+  '// READING_THE_WHEEL': '// ĐỌC_VÒNG_TRÒN_NHƯ_THẾ_NÀO',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'Vành ngoài là hợp âm trưởng. Vành trong là các giọng thứ song song của chúng — vẫn những nốt ấy, chỉ là một chỗ xuất phát tối hơn.',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'Khối được viền là giọng của bạn. Ba hoặc bốn múi trên mỗi vành, luôn nằm cạnh nhau, bởi một giọng là một chỗ trên vòng tròn này chứ không phải một danh sách phải học thuộc.',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'Theo chiều kim đồng hồ là lên một quãng năm: G là bậc V của C và nó kéo về nhà. Ngược chiều kim đồng hồ là lên một quãng bốn: F là bậc IV của C, và nó lại làm mọi thứ chùng xuống.',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'Số La Mã trên một múi là việc mà hợp âm đó làm. I, IV và V là ba hợp âm trưởng của bạn; ii, iii và vi là ba hợp âm thứ; còn vii° là cái không chịu ngồi yên.',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'Các múi kề nhau dùng chung nhiều nốt nhất. Trên ghi-ta điều đó có nghĩa là tay phải di chuyển ít nhất, và đó là lý do rất nhiều bài hát được dựng từ những múi chạm nhau.',
+  '// IF_YOU_ALREADY_PLAY': '// NẾU_BẠN_ĐÃ_BIẾT_CHƠI',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'Những hợp âm mở bạn đã biết chính là một giọng. G, C và D là I, IV và V trong giọng G — vòng tròn này chỉ là đúng mối quan hệ ấy, vẽ ra cho cả mười hai giọng.',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'Capo xoay vòng tròn chứ không đổi thế bấm. Vẫn thế bấm ấy nhưng cao hơn hai ngăn là một giọng lệch hai múi theo chiều kim đồng hồ; đặt giọng đó ở đây và ứng dụng sẽ gọi đúng tên những hợp âm bạn đang thực sự chơi.',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'Một thế bấm không phải là một hợp âm. Sáng tác đưa ra nhiều thế bấm chơi được của cùng một hợp âm, và con số ↔ trên dòng thời gian là số ngăn tay bạn phải đi để tới thế bấm ấy. Nối thế bấm mượt sẽ chọn những thế gần như không phải di chuyển.',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'Hợp âm mượn là những múi nằm ngay bên ngoài đường viền. Hãy thử múi kề bên trước khi thử thứ gì lạ lẫm — chỉ một nốt nằm ngoài giọng thôi đã là nguồn gốc của phần lớn màu sắc trong nhạc pop.',
+  '// WHAT_EACH_TAB_IS_FOR': '// TỪNG_THẺ_DÙNG_ĐỂ_LÀM_GÌ',
+  'Choose a key and see what is in it.': 'Chọn một giọng và xem trong đó có gì.',
+  'Get in tune, on any of eight instruments.':
+    'Lên dây cho chuẩn, trên bất kỳ nhạc cụ nào trong tám nhạc cụ.',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'Cách chơi nó: nhạc cụ, mẫu quạt chả, cảm giác và swing.',
+  'A groove underneath, editable step by step.': 'Một groove ở bên dưới, sửa được theo từng bước.',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'Bản thân hợp âm: quãng bảy, các âm mở rộng, thể đảo, và một thế bấm cho đôi tay bạn.',
+  'The song: bars, loops and sections.': 'Bài hát: ô nhịp, vòng lặp và các đoạn.',
+  'What could come next, and 56 progressions taken from real songs.':
+    'Thứ có thể đến tiếp theo, cùng 56 vòng hòa âm lấy từ những bài hát có thật.',
+  'The modes, and an ear trainer to test them.':
+    'Các điệu thức, và một bài luyện tai để kiểm tra chúng.',
+  'Save, reopen, import and export what you write.':
+    'Lưu, mở lại, nhập và xuất những gì bạn viết ra.',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'Nếu chỉ mang theo được một điều: những hợp âm ngồi cạnh nhau trên vòng tròn dùng chung gần hết số nốt. Bước sang một múi, để phần lớn ngón tay nguyên chỗ, và nó sẽ nghe như thể vốn thuộc về đó.',
 };
 
 /* ===== src/i18n.js ===== */
@@ -13547,6 +14098,24 @@ class Tuner {
     this.emaAlpha = 0.25;
     this.lockDelayMs = 150;
     this.snapCents = 4;
+    /**
+     * How long a lock is held once it has been earned.
+     *
+     * A plucked string is not one pitch. It sharpens on the attack, settles,
+     * then drifts as it decays, and a finger on the peg moves it further — so
+     * a reading that has just touched dead centre will cross back out of a
+     * ±4¢ window several times a second. Reporting that honestly frame by
+     * frame is what makes a tuner flicker, and a flickering "in tune" is no
+     * answer at all: you cannot tell whether you are done.
+     *
+     * So the lock is held for two seconds from the last frame that was
+     * genuinely in tune. Inside that window a drift out to `releaseCents` is
+     * treated as the same note wobbling; past `releaseCents` the peg has
+     * actually moved and the display follows it immediately. The hold also
+     * survives the note dying away, which is the other half of the flicker —
+     * the level falls under the gate while you are still looking at it.
+     */
+    this.holdMs = 2000;
 
     this.notes = [40, 45, 50, 55, 59, 64];
     this.targetMidi = null;   // null = follow whichever string is nearest
@@ -13559,6 +14128,15 @@ class Tuner {
     this._smoothCents = 0;
     this._lockStart = null;
     this._locked = false;
+    this._holdUntil = 0;
+    this._recent = [];
+    this._heldMidi = null;
+    this._lastFreq = null;
+  }
+
+  /** How far the reading may wander before the lock is a lie rather than wobble. */
+  get releaseCents() {
+    return this.snapCents * 2;
   }
 
   /** Set the notes being tuned to; resizes the analysis window to suit. */
@@ -13579,6 +14157,10 @@ class Tuner {
     this._lockStart = null;
     this._locked = false;
     this._chimed = false;
+    this._holdUntil = 0;
+    this._recent = [];
+    this._heldMidi = null;
+    this._lastFreq = null;
   }
 
   /**
@@ -13663,10 +14245,18 @@ class Tuner {
     if (!this.running || !this.analyser) return;
     this.analyser.getFloatTimeDomainData(this.buffer);
 
+    const now = performance.now();
     const level = rmsOf(this.buffer);
     if (level < this.noiseGate) {
-      this._lockStart = null;
-      this._locked = false;
+      // A held lock outlives the note that earned it. Without this the answer
+      // disappears the moment the string decays under the gate, which is
+      // usually the moment you look up from the peg to read it.
+      if (this._locked && now < this._holdUntil) {
+        this._emit({ state: 'locked', freq: this._lastFreq, cents: 0, midi: this._heldMidi ?? this.targetMidi, level, clarity: 0 });
+        return;
+      }
+      this._dropLock();
+      this._recent.length = 0;
       this._smoothCents += (0 - this._smoothCents) * 0.15;
       this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
       return;
@@ -13674,22 +14264,54 @@ class Tuner {
 
     const { freq, clarity } = detectPitch(this.buffer, this.ctx.sampleRate, this._minLag, this._maxLag);
     if (freq <= 0) {
+      if (this._locked && now < this._holdUntil) {
+        this._emit({ state: 'locked', freq: this._lastFreq, cents: 0, midi: this._heldMidi ?? this.targetMidi, level, clarity: 0 });
+        return;
+      }
       this._emit({ state: 'off', freq: null, cents: this._smoothCents, midi: this.targetMidi, level, clarity: 0 });
       return;
     }
 
-    const midi = this.targetMidi ?? this._nearest(freq);
+    this._lastFreq = freq;
+    const midi = this.targetMidi ?? this._stickyNearest(freq);
     const raw = centsBetween(freq, midiToFreq(midi, this.a4));
-    this._smoothCents += (raw - this._smoothCents) * this.emaAlpha;
 
-    // Hysteresis: hold inside the snap zone before calling it in tune, so a
-    // needle passing through does not flash green.
+    // A median of the last three readings first. One bad frame — an octave
+    // slip on the attack, a transient in the room — moves a mean and cannot
+    // move a median, and it costs two samples of lag at 30 Hz.
+    this._recent.push(raw);
+    if (this._recent.length > 3) this._recent.shift();
+    const median = this._recent.length === 3
+      ? this._recent.slice().sort((x, y) => x - y)[1]
+      : raw;
+
+    // Then an EMA whose rate follows how far it has to go. A real correction —
+    // you turning the peg — moves tens of cents and gets the full response the
+    // user asked for; the last couple of cents of a string breathing get a
+    // quarter of it, so the needle settles instead of dithering. The Response
+    // setting still means what it says: this only scales it down as the
+    // reading converges.
+    const error = Math.abs(median - this._smoothCents);
+    const urgency = Math.min(1, Math.max(0.25, error / 8));
+    this._smoothCents += (median - this._smoothCents) * this.emaAlpha * urgency;
+
+    const off = Math.abs(this._smoothCents);
     let state;
-    const now = performance.now();
-    if (Math.abs(this._smoothCents) <= this.snapCents) {
+    if (this._locked) {
+      if (off <= this.snapCents) {
+        this._holdUntil = now + this.holdMs;      // still right: keep holding
+      } else if (off > this.releaseCents || now >= this._holdUntil) {
+        this._dropLock();
+      }
+      state = this._locked ? 'locked' : (this._smoothCents < 0 ? 'flat' : 'sharp');
+    } else if (off <= this.snapCents) {
+      // Hysteresis on the way in too: hold inside the snap zone before calling
+      // it in tune, so a needle passing through does not flash green.
       if (this._lockStart === null) this._lockStart = now;
       if (now - this._lockStart >= this.lockDelayMs) {
         this._locked = true;
+        this._holdUntil = now + this.holdMs;
+        this._heldMidi = midi;
         state = 'locked';
         // Once per lock, not once per frame.
         if (this.chimeOnLock && !this._chimed) {
@@ -13699,19 +14321,42 @@ class Tuner {
       } else state = this._smoothCents < 0 ? 'flat' : 'sharp';
     } else {
       this._lockStart = null;
-      this._locked = false;
-      this._chimed = false;
       state = this._smoothCents < 0 ? 'flat' : 'sharp';
     }
 
     this._emit({
       state,
       freq,
-      cents: this._locked ? 0 : this._smoothCents,
+      cents: state === 'locked' ? 0 : this._smoothCents,
       midi,
       level,
       clarity,
     });
+  }
+
+  _dropLock() {
+    this._locked = false;
+    this._lockStart = null;
+    this._chimed = false;
+    this._holdUntil = 0;
+    this._heldMidi = null;
+  }
+
+  /**
+   * The nearest note, but reluctant to change its mind while locked.
+   *
+   * In auto mode a string that is being tuned passes closer to its neighbour
+   * for a moment, and the display jumping to that neighbour and back is the
+   * same flicker in another form. Once a note is locked it is kept until the
+   * reading is a long way from it — further than any wobble, and further than
+   * the release band.
+   */
+  _stickyNearest(freq) {
+    if (this._locked && this._heldMidi !== null) {
+      const held = Math.abs(centsBetween(freq, midiToFreq(this._heldMidi, this.a4)));
+      if (held < 70) return this._heldMidi;
+    }
+    return this._nearest(freq);
   }
 
   _emit(update) {
@@ -16339,6 +16984,35 @@ const urlTheme = THEME_IDS.includes(params.get('theme')) ? params.get('theme') :
 const initialTheme = urlTheme || storedTheme();
 applyTheme(initialTheme);
 
+/**
+ * Tell the Android shell which way round to draw the system bars.
+ *
+ * The app paints its own background behind the status bar and the navigation
+ * bar, and which background that is depends on the in-app theme — so Light and
+ * Sepia would put a white clock on a white bar. A theme is a page decision and
+ * the page is the only thing that knows it; switching the activity's night
+ * mode instead would recreate the activity and reload the app. A no-op
+ * everywhere but the app, where the bars are the browser's problem.
+ */
+function syncSystemBars(resolved) {
+  const shell = window.CircleSongInsets;
+  if (!shell || typeof shell.setLightSystemBars !== 'function') return;
+  try {
+    shell.setLightSystemBars(resolved === 'light' || resolved === 'sepia');
+  } catch (e) {
+    /* an older shell without the method — the bars simply stay as they were */
+  }
+}
+
+/** Apply a theme preference and keep the native chrome in step with it. */
+function setTheme(pref) {
+  const resolved = applyTheme(pref);
+  syncSystemBars(resolved);
+  return resolved;
+}
+
+syncSystemBars(document.documentElement.dataset.theme);
+
 // Language, on the same terms as the theme: a URL parameter wins so every
 // language is linkable and screenshottable, then the stored choice, then the
 // device's own languages. Resolved before the first render, because the tables
@@ -17076,7 +17750,13 @@ function renderCircle() {
       b.dataset.ring = minor ? 'minor' : 'major';
       b.tabIndex = focused.wedge === i && focused.minor === minor ? 0 : -1;
       b.style.cssText = `left:${pct(p.x)};top:${pct(p.y)};color:${colour};`;
-      b.onclick = () => selectWedge(i, minor);
+      // Stop it here rather than let the wheel's geometry handler filter it
+      // out downstream. Selecting can re-render the wheel, which detaches this
+      // button mid-dispatch, and a detached button no longer matches
+      // ".wheel-labels button" — so the filter missed it and every tap on a
+      // label while the key was unlocked was acted on twice, once by the
+      // button and once by the geometry. That was audible as a doubled strum.
+      b.onclick = (ev) => { ev.stopPropagation(); selectWedge(i, minor); };
       return b;
     };
     // Ink polarity is decided per wedge, against the wedge.
@@ -17169,6 +17849,7 @@ function renderCircle() {
     modeBtns.appendChild(b);
   }
 
+  renderKeyRegion(gradeAt);
   renderSecondaryDominants(posAt);
   renderExplore();
 
@@ -17202,6 +17883,73 @@ function renderCircle() {
     };
     strip.appendChild(b);
   });
+}
+
+/**
+ * Outline the block of wedges the key's own chords occupy.
+ *
+ * The seven chords of a key are not scattered around the circle of fifths.
+ * Each ring holds one unbroken run of them — three or four adjacent wedges —
+ * and that is the whole reason this wheel is the right picture of a key:
+ * "in the key" is a place, not a list. Drawing the boundary says which chords
+ * those are at a glance, and says why they are neighbours at the same time.
+ *
+ * It is a shape rather than a shade because a shade had run out of room. On
+ * the pale themes an out-of-key wedge is already nearly the colour of the
+ * page, so there is nowhere further for it to go, and the in-key and
+ * out-of-key wedges sat at 1.3:1 — indistinguishable. An outline does not
+ * care how light the wedges are.
+ */
+function renderKeyRegion(gradeAt) {
+  const svg = $('wheelRegion');
+  svg.replaceChildren();
+
+  const MID = 140;
+  const pt = (r, deg) => {
+    const a = (deg * Math.PI) / 180;
+    return { x: MID + r * Math.sin(a), y: MID - r * Math.cos(a) };
+  };
+  // An annular sector, inset far enough that the stroke is not half-clipped
+  // by the rim it sits on.
+  const sector = (r0, r1, from, to) => {
+    const big = to - from > 180 ? 1 : 0;
+    const [a, b, c, d] = [pt(r1, from), pt(r1, to), pt(r0, to), pt(r0, from)];
+    const n = (v) => v.toFixed(2);
+    return `M${n(a.x)},${n(a.y)}`
+      + `A${r1},${r1} 0 ${big} 1 ${n(b.x)},${n(b.y)}`
+      + `L${n(c.x)},${n(c.y)}`
+      + `A${r0},${r0} 0 ${big} 0 ${n(d.x)},${n(d.y)}Z`;
+  };
+  // Maximal runs of adjacent wedges, wrapping round the twelve. The runs are
+  // found rather than assumed: every diatonic mode gives one per ring, but a
+  // scale that did not would draw as several outlines instead of one wrong one.
+  const runs = (flags) => {
+    const found = [];
+    if (flags.every(Boolean) || !flags.some(Boolean)) return found;
+    for (let i = 0; i < 12; i++) {
+      if (!flags[i] || flags[(i + 11) % 12]) continue;
+      let len = 0;
+      while (len < 12 && flags[(i + len) % 12]) len++;
+      found.push([i, i + len - 1]);
+    }
+    return found;
+  };
+
+  for (const [r0, r1, flags] of [
+    [91, 138.5, CIRCLE.map((note) => gradeAt.has(`${note}:maj`))],
+    [43.5, 88.5, CIRCLE.map((note) => gradeAt.has(`${(note + 9) % 12}:min`))],
+  ]) {
+    for (const [from, to] of runs(flags)) {
+      const d = sector(r0, r1, from * 30 - 15, to * 30 + 15);
+      // Halo first, line on top: two passes of the same path.
+      for (const cls of ['key-region halo', 'key-region line']) {
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', cls);
+        svg.appendChild(path);
+      }
+    }
+  }
 }
 
 /**
@@ -17378,7 +18126,20 @@ async function selectWedge(wedge, minor) {
   reresolveAll();
   render();
   restore();
-  previewDegree(0);
+  // Chord/Note governs the wheel whether or not the key is locked. Unlocked,
+  // a tap also moves the key — but what you hear is still the thing the
+  // switch names, which is the whole point of having it on screen always.
+  if (state.exploreMode === 'note') playRootNote();
+  else previewDegree(0);
+}
+
+/** The new tonic, sounded as one note — the Note half of the wheel's switch. */
+async function playRootNote() {
+  if (sequencer.playing) return;
+  if (!(await ensureAudio())) return;
+  const when = auditionStart();
+  engine.pluckNote({ midi: 60 + state.rootPc, tuning: tuning(), when, velocity: 0.85 });
+  engine.damp(when + exploreRingSeconds());
 }
 
 /** Move the keyboard focus to whichever wedge `state.wheelFocus` names. */
@@ -18821,14 +19582,21 @@ function renderTunerReadout() {
   const c = Math.max(-50, Math.min(50, r.cents));
   note.textContent = midiLabel(r.midi);
   cents.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(1)} ¢`;
-  $('tunerFreq').textContent = t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
+  $('tunerFreq').textContent = r.freq === null
+    ? t('Freq: —')
+    : t('Freq: {hz}Hz', { hz: r.freq.toFixed(1) });
   $('tunerSignal').textContent = `${Math.min(100, Math.round(r.level * 400))}%`;
   stateEl.textContent =
     r.state === 'locked' ? t('LOCKED') : r.state === 'flat' ? t('FLAT') : t('SHARP');
 
   // Fill from dead centre out to wherever the note actually is, so the arc
-  // itself shows how far off it is rather than only the pointer.
-  arc.setAttribute('d', Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r) : dialArc(0, c, DIAL.r));
+  // itself shows how far off it is rather than only the pointer. In tune, the
+  // whole ring lights instead: the question "am I done?" should be answerable
+  // from across the room, without reading a number or finding a needle.
+  arc.setAttribute('d',
+    r.state === 'locked' ? dialArc(-50, 50, DIAL.r)
+    : Math.abs(c) < 0.4 ? dialArc(-0.4, 0.4, DIAL.r)
+    : dialArc(0, c, DIAL.r));
 
   pointer.replaceChildren();
   const tip = dialPoint(c, DIAL.r + 16);
@@ -18957,7 +19725,7 @@ function renderTheme() {
     b.append(sw, el('span', 'theme-name', theme.label));
     b.onclick = () => {
       state.theme = theme.id;
-      applyTheme(theme.id);
+      setTheme(theme.id);
       saveTheme(theme.id);
       // The wheel and the fretboard are painted from JavaScript, so they have
       // to be repainted rather than merely restyled.
@@ -19535,9 +20303,9 @@ function wire() {
   // wheel is painted as a conic gradient rather than as twelve elements, so
   // there is nothing to attach a listener to but the geometry.
   $('wheel').onclick = (e) => {
-    // A label is a real button and handles itself; without this the same tap
-    // would be counted twice, once by the button and once by the geometry.
-    if (e.target.closest('.wheel-labels button')) return;
+    // A label is a real button and stops the event itself; this is the second
+    // line of the same defence, for anything in the labels that is not one.
+    if (e.target.closest && e.target.closest('.wheel-labels')) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const scale = rect.width / 280;
     const dx = (e.clientX - (rect.left + rect.width / 2)) / scale;
@@ -19794,16 +20562,6 @@ function wire() {
       previewDegree(state.activeDegree);
     }
   });
-
-  // Browsers suspend the context when the tab is hidden; stop cleanly instead
-  // of letting the scheduler race a stalled clock.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && sequencer.playing) {
-      sequencer.stop();
-      state.playing = false;
-      renderTransport();
-    }
-  });
 }
 
 // ---------------------------------------------------------------- save/load
@@ -19939,16 +20697,81 @@ function applySongData(data) {
 // dark at sunset expects the app to flip with it, without being reopened.
 watchSystemTheme(
   () => state.theme,
-  () => render()
+  (resolved) => { syncSystemBars(resolved); render(); }
 );
 
-// The microphone is released whenever the page stops being visible, so it is
-// never held by a tab sitting in the background.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) return;
+/**
+ * Everything that makes sound, stopped — and then the context itself.
+ *
+ * A backgrounded app is not reliably a paused one. Capacitor's onPause only
+ * notifies plugins, so the WebView carries on: the scheduler keeps queueing
+ * bars against an audio clock that never stops, and the worklet keeps
+ * rendering whatever it was holding. That is heard as an app still making a
+ * noise after it has been put away.
+ *
+ * Stopping the transport is not enough on its own, because a note already
+ * sounding, a reference tone or an open microphone all outlive it. Suspending
+ * the context is what actually guarantees silence: a suspended context renders
+ * nothing at all. Every path that makes sound goes through ensureAudio(),
+ * which resumes it, so nothing has to be put back by hand.
+ */
+function silenceForBackground() {
+  if (sequencer.playing) {
+    sequencer.stop();
+    state.playing = false;
+    renderTransport();
+  }
   if (state.tunerOn) stopTuner();
   stopReference();
+  engine.allNotesOff();
+  engine.suspend().catch(() => {});
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    silenceForBackground();
+  } else if (engine.ready && engine.ctx.state === 'suspended') {
+    // Brought back to the front: resume now rather than on the next tap, so
+    // the first chord after switching back is not the one that pays for it.
+    engine.ctx.resume().catch(() => {});
+  }
 });
+
+// visibilitychange is not fired when a page is discarded outright, so the last
+// moment the app is certain to get is pagehide.
+window.addEventListener('pagehide', silenceForBackground);
+
+// ------------------------------------------------------------------ insets
+
+/**
+ * How much room the system bars need, in CSS pixels.
+ *
+ * In a browser env(safe-area-inset-*) is the whole answer and the CSS defaults
+ * already hold it. In the Android app it is not: from targetSdk 35 the window
+ * is edge-to-edge with no way to opt out, and the WebView derives env() from
+ * the display cutout alone — so env(safe-area-inset-top) is 0 while the clock
+ * and the notification icons sit on top of the transport bar. MainActivity
+ * measures the real insets and exposes them here.
+ */
+function applyNativeInsets() {
+  const source = window.CircleSongInsets;
+  if (!source || typeof source.get !== 'function') return;
+  let parts;
+  try {
+    parts = String(source.get()).split(',').map(Number);
+  } catch (e) {
+    return;
+  }
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n) || n < 0)) return;
+  const names = ['--inset-top', '--inset-right', '--inset-bottom', '--inset-left'];
+  parts.forEach((px, i) => document.documentElement.style.setProperty(names[i], `${px}px`));
+}
+
+applyNativeInsets();
+// Rotation, a keyboard opening, a cutout coming into play: the native side
+// says when, and resize covers the case where the event was missed.
+window.addEventListener('circlesong:insets', applyNativeInsets);
+window.addEventListener('resize', applyNativeInsets);
 
 // --------------------------------------------------------------------- boot
 

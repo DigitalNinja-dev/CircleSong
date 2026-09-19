@@ -89,7 +89,7 @@ export const LOCALE_HI = {
   '/03 DRUM_MACHINE': '/03 ड्रम_मशीन',
   '/04 DIATONIC_CHORDS': '/04 डायटॉनिक_कॉर्ड',
   '/05 TIMELINE': '/05 टाइमलाइन',
-  '/06 MODES': '/06 मोड',
+  '/06 LEARN': '/06 सीखें',
   '/07 SONGWRITING_ASSISTANT': '/07 गीत_रचना_सहायक',
   '/08 SONGS': '/08 गीत',
   '/09 TUNER': '/09 ट्यूनर',
@@ -1101,4 +1101,57 @@ export const LOCALE_HI = {
   'New song started.': 'नया गीत शुरू हुआ।',
   'Could not read that file — {error}': 'वह फ़ाइल पढ़ी नहीं जा सकी — {error}',
   'Unrecognised file format': 'अपरिचित फ़ाइल प्रारूप',
+
+  // ------------------------------------------------ guide for guitarists
+  '// MODES': '// मोड',
+  '// GUIDE_FOR_GUITARISTS': '// गिटार_बजाने_वालों_के_लिए_गाइड',
+  'CircleSong is a songwriting tool that shows its working. Pick a key and it names every chord in it and what each one does; write a progression and it plays back on a modelled guitar, so you hear the idea before you can play it.':
+    'CircleSong गीत लिखने का एक औज़ार है जो अपना हिसाब भी दिखाता है। एक कुंजी चुनिए और यह उसके हर कॉर्ड का नाम और काम बता देता है; एक प्रोग्रेशन लिखिए और वह एक मॉडल की गई गिटार पर बजता है — यानी बजाना आने से पहले ही विचार सुनाई दे जाता है।',
+  '// START_HERE': '// यहाँ_से_शुरू_करें',
+  'Tune up. The Tuner knows 8 instruments and 26 tunings, and you can tap any string to hear its pitch and tune by ear.':
+    'पहले ट्यून कीजिए। ट्यूनर 8 वाद्य और 26 ट्यूनिंग जानता है, और किसी भी तार को छूकर उसकी पिच सुनी जा सकती है और कान से ट्यून किया जा सकता है।',
+  'Pick your key. Tap a wedge on the circle. The outlined block is every chord that belongs to that key.':
+    'अपनी कुंजी चुनिए। चक्र के किसी टुकड़े को छुइए। जिस हिस्से के चारों ओर रेखा खिंची है, वे सब उसी कुंजी के कॉर्ड हैं।',
+  'Hear the chords. Compose lays out the seven degrees, each with a fretboard shape you can actually play.':
+    'कॉर्ड सुनिए। रचना सातों अंश सामने रख देती है, हर एक के साथ फ़्रेटबोर्ड की ऐसी पकड़ जो सचमुच बजाई जा सके।',
+  'Write something. Timeline turns bars into a song — tap a bar, choose a chord, press play.':
+    'कुछ लिखिए। टाइमलाइन बारों को गीत में बदल देती है — एक बार छुइए, कॉर्ड चुनिए, और चला दीजिए।',
+  'Make it move. Tone decides how it is strummed; Drums puts a groove underneath.':
+    'इसमें हरकत लाइए। ध्वनि तय करती है कि स्ट्रम कैसा हो; ड्रम नीचे एक ग्रूव रख देते हैं।',
+  '// READING_THE_WHEEL': '// चक्र_कैसे_पढ़ें',
+  'The outer ring is major chords. The inner ring is their relative minors — the same notes, a darker place to start.':
+    'बाहरी छल्ला मेजर कॉर्ड है। भीतरी छल्ला उनके सापेक्ष माइनर — वही स्वर, बस शुरुआत की जगह ज़्यादा गहरी।',
+  'The outlined block is your key. Three or four wedges on each ring, always side by side, because a key is a place on this circle rather than a list to memorise.':
+    'रेखांकित हिस्सा आपकी कुंजी है। हर छल्ले पर तीन या चार टुकड़े, हमेशा अगल-बगल, क्योंकि कुंजी इस चक्र पर एक जगह है, रटने की सूची नहीं।',
+  'Clockwise is a fifth up. G is the V of C and pulls back home. Anticlockwise is a fourth up: F is the IV of C, and it relaxes instead.':
+    'घड़ी की दिशा में एक पंचम ऊपर: G, C का V है और घर की ओर खींचता है। उल्टी दिशा में एक चतुर्थ ऊपर: F, C का IV है, और वह उलटे ढील देता है।',
+  "The roman numeral on a wedge is that chord's job. I, IV and V are your three majors; ii, iii and vi the three minors; vii° the one that cannot sit still.":
+    'टुकड़े पर लिखा रोमन अंक उस कॉर्ड का काम है। I, IV और V आपके तीन मेजर हैं; ii, iii और vi तीन माइनर; और vii° वह जो टिक नहीं पाता।',
+  'Neighbours share the most notes. On a guitar that means the least hand movement, which is why so many songs are built from wedges that touch.':
+    'पड़ोसी टुकड़ों में सबसे ज़्यादा स्वर साझे होते हैं। गिटार पर इसका मतलब है हाथ की सबसे कम हरकत — इसीलिए इतने गीत उन्हीं टुकड़ों से बने हैं जो एक-दूसरे से सटे हैं।',
+  '// IF_YOU_ALREADY_PLAY': '// अगर_आप_पहले_से_बजाते_हैं',
+  'The open chords you already know are a key. G, C and D are I, IV and V in G — the circle is that one relationship drawn out for all twelve keys.':
+    'जो खुले कॉर्ड आप पहले से जानते हैं, वे एक कुंजी हैं। G, C और D, G में I, IV और V हैं — यह चक्र उसी एक रिश्ते को बारहों कुंजियों के लिए खींच देता है।',
+  'A capo turns the wheel, not the shapes. The same grip two frets up is a key two wedges clockwise; set that key here and the app names the chords you are really playing.':
+    'कैपो चक्र को घुमाता है, पकड़ को नहीं। वही पकड़ दो फ़्रेट ऊपर घड़ी की दिशा में दो टुकड़े आगे की कुंजी है; उसे यहाँ सेट कीजिए और ऐप उन कॉर्डों के नाम बताएगा जो आप सचमुच बजा रहे हैं।',
+  'A shape is not a chord. Compose offers several playable voicings of the same chord, and the ↔ number in the timeline is how many frets your hand travels to reach one. Smooth voicings picks the shapes that barely move.':
+    'पकड़ और कॉर्ड एक चीज़ नहीं। रचना एक ही कॉर्ड की कई बजाने योग्य वॉइसिंग देती है, और टाइमलाइन पर ↔ संख्या बताती है कि उस तक पहुँचने में हाथ कितने फ़्रेट चलता है। सहज वॉइसिंग वही पकड़ चुनती है जो मुश्किल से हिलती है।',
+  'Borrowed chords are the wedges just outside the outline. Try the one next door before anything exotic — a single note from outside the key is where most of the colour in pop music comes from.':
+    'उधार लिए कॉर्ड वे टुकड़े हैं जो रेखा के ठीक बाहर हैं। कुछ भी अनोखा आज़माने से पहले बगल वाला आज़माइए — कुंजी के बाहर का एक ही स्वर पॉप के अधिकांश रंग का स्रोत है।',
+  '// WHAT_EACH_TAB_IS_FOR': '// कौन_सा_टैब_किस_लिए',
+  'Choose a key and see what is in it.': 'एक कुंजी चुनिए और देखिए उसमें क्या है।',
+  'Get in tune, on any of eight instruments.': 'आठ में से किसी भी वाद्य पर सुर में आइए।',
+  'How it is played: instrument, strumming pattern, feel and swing.':
+    'कैसे बजाया जाए: वाद्य, स्ट्रम का पैटर्न, मिज़ाज और स्विंग।',
+  'A groove underneath, editable step by step.': 'नीचे एक ग्रूव, कदम-दर-कदम बदला जा सकने वाला।',
+  'The chord itself: sevenths, extensions, inversions, and a shape for your hands.':
+    'कॉर्ड खुद: सप्तम, विस्तार, पलटाव, और आपके हाथों के लिए एक पकड़।',
+  'The song: bars, loops and sections.': 'गीत: बार, लूप और खंड।',
+  'What could come next, and 56 progressions taken from real songs.':
+    'आगे क्या आ सकता है, और असली गीतों से लिए गए 56 प्रोग्रेशन।',
+  'The modes, and an ear trainer to test them.': 'मोड, और उन्हें परखने के लिए कान की कसरत।',
+  'Save, reopen, import and export what you write.':
+    'जो लिखें उसे सहेजिए, फिर खोलिए, आयात और निर्यात कीजिए।',
+  'If you take one thing from this: chords that sit next to each other on the wheel share most of their notes. Move one step, leave most of your fingers where they are, and it will sound like it belongs.':
+    'अगर एक ही बात याद रखनी हो: चक्र पर अगल-बगल बैठे कॉर्ड अपने लगभग सारे स्वर साझा करते हैं। एक कदम चलिए, ज़्यादातर उँगलियाँ जहाँ हैं वहीं रहने दीजिए, और वह अपनी जगह का लगेगा।',
 };
