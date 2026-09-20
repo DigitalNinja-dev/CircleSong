@@ -156,26 +156,55 @@ const MODULES = [
 // matters: forget to bump it and every returning user keeps running the
 // previous build, which is indistinguishable from the change not working. The
 // hash cannot be forgotten, so shipping a change always invalidates the cache.
+const VERSION_SPAN = /<span class="version">([^<]*)<\/span>/;
+
 {
   const swPath = join(root, 'sw.js');
   let sw = readFileSync(swPath, 'utf8');
   const shell = [...sw.matchAll(/^\s*'\.\/([^']*)',/gm)].map((m) => m[1]).filter(Boolean);
+  // The build stamp printed in index.html is blanked before hashing, or the
+  // hash would cover the stamp derived from it and no two builds in a row
+  // could ever agree.
+  const forHashing = (rel, buf) =>
+    rel.endsWith('.html')
+      ? Buffer.from(buf.toString('utf8').replace(VERSION_SPAN, '<span class="version"></span>'))
+      : buf;
+
   const h = createHash('sha256');
   for (const rel of shell.sort()) {
     try {
       h.update(rel);
-      h.update(readFileSync(join(root, rel)));
+      h.update(forHashing(rel, readFileSync(join(root, rel))));
     } catch {
       // './' and any entry without a file on disk contribute their name only.
     }
   }
-  const stamp = `circlesong-${h.digest('hex').slice(0, 8)}`;
+  const build = h.digest('hex').slice(0, 8);
+  const stamp = `circlesong-${build}`;
   const current = sw.match(/const CACHE = '([^']+)'/);
   if (!current) throw new Error('build: could not find the CACHE constant in sw.js');
   if (current[1] !== stamp) {
     sw = sw.replace(/const CACHE = '[^']+'/, `const CACHE = '${stamp}'`);
     writeFileSync(swPath, sw);
     console.log(`sw.js cache stamped ${current[1]} -> ${stamp}`);
+  }
+
+  // The same hash, where a person can read it.
+  //
+  // "Is the fix on my phone?" has been unanswerable from the phone, and
+  // guessing wrong costs a whole round of testing the wrong build. About now
+  // names the build, and it is the hash the service worker already computes
+  // from the shipped files — so two installs agree if and only if they are
+  // running the same code.
+  const indexPath = join(root, 'index.html');
+  let html = readFileSync(indexPath, 'utf8');
+  const shown = html.match(VERSION_SPAN);
+  if (!shown) throw new Error('build: could not find the version span in index.html');
+  const line = `VERSION 1.0 · BUILD ${build}`;
+  if (shown[1] !== line) {
+    html = html.replace(VERSION_SPAN, `<span class="version">${line}</span>`);
+    writeFileSync(indexPath, html);
+    console.log(`index.html build stamped "${shown[1]}" -> "${line}"`);
   }
 }
 

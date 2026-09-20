@@ -429,15 +429,23 @@ install a toolchain, you do not have to: the workflow builds the APK for you.
 
 Two ways, depending on whether you have a cable.
 
-**From the phone alone.** Run the Android workflow from the Actions tab
-("Run workflow"), and it publishes the APK to a fixed release tag, so the link
-never changes:
+**From the phone alone.** Every push to a development branch publishes the APK
+to a fixed release tag, so the link never changes and always serves the latest
+build:
 
 ```
 https://github.com/DigitalNinja-dev/CircleSong/releases/download/test-build/circlesong-debug.apk
 ```
 
-Open that on the phone and tap it. Android will ask for permission to install
+The release notes name the commit it was built from, and **About inside the
+app names the build** — `VERSION 1.0 · BUILD 78dcf42a`, the same hash the
+service worker stamps from the shipped files. Two installs agree if and only if
+they are running the same code, which is how to tell whether a fix has actually
+reached the phone. That link used to publish only on a manual run, and twice a
+fix was reported still broken from a build that predated it — once by
+twenty-three minutes.
+
+Open the link on the phone and tap it. Android will ask for permission to install
 from the browser the first time — Settings → Apps → Special access → Install
 unknown apps — and that is a one-time answer. Every push also attaches the APK
 to its own run under Artifacts, but that is a zip behind a GitHub login, which
