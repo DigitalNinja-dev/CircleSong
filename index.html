@@ -77,6 +77,19 @@
     <span class="bracket tl"></span><span class="bracket tr"></span>
     <span class="bracket bl"></span><span class="bracket br"></span>
 
+    <!-- DROPDOWNS -->
+    <!-- One overlay shared by every <select> in the app. Android's own list
+         is a framework dialog built from the activity theme, and it arrived
+         unreadable twice; this one is the app's, so it is themed, translated
+         and measurable like everything else. -->
+    <div id="menuOverlay" class="overlay" hidden>
+      <div class="about menu-sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+        <span id="menuTitle" class="micro-label"></span>
+        <div class="menu-list" id="menuList" role="listbox"></div>
+        <button id="menuCloseBtn" class="about-close" data-i18n>CLOSE</button>
+      </div>
+    </div>
+
     <!-- LANGUAGE -->
     <div id="langOverlay" class="overlay" hidden>
       <div class="about lang-sheet" role="dialog" aria-modal="true" aria-labelledby="langTitle">
@@ -105,7 +118,7 @@
           <img src="assets/logo.svg" alt="" class="logo lg">
           <span id="aboutTitle" class="wordmark lg">CIRCLE<span class="accent">SONG</span></span>
         </div>
-        <span class="version">VERSION 1.0</span>
+        <span class="version">VERSION 1.0 · BUILD 78dcf42a</span>
         <p data-i18n>CircleSong is a circle-of-fifths powered composition tool for guitar players. It maps the theory behind keys, modes, and chord progressions onto an instrument you already play, so you can build song structures — verses, choruses, bridges — by ear and by understanding, not guesswork.</p>
         <p data-i18n>Pick a key, hear every diatonic chord and its inversions instantly, sequence them into a loop, and get progression ideas grounded in real theory and well-known songs. The Learn tab and ear trainer build your fluency in modes as you write — so composing and studying happen in the same place.</p>
         <p data-i18n>Everything the instrument needs is here: eight modelled tones from acoustic steel to grand piano, thirty-four strum and picking patterns, a drum machine, a tuner for eight instruments, and songs you can save. It runs entirely on your device, installs to your home screen, and keeps working with no signal.</p>

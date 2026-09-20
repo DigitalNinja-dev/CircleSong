@@ -11,11 +11,4 @@
     <color name="colorAccent">#8ef000</color>
     <color name="splashBackground">#0d0d0d</color>
 
-    <!-- The native <select> popups. Not the page's colours — those are CSS and
-         change with the in-app theme, while a dialog theme is fixed at build
-         time — but the same family, a shade lighter than the ground so the
-         panel reads as sitting on top of the app. -->
-    <color name="dialogBackground">#1b1b1b</color>
-    <color name="dialogText">#f2f2f2</color>
-    <color name="dialogTextDim">#b4b4b4</color>
 </resources>
